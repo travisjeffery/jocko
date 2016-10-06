@@ -11,51 +11,47 @@ import (
 )
 
 var (
-	logDirsFlag = flag.String("log-dirs", "/tmp/clog-logs", "A comma separated list of directories under which to store log files")
+	logDirFlag = flag.String("log-dir", "/tmp/clog-logs", "A comma separated list of directories under which to store log files")
 )
 
 type Clog struct {
-	LogDirs []string
+	LogDir string
 }
 
-func NewClog(logDirs []string) (*Clog, error) {
-	for _, logDir := range logDirs {
-		ld, err := os.Stat(logDir)
+func NewClog(logDir string) (*Clog, error) {
+	ld, err := os.Stat(logDir)
 
-		if os.IsNotExist(err) {
-			err = os.Mkdir(logDir, 0755)
+	if os.IsNotExist(err) {
+		err = os.Mkdir(logDir, 0755)
 
-			if err != nil {
-				return nil, errors.Wrap(err, "log directory mkdir failed")
-			}
-		} else if !ld.IsDir() {
-			return nil, errors.Wrap(err, "log directory isn't a directory")
+		if err != nil {
+			return nil, errors.Wrap(err, "log directory mkdir failed")
 		}
+	} else if !ld.IsDir() {
+		return nil, errors.Wrap(err, "log directory isn't a directory")
 	}
 
 	c := &Clog{
-		LogDirs: logDirs,
+		LogDir: logDir,
 	}
 
 	return c, nil
 }
 
 func (c *Clog) initTopics() (err error) {
-	for _, ld := range c.LogDirs {
-		fis, err := ioutil.ReadDir(ld)
+	fis, err := ioutil.ReadDir(c.LogDir)
 
-		if err != nil {
-			return errors.Wrap(err, "directory read failed")
+	if err != nil {
+		return errors.Wrap(err, "directory read failed")
+	}
+
+	for _, fi := range fis {
+		if !fi.IsDir() {
+			continue
 		}
 
-		for _, fi := range fis {
-			if !fi.IsDir() {
-				continue
-			}
-
-			if err = c.initTopic(fi.Name()); err != nil {
-				break
-			}
+		if err = c.initTopic(fi.Name()); err != nil {
+			break
 		}
 	}
 
@@ -63,13 +59,13 @@ func (c *Clog) initTopics() (err error) {
 }
 
 func (c *Clog) initTopic(name string) error {
-	path := filePath
+
 }
 
 func main() {
 	flag.Parse()
 
-	_, err := NewClog(strings.Split(*logDirsFlag, ","))
+	_, err := NewClog(*logDirFlag)
 
 	if err != nil {
 		log.Println(err)
