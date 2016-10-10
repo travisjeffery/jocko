@@ -11,8 +11,19 @@ import (
 )
 
 func TestNewCommitLog(t *testing.T) {
-	l, err := New(filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63())))
-	defer l.deleteAll()
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
+	fmt.Println(path)
+	opts := Options{
+		Path:         path,
+		SegmentBytes: 3,
+	}
+	l, err := New(opts)
+
+	// remove old data
+	l.deleteAll()
+
+	l.init()
+	l.open()
 
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +39,7 @@ func TestNewCommitLog(t *testing.T) {
 		t.Error(err)
 	}
 
-	r := l.NewReader(0)
+	r, err := l.NewReader(0)
 	if err != nil {
 		t.Error(err)
 	}

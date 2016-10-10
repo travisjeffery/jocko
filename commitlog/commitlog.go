@@ -11,56 +11,51 @@ import (
 )
 
 type CommitLog struct {
+	Options
 	name           string
-	path           string
 	mu             sync.RWMutex
 	segments       []*segment
 	vActiveSegment atomic.Value
 }
 
-type Reader struct {
-	segment *segment
-	mu      sync.Mutex
-	offset  int64
+type Options struct {
+	Path         string
+	SegmentBytes int64
 }
 
-func (r *Reader) Read(p []byte) (n int, err error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return r.segment.ReadAt(p, r.offset)
-}
-
-func (l *CommitLog) NewReader(offset int64) (r *Reader) {
-	return &Reader{
-		segment: l.segments[0],
-		offset:  offset,
-	}
-}
-
-func New(path string) (*CommitLog, error) {
-	err := os.MkdirAll(path, 0755)
-	if err != nil {
-		return nil, errors.Wrap(err, "mkdir failed")
+func New(opts Options) (*CommitLog, error) {
+	if opts.Path == "" {
+		return nil, errors.New("path is empty")
 	}
 
-	path, _ = filepath.Abs(path)
+	if opts.SegmentBytes == 0 {
+		// TODO default here
+	}
+
+	path, _ := filepath.Abs(opts.Path)
 	l := &CommitLog{
-		name: filepath.Base(path),
-		path: path,
+		Options: opts,
+		name:    filepath.Base(path),
 	}
-	err = l.open()
 
-	return l, err
+	return l, nil
+}
+
+func (l *CommitLog) init() error {
+	err := os.MkdirAll(l.Path, 0755)
+	if err != nil {
+		return errors.Wrap(err, "mkdir failed")
+	}
+	return nil
 }
 
 func (l *CommitLog) open() error {
-	_, err := ioutil.ReadDir(l.path)
+	_, err := ioutil.ReadDir(l.Path)
 	if err != nil {
-		return errors.Wrap(err, "read dif failed")
+		return errors.Wrap(err, "read dir failed")
 	}
 
-	activeSegment, err := NewSegment(l.path, 0)
+	activeSegment, err := NewSegment(l.Path, 0, l.SegmentBytes)
 	if err != nil {
 		return err
 	}
@@ -72,12 +67,19 @@ func (l *CommitLog) open() error {
 }
 
 func (l *CommitLog) deleteAll() error {
-	return os.RemoveAll(l.path)
+	return os.RemoveAll(l.Path)
 }
 
 func (l *CommitLog) Write(p []byte) (n int, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if l.checkSplit() {
+		if err = l.split(); err != nil {
+			return 0, err
+		}
+	}
+
 	return l.activeSegment().Write(p)
 }
 
@@ -85,6 +87,24 @@ func (l *CommitLog) Read(p []byte) (n int, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.activeSegment().Read(p)
+}
+
+func (l *CommitLog) checkSplit() bool {
+	return l.activeSegment().IsFull()
+}
+
+func (l *CommitLog) split() error {
+	seg, err := NewSegment(l.Path, l.newestOffset(), l.SegmentBytes)
+	if err != nil {
+		return err
+	}
+	l.segments = append(l.segments, seg)
+	l.vActiveSegment.Store(seg)
+	return nil
+}
+
+func (l *CommitLog) newestOffset() int64 {
+	return l.activeSegment().NewestOffset()
 }
 
 func (l *CommitLog) activeSegment() *segment {
