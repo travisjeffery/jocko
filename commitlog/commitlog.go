@@ -104,7 +104,7 @@ func (l *CommitLog) split() error {
 }
 
 func (l *CommitLog) newestOffset() int64 {
-	return l.activeSegment().NewestOffset()
+	return l.activeSegment().NextOffset()
 }
 
 func (l *CommitLog) activeSegment() *segment {

@@ -1,28 +1,28 @@
-package clog
+package strolla
 
 import (
 	"encoding/json"
 	"flag"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	"github.com/travisjeffery/strolla/commitlog"
 )
 
 var (
-	logDirFlag = flag.String("log-dir", "/tmp/clog-logs", "A comma separated list of directories under which to store log files")
+	logDirFlag = flag.String("logdir", "/tmp/strolla", "A comma separated list of directories under which to store log files")
 )
 
 const configFile = "config.json"
 
-type Clog struct {
+type Strolla struct {
 	LogDir string
 }
 
-func NewClog(logDir string) (*Clog, error) {
+func NewStrolla(logDir string) (*Strolla, error) {
 	ld, err := os.Stat(logDir)
 
 	if os.IsNotExist(err) {
@@ -35,14 +35,14 @@ func NewClog(logDir string) (*Clog, error) {
 		return nil, errors.Wrap(err, "log directory isn't a directory")
 	}
 
-	c := &Clog{
+	c := &Strolla{
 		LogDir: logDir,
 	}
 
 	return c, nil
 }
 
-func (c *Clog) initTopics() (err error) {
+func (c *Strolla) initTopics() (err error) {
 	fis, err := ioutil.ReadDir(c.LogDir)
 
 	if err != nil {
@@ -65,7 +65,7 @@ func (c *Clog) initTopics() (err error) {
 type TopicConfig struct {
 }
 
-func (c *Clog) initTopic(name string) error {
+func (c *Strolla) initTopic(name string) error {
 	topicPath := filepath.Join(c.LogDir, name)
 	configPath := filepath.Join(topicPath, configFile)
 
@@ -90,7 +90,7 @@ func (c *Clog) initTopic(name string) error {
 type Topic struct {
 	name   string
 	config TopicConfig
-	log    *Log
+	log    *commitlog.CommitLog
 	writer io.Writer
 }
 
@@ -98,16 +98,6 @@ func newTopic(config TopicConfig) *Topic {
 	return &Topic{}
 }
 
-func (c *Clog) register(name string, topic *Topic) error {
+func (c *Strolla) register(name string, topic *Topic) error {
 
-}
-
-func main() {
-	flag.Parse()
-
-	_, err := NewClog(*logDirFlag)
-
-	if err != nil {
-		log.Println(err)
-	}
 }

@@ -15,14 +15,14 @@ const (
 )
 
 type segment struct {
-	writer       io.Writer
-	reader       io.Reader
-	log          *os.File
-	index        *os.File
-	baseOffset   int64
-	newestOffset int64
-	bytes        int64
-	maxBytes     int64
+	writer     io.Writer
+	reader     io.Reader
+	log        *os.File
+	index      *os.File
+	baseOffset int64
+	nextOffset int64
+	bytes      int64
+	maxBytes   int64
 }
 
 func NewSegment(path string, baseOffset int64, maxBytes int64) (*segment, error) {
@@ -44,21 +44,21 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*segment, error)
 	}
 
 	s := &segment{
-		log:          log,
-		index:        index,
-		writer:       log,
-		reader:       log,
-		bytes:        fi.Size(),
-		maxBytes:     maxBytes,
-		baseOffset:   baseOffset,
-		newestOffset: baseOffset,
+		log:        log,
+		index:      index,
+		writer:     log,
+		reader:     log,
+		bytes:      fi.Size(),
+		maxBytes:   maxBytes,
+		baseOffset: baseOffset,
+		nextOffset: baseOffset,
 	}
 
 	return s, nil
 }
 
-func (s *segment) NewestOffset() int64 {
-	return s.newestOffset
+func (s *segment) NextOffset() int64 {
+	return s.nextOffset
 }
 
 func (s *segment) IsFull() bool {
@@ -71,12 +71,12 @@ func (s *segment) Write(p []byte) (n int, err error) {
 		return n, errors.Wrap(err, "log write failed")
 	}
 
-	_, err = s.index.Write([]byte(fmt.Sprintf("%d,%d\n", s.newestOffset, s.bytes)))
+	_, err = s.index.Write([]byte(fmt.Sprintf("%d,%d\n", s.nextOffset, s.bytes)))
 	if err != nil {
 		return 0, errors.Wrap(err, "index write failed")
 	}
 
-	s.newestOffset += 1
+	s.nextOffset += 1
 	s.bytes += int64(n)
 
 	return n, nil
