@@ -17,6 +17,7 @@ Kafka/distributed commit log service in Go.
 - [x] Segment indexes
 - [ ] Writing over a network
 - [ ] Distributed replication
+- [ ] Clients
 - [ ] Etc...
 
 ## License
