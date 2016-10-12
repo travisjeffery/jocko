@@ -18,7 +18,7 @@ type segment struct {
 	writer     io.Writer
 	reader     io.Reader
 	log        *os.File
-	index      *os.File
+	index      *index
 	baseOffset int64
 	nextOffset int64
 	bytes      int64
@@ -38,9 +38,11 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*segment, error)
 	}
 
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, baseOffset))
-	index, err := os.OpenFile(indexPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	index, err := NewIndex(options{
+		path: indexPath,
+	})
 	if err != nil {
-		return nil, errors.Wrap(err, "open file failed")
+		return nil, err
 	}
 
 	s := &segment{

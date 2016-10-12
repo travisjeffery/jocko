@@ -15,7 +15,7 @@ func TestNewCommitLog(t *testing.T) {
 	fmt.Println(path)
 	opts := Options{
 		Path:         path,
-		SegmentBytes: 3,
+		SegmentBytes: 6,
 	}
 	l, err := New(opts)
 
@@ -39,7 +39,17 @@ func TestNewCommitLog(t *testing.T) {
 		t.Error(err)
 	}
 
-	r, err := l.NewReader(0)
+	_, err = l.Write([]byte("three"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = l.Write([]byte("four"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := l.NewReader(1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -48,8 +58,7 @@ func TestNewCommitLog(t *testing.T) {
 		t.Error(err)
 	}
 
-	check(t, p, []byte("onetwo"))
-
+	check(t, p, []byte("twothreefour"))
 }
 
 func check(t *testing.T, got, want []byte) {
