@@ -1,4 +1,4 @@
-# Strolla
+# Jocko
 
 Kafka/distributed commit log service in Go.
 

@@ -1,4 +1,4 @@
-package strolla
+package jocko
 
 import (
 	"encoding/json"
@@ -9,20 +9,20 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/strolla/commitlog"
+	"github.com/travisjeffery/jocko/commitlog"
 )
 
 var (
-	logDirFlag = flag.String("logdir", "/tmp/strolla", "A comma separated list of directories under which to store log files")
+	logDirFlag = flag.String("logdir", "/tmp/jocko", "A comma separated list of directories under which to store log files")
 )
 
 const configFile = "config.json"
 
-type Strolla struct {
+type Jocko struct {
 	LogDir string
 }
 
-func NewStrolla(logDir string) (*Strolla, error) {
+func NewJocko(logDir string) (*Jocko, error) {
 	ld, err := os.Stat(logDir)
 
 	if os.IsNotExist(err) {
@@ -35,14 +35,14 @@ func NewStrolla(logDir string) (*Strolla, error) {
 		return nil, errors.Wrap(err, "log directory isn't a directory")
 	}
 
-	c := &Strolla{
+	c := &Jocko{
 		LogDir: logDir,
 	}
 
 	return c, nil
 }
 
-func (c *Strolla) initTopics() (err error) {
+func (c *Jocko) initTopics() (err error) {
 	fis, err := ioutil.ReadDir(c.LogDir)
 
 	if err != nil {
@@ -65,7 +65,7 @@ func (c *Strolla) initTopics() (err error) {
 type TopicConfig struct {
 }
 
-func (c *Strolla) initTopic(name string) error {
+func (c *Jocko) initTopic(name string) error {
 	topicPath := filepath.Join(c.LogDir, name)
 	configPath := filepath.Join(topicPath, configFile)
 
@@ -98,6 +98,6 @@ func newTopic(config TopicConfig) *Topic {
 	return &Topic{}
 }
 
-func (c *Strolla) register(name string, topic *Topic) error {
+func (c *Jocko) register(name string, topic *Topic) error {
 
 }
