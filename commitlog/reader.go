@@ -40,6 +40,8 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 
 func (l *CommitLog) NewReader(offset int64) (r *Reader, err error) {
 	segment, idx := findSegment(l.segments, offset)
+	entry, _ := findEntry(segment, offset)
+	offset = int64(entry.Position)
 
 	if segment == nil {
 		return nil, errors.Wrap(err, "segment not found")

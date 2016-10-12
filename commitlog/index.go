@@ -21,6 +21,7 @@ const (
 )
 
 type index struct {
+	options
 	mmap   gommap.MMap
 	file   *os.File
 	offset int64
@@ -36,7 +37,7 @@ type options struct {
 	bytes int64
 }
 
-func NewIndex(opts options) (idx *index, err error) {
+func newIndex(opts options) (idx *index, err error) {
 	if opts.bytes == 0 {
 		opts.bytes = 10 * 1024 * 1024
 	}
@@ -45,7 +46,9 @@ func NewIndex(opts options) (idx *index, err error) {
 		return nil, errors.New("path is empty")
 	}
 
-	idx = &index{}
+	idx = &index{
+		options: opts,
+	}
 	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, errors.Wrap(err, "open file failed")

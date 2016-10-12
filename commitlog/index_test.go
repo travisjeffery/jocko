@@ -17,7 +17,7 @@ func TestIndex(t *testing.T) {
 
 	path = filepath.Join(path, "test.index")
 
-	idx, err := NewIndex(options{
+	idx, err := newIndex(options{
 		path: path,
 	})
 	if err != nil {

@@ -38,7 +38,7 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*segment, error)
 	}
 
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, baseOffset))
-	index, err := NewIndex(options{
+	index, err := newIndex(options{
 		path: indexPath,
 	})
 	if err != nil {
@@ -76,6 +76,14 @@ func (s *segment) Write(p []byte) (n int, err error) {
 	_, err = s.index.Write([]byte(fmt.Sprintf("%d,%d\n", s.nextOffset, s.bytes)))
 	if err != nil {
 		return 0, errors.Wrap(err, "index write failed")
+	}
+
+	err = s.index.WriteEntry(entry{
+		Offset:   int8(s.nextOffset),
+		Position: int8(s.bytes),
+	})
+	if err != nil {
+		return 0, err
 	}
 
 	s.nextOffset += 1
