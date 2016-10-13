@@ -9,7 +9,7 @@ Kafka/distributed commit log service in Go.
 - Distribute a single binary
 - Improve performance
 - Use Raft for consensus
-- Smarter configuration settings, examples:
+- Smarter configuration settings
   - Able to use percentages of disk space for retention policies rather than only bytes and time kept
   - Handling size configs when you change the number of partitions or add topics
 - Learn a lot and have fun
