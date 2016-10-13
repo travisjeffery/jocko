@@ -31,7 +31,9 @@ func TestIndex(t *testing.T) {
 		})
 	}
 	for _, e := range entries {
-		idx.WriteEntry(e)
+		if err := idx.WriteEntry(e); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err = idx.Sync(); err != nil {
 		t.Fatal(err)
