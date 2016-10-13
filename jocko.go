@@ -99,5 +99,5 @@ func newTopic(config TopicConfig) *Topic {
 }
 
 func (c *Jocko) register(name string, topic *Topic) error {
-
+	return nil
 }

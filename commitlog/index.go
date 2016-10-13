@@ -28,13 +28,32 @@ type index struct {
 }
 
 type entry struct {
+	Offset   int64
+	Position int64
+}
+
+// relEntry is an entry relative to the base offset
+type relEntry struct {
 	Offset   int8
 	Position int8
 }
 
+func newRelEntry(e entry, baseOffset int64) relEntry {
+	return relEntry{
+		Offset:   int8(e.Offset - baseOffset),
+		Position: int8(e.Position),
+	}
+}
+
+func (rel relEntry) fill(e *entry, baseOffset int64) {
+	e.Offset = baseOffset + int64(rel.Offset)
+	e.Position = int64(rel.Position)
+}
+
 type options struct {
-	path  string
-	bytes int64
+	path       string
+	bytes      int64
+	baseOffset int64
 }
 
 func newIndex(opts options) (idx *index, err error) {
@@ -75,7 +94,8 @@ func newIndex(opts options) (idx *index, err error) {
 
 func (idx *index) WriteEntry(entry entry) (err error) {
 	b := new(bytes.Buffer)
-	if err = binary.Write(b, binary.BigEndian, entry); err != nil {
+	relEntry := newRelEntry(entry, idx.baseOffset)
+	if err = binary.Write(b, binary.BigEndian, relEntry); err != nil {
 		return errors.Wrap(err, "binary write failed")
 	}
 	if _, err = idx.WriteAt(b.Bytes(), idx.offset); err != nil {
@@ -89,7 +109,13 @@ func (idx *index) ReadEntry(e *entry, offset int64) error {
 	p := make([]byte, entryWidth)
 	copy(p, idx.mmap[offset:offset+entryWidth])
 	b := bytes.NewReader(p)
-	return binary.Read(b, binary.BigEndian, e)
+	rel := &relEntry{}
+	err := binary.Read(b, binary.BigEndian, rel)
+	if err != nil {
+		return errors.Wrap(err, "binar read failed")
+	}
+	rel.fill(e, idx.baseOffset)
+	return nil
 }
 
 func (idx *index) ReadAt(p []byte, offset int64) (n int, err error) {

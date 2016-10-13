@@ -26,8 +26,8 @@ func TestIndex(t *testing.T) {
 	entries := []entry{}
 	for i := 0; i < 3; i++ {
 		entries = append(entries, entry{
-			int8(i),
-			int8(i * 5),
+			int64(i),
+			int64(i * 5),
 		})
 	}
 	for _, e := range entries {

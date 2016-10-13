@@ -1,4 +1,4 @@
-# Jocko
+# JOCKO
 
 Kafka/distributed commit log service in Go.
 

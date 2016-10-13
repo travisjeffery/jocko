@@ -81,8 +81,8 @@ func (s *segment) Write(p []byte) (n int, err error) {
 	}
 
 	err = s.index.WriteEntry(entry{
-		Offset:   int8(s.nextOffset),
-		Position: int8(s.bytes),
+		Offset:   s.nextOffset,
+		Position: s.bytes,
 	})
 	if err != nil {
 		return 0, err
