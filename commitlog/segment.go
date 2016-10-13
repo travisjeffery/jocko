@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/pkg/errors"
 )
@@ -39,7 +40,8 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*segment, error)
 
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, baseOffset))
 	index, err := newIndex(options{
-		path: indexPath,
+		path:       indexPath,
+		baseOffset: baseOffset,
 	})
 	if err != nil {
 		return nil, err
@@ -105,4 +107,16 @@ func (s *segment) Close() error {
 		return err
 	}
 	return s.index.Close()
+}
+
+func (s *segment) findEntry(offset int64) (e *entry, err error) {
+	e = &entry{}
+	idx := sort.Search(int(s.index.bytes/entryWidth), func(i int) bool {
+		_ = s.index.ReadEntry(e, int64(i*entryWidth))
+		return int64(e.Offset) > offset || e.Offset == 0
+	})
+	if idx == -1 {
+		return nil, errors.New("entry not found")
+	}
+	return e, nil
 }
