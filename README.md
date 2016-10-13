@@ -10,8 +10,8 @@ Kafka/distributed commit log service in Go.
 - Improve performance
 - Use Raft for consensus
 - Smarter configuration settings, examples:
-  - Topics A, B, C, D use 25% of available disk space each (right now you have to specify in byte size or age)
-  - Handling size configs when you change the number of partitions or add more topics
+  - Able to use percentages of disk space for retention policies rather than only bytes and time kept
+  - Handling size configs when you change the number of partitions or add topics
 - Learn a lot and have fun
 
 ## TODO
