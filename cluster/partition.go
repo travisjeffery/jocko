@@ -1,18 +1,18 @@
-package jocko
+package cluster
 
 import "github.com/travisjeffery/jocko/commitlog"
 
-type Options struct {
+type PartitionOptions struct {
 	Topic string
 }
 
 type Partition struct {
-	Options
+	PartitionOptions
 	ID        int
 	CommitLog *commitlog.CommitLog
 }
 
-func NewPartition(opts Options) *Partition {
+func NewPartition(opts PartitionOptions) *Partition {
 	return &Partition{
 		Options: opts,
 	}
