@@ -1,4 +1,4 @@
-package jocko
+package server
 
 import (
 	"encoding/json"
