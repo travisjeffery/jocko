@@ -21,6 +21,35 @@ type Store interface {
 	Join(addr []byte) error
 }
 
+type MetadataRequest struct {
+	Topics []string `json:"topics"`
+}
+
+type Broker struct {
+	ID   int    `json:"id"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+type PartitionMetadata struct {
+	ErrorCode int   `json:"error_code"`
+	ID        int   `json:"id"`
+	Leader    int   `json:"leader"`
+	Replicas  []int `json:"replicas"`
+}
+
+type TopicMetadata struct {
+	ErrorCode         int                 `json:"error_code"`
+	Topic             string              `json:"topic"`
+	PartitionMetadata []PartitionMetadata `json:"partition_metadata"`
+}
+
+type MetadataResponse struct {
+	Brokers       []Broker        `json:"brokers"`
+	ControllerID  int             `json:"controller_id"`
+	TopicMetadata []TopicMetadata `json:"topic_metadata"`
+}
+
 type Server struct {
 	addr string
 	ln   net.Listener
@@ -69,6 +98,8 @@ func (s *Server) Close() {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/join" {
 		s.handleJoin(w, r)
+	} else if r.URL.Path == "/metadata" {
+		s.handleMetadata(w, r)
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -94,6 +125,14 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.store.Join([]byte(remoteAddr)); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
+	m := new(MetadataRequest)
+	if err := json.NewDecoder(r.Body).Decode(m); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 }
