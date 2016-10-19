@@ -27,7 +27,7 @@ func TestNewServer(t *testing.T) {
 	b = doGet(t, s.URL(), "k1")
 	assert.Equal(t, `{"k1":"v1"}`, string(b))
 
-	store.m["k2"] = "v2"
+	store.m["k2"] = []byte("v2")
 	b = doGet(t, s.URL(), "k2")
 	assert.Equal(t, `{"k2":"v2"}`, string(b))
 
@@ -46,30 +46,30 @@ func (t *testServer) URL() string {
 }
 
 type testStore struct {
-	m map[string]string
+	m map[string][]byte
 }
 
 func newTestStore() *testStore {
 	return &testStore{
-		m: make(map[string]string),
+		m: make(map[string][]byte),
 	}
 }
 
-func (t *testStore) Get(key string) (string, error) {
-	return t.m[key], nil
+func (t *testStore) Get(key []byte) ([]byte, error) {
+	return t.m[string(key)], nil
 }
 
-func (t *testStore) Set(key, value string) error {
-	t.m[key] = value
+func (t *testStore) Set(key, value []byte) error {
+	t.m[string(key)] = value
 	return nil
 }
 
-func (t *testStore) Delete(key string) error {
-	delete(t.m, key)
+func (t *testStore) Delete(key []byte) error {
+	delete(t.m, string(key))
 	return nil
 }
 
-func (t *testStore) Join(addr string) error {
+func (t *testStore) Join(addr []byte) error {
 	return nil
 }
 
