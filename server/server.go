@@ -26,16 +26,16 @@ type MetadataRequest struct {
 }
 
 type Broker struct {
-	ID   int    `json:"id"`
+	ID   string `json:"id"`
 	Host string `json:"host"`
 	Port int    `json:"port"`
 }
 
 type PartitionMetadata struct {
-	ErrorCode int   `json:"error_code"`
-	ID        int   `json:"id"`
-	Leader    int   `json:"leader"`
-	Replicas  []int `json:"replicas"`
+	ErrorCode int      `json:"error_code"`
+	ID        string   `json:"id"`
+	Leader    string   `json:"leader"`
+	Replicas  []string `json:"replicas"`
 }
 
 type TopicMetadata struct {
@@ -46,7 +46,7 @@ type TopicMetadata struct {
 
 type MetadataResponse struct {
 	Brokers       []Broker        `json:"brokers"`
-	ControllerID  int             `json:"controller_id"`
+	ControllerID  string          `json:"controller_id"`
 	TopicMetadata []TopicMetadata `json:"topic_metadata"`
 }
 
@@ -135,6 +135,7 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
 }
 
 // Addr returns the address on which the Server is listening
