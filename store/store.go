@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -55,8 +54,9 @@ type TopicPartition struct {
 }
 
 type Options struct {
-	dataDir       string
-	bindAddr      string
+	DataDir  string
+	BindAddr string
+
 	numPartitions int
 	transport     raft.Transport
 }
@@ -67,16 +67,18 @@ type Store struct {
 	mu sync.Mutex
 
 	partitions []*TopicPartition
-	topics     []string
+	topics     map[string][]*TopicPartition
 
 	peerStore raft.PeerStore
 	transport raft.Transport
-	raft      *raft.Raft
-	store     *raftboltdb.BoltStore
+
+	raft  *raft.Raft
+	store *raftboltdb.BoltStore
 }
 
 func New(options Options) *Store {
 	return &Store{
+		topics:  make(map[string][]*TopicPartition),
 		Options: options,
 	}
 }
@@ -86,26 +88,25 @@ func (s *Store) Open() error {
 
 	conf.EnableSingleNode = true
 
-	addr, err := net.ResolveTCPAddr("tcp", s.bindAddr)
+	addr, err := net.ResolveTCPAddr("tcp", s.BindAddr)
 	if err != nil {
 		return errors.Wrap(err, "resolve bind addr failed")
 	}
 
 	if s.transport == nil {
-		s.transport, err = raft.NewTCPTransport(s.bindAddr, addr, 3, timeout, os.Stderr)
+		s.transport, err = raft.NewTCPTransport(s.BindAddr, addr, 3, timeout, os.Stderr)
 		if err != nil {
 			return errors.Wrap(err, "tcp transport failede")
 		}
 	}
 
-	s.peerStore = raft.NewJSONPeers(s.dataDir, s.transport)
+	s.peerStore = raft.NewJSONPeers(s.DataDir, s.transport)
 
-	snapshots, err := raft.NewFileSnapshotStore(s.dataDir, 2, os.Stderr)
+	snapshots, err := raft.NewFileSnapshotStore(s.DataDir, 2, os.Stderr)
 	if err != nil {
-		return fmt.Errorf("file snapshot store: %s", err)
 	}
 
-	boltStore, err := raftboltdb.NewBoltStore(filepath.Join(s.dataDir, "store.db"))
+	boltStore, err := raftboltdb.NewBoltStore(filepath.Join(s.DataDir, "store.db"))
 	if err != nil {
 		return errors.Wrap(err, "bolt store failed")
 	}
@@ -144,9 +145,18 @@ func (s *Store) Partitions() ([]*TopicPartition, error) {
 	return s.partitions, nil
 }
 
+func (s *Store) PartitionsForTopic(topic string) (found []*TopicPartition, err error) {
+	return s.topics[topic], nil
+}
+
 func (s *Store) NumPartitions() (int, error) {
 	// TODO: need to get to get from store
-	return s.numPartitions, nil
+	if s.numPartitions == 0 {
+		return 4, nil
+	} else {
+		return s.numPartitions, nil
+	}
+
 }
 
 func (s *Store) AddPartition(partition TopicPartition) error {
@@ -170,6 +180,11 @@ func (s *Store) addPartition(partition TopicPartition) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.partitions = append(s.partitions, &partition)
+	if v, ok := s.topics[partition.Topic]; ok {
+		s.topics[partition.Topic] = append(v, &partition)
+	} else {
+		s.topics[partition.Topic] = []*TopicPartition{&partition}
+	}
 }
 
 func (s *Store) IsLeaderOfPartition(partition TopicPartition) bool {
@@ -188,7 +203,11 @@ func (s *Store) IsLeaderOfPartition(partition TopicPartition) bool {
 }
 
 func (s *Store) Topics() []string {
-	return s.topics
+	topics := []string{}
+	for k := range s.topics {
+		topics = append(topics, k)
+	}
+	return topics
 }
 
 func (s *Store) Join(addr string) error {
@@ -201,7 +220,6 @@ func (s *Store) Apply(l *raft.Log) interface{} {
 	if err := json.Unmarshal(l.Data, &c); err != nil {
 		panic(errors.Wrap(err, "json unmarshal failed"))
 	}
-
 	switch c.Cmd {
 	case addPartition:
 		var p TopicPartition
@@ -250,7 +268,6 @@ func (s *Store) WaitForLeader(timeout time.Duration) (string, error) {
 				return l, nil
 			}
 		case <-timer.C:
-			return "", fmt.Errorf("timeout expired")
 		}
 	}
 }
@@ -268,7 +285,6 @@ func (s *Store) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
 				return nil
 			}
 		case <-timer.C:
-			return fmt.Errorf("timeout expired")
 		}
 	}
 }

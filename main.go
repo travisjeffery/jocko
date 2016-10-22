@@ -21,7 +21,10 @@ var (
 func main() {
 	kingpin.Parse()
 
-	store := store.New(*raftDir, *raftAddr)
+	store := store.New(store.Options{
+		DataDir:  *raftDir,
+		BindAddr: *raftAddr,
+	})
 	if err := store.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
@@ -36,5 +39,6 @@ func main() {
 	gracefully.Timeout = 10 * time.Second
 	gracefully.Shutdown()
 
+	store.Close()
 	server.Close()
 }

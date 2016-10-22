@@ -10,13 +10,13 @@ import (
 )
 
 func TestStoreOpen(t *testing.T) {
-	dataDir, _ := ioutil.TempDir("", "storetest")
-	defer os.RemoveAll(dataDir)
-	bindAddr := "127.0.0.1:4000"
+	DataDir, _ := ioutil.TempDir("", "storetest")
+	defer os.RemoveAll(DataDir)
+	BindAddr := "127.0.0.1:4000"
 
 	s0 := New(Options{
-		dataDir:       dataDir,
-		bindAddr:      bindAddr,
+		DataDir:       DataDir,
+		BindAddr:      BindAddr,
 		numPartitions: 2,
 	})
 	assert.NotNil(t, s0)
@@ -28,12 +28,12 @@ func TestStoreOpen(t *testing.T) {
 	_, err = s0.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
 
-	dataDir, _ = ioutil.TempDir("", "storetest")
-	defer os.RemoveAll(dataDir)
-	bindAddr = "127.0.0.1:4001"
+	DataDir, _ = ioutil.TempDir("", "storetest")
+	defer os.RemoveAll(DataDir)
+	BindAddr = "127.0.0.1:4001"
 	s1 := New(Options{
-		dataDir:       dataDir,
-		bindAddr:      bindAddr,
+		DataDir:       DataDir,
+		BindAddr:      BindAddr,
 		numPartitions: 2,
 	})
 	err = s1.Open()

@@ -13,7 +13,5 @@ type Partition struct {
 }
 
 func NewPartition(opts PartitionOptions) *Partition {
-	return &Partition{
-		Options: opts,
-	}
+	return &Partition{}
 }
