@@ -8,8 +8,8 @@ import (
 )
 
 type Reader struct {
-	segment  *segment
-	segments []*segment
+	segment  *Segment
+	segments []*Segment
 	idx      int
 	mu       sync.Mutex
 	offset   int64

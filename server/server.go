@@ -5,13 +5,12 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/cluster"
+	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/store"
 )
 
@@ -48,21 +47,16 @@ type Server struct {
 	addr string
 	ln   net.Listener
 
-	logger     *log.Logger
-	store      *store.Store
-	controller *cluster.Controller
+	logger *log.Logger
+	store  *store.Store
 }
 
 func New(addr string, store *store.Store) *Server {
-	controller := &cluster.Controller{
-		Store: store,
-	}
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 	return &Server{
-		addr:       addr,
-		store:      store,
-		logger:     logger,
-		controller: controller,
+		addr:   addr,
+		store:  store,
+		logger: logger,
 	}
 }
 
@@ -196,12 +190,12 @@ type TopicRequest struct {
 func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 	var topic TopicRequest
 	if err := json.NewDecoder(r.Body).Decode(&topic); err != nil {
-		s.logger.Print(errors.Wrap(err, "json decode failed"))
-		w.WriteHeader(http.StatusInternalServerError)
+		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if s.store.IsController() {
-		err := s.controller.CreateTopic(topic.Topic, topic.Partitions)
+		err := s.store.CreateTopic(topic.Topic, topic.Partitions)
 		if err != nil {
 			s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", topic.Topic, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -213,8 +207,34 @@ func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
+type ProduceRequest struct {
+	RequiredAcks int                  `json:"required_acks"`
+	Timeout      int                  `json:"timeout"`
+	Partition    int                  `json:"partition"`
+	Topic        string               `json:"topic"`
+	MessageSet   commitlog.MessageSet `json:"message_set"`
+}
 
+func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
+	var produce ProduceRequest
+	if err := json.NewDecoder(r.Body).Decode(&produce); err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	partition, err := s.store.Partition(produce.Topic, produce.Partition)
+	if err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to find partition; %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	err = partition.CommitLog.Append(produce.MessageSet)
+	if err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to append messages; %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // Addr returns the address on which the Server is listening

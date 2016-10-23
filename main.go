@@ -24,6 +24,7 @@ func main() {
 	store := store.New(store.Options{
 		DataDir:  *raftDir,
 		BindAddr: *raftAddr,
+		LogDir:   *logDir,
 	})
 	if err := store.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)

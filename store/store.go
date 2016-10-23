@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
+	"github.com/travisjeffery/jocko/cluster"
 )
 
 const (
@@ -43,19 +44,10 @@ func newCommand(cmd CmdType, data interface{}) (c command, err error) {
 	}, nil
 }
 
-type TopicPartition struct {
-	Topic     string `json:"topic"`
-	Partition int    `json:"partition"`
-
-	// broker ids
-	Replicas        []string `json:"replicas"`
-	Leader          string   `json:"leader"`
-	PreferredLeader string   `json:"preferred_leader"`
-}
-
 type Options struct {
 	DataDir  string
 	BindAddr string
+	LogDir   string
 
 	numPartitions int
 	transport     raft.Transport
@@ -66,8 +58,8 @@ type Store struct {
 
 	mu sync.Mutex
 
-	partitions []*TopicPartition
-	topics     map[string][]*TopicPartition
+	partitions []*cluster.TopicPartition
+	topics     map[string][]*cluster.TopicPartition
 
 	peerStore raft.PeerStore
 	transport raft.Transport
@@ -78,7 +70,7 @@ type Store struct {
 
 func New(options Options) *Store {
 	return &Store{
-		topics:  make(map[string][]*TopicPartition),
+		topics:  make(map[string][]*cluster.TopicPartition),
 		Options: options,
 	}
 }
@@ -141,12 +133,25 @@ func (s *Store) Brokers() ([]string, error) {
 	return s.peerStore.Peers()
 }
 
-func (s *Store) Partitions() ([]*TopicPartition, error) {
+func (s *Store) Partitions() ([]*cluster.TopicPartition, error) {
 	return s.partitions, nil
 }
 
-func (s *Store) PartitionsForTopic(topic string) (found []*TopicPartition, err error) {
+func (s *Store) PartitionsForTopic(topic string) (found []*cluster.TopicPartition, err error) {
 	return s.topics[topic], nil
+}
+
+func (s *Store) Partition(topic string, partition int) (*cluster.TopicPartition, error) {
+	found, err := s.PartitionsForTopic(topic)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range found {
+		if f.Partition == partition {
+			return f, nil
+		}
+	}
+	return nil, errors.New("partition not found")
 }
 
 func (s *Store) NumPartitions() (int, error) {
@@ -159,7 +164,7 @@ func (s *Store) NumPartitions() (int, error) {
 
 }
 
-func (s *Store) AddPartition(partition TopicPartition) error {
+func (s *Store) AddPartition(partition cluster.TopicPartition) error {
 	return s.apply(addPartition, partition)
 }
 
@@ -176,23 +181,29 @@ func (s *Store) apply(cmdType CmdType, data interface{}) error {
 	return f.Error()
 }
 
-func (s *Store) addPartition(partition TopicPartition) {
+func (s *Store) addPartition(partition *cluster.TopicPartition) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.partitions = append(s.partitions, &partition)
+	s.partitions = append(s.partitions, partition)
 	if v, ok := s.topics[partition.Topic]; ok {
-		s.topics[partition.Topic] = append(v, &partition)
+		s.topics[partition.Topic] = append(v, partition)
 	} else {
-		s.topics[partition.Topic] = []*TopicPartition{&partition}
+		s.topics[partition.Topic] = []*cluster.TopicPartition{partition}
+	}
+	if s.IsLeaderOfPartition(partition) {
+		// need to open log here
+		if err := partition.OpenCommitLog(s.LogDir); err != nil {
+			// log or panic
+		}
 	}
 }
 
-func (s *Store) IsLeaderOfPartition(partition TopicPartition) bool {
+func (s *Store) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	// TODO: switch this to a map for perf
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, p := range s.partitions {
-		if p.Topic == partition.Topic && p.Partition == partition.Partition {
+	for _, p := range s.topics[partition.Topic] {
+		if p.Partition == partition.Partition {
 			if partition.Leader == s.BrokerID() {
 				return true
 			}
@@ -222,17 +233,51 @@ func (s *Store) Apply(l *raft.Log) interface{} {
 	}
 	switch c.Cmd {
 	case addPartition:
-		var p TopicPartition
+		p := new(cluster.TopicPartition)
 		b, err := c.Data.MarshalJSON()
 		if err != nil {
 			panic(errors.Wrap(err, "json unmarshal failed"))
 		}
-		if err := json.Unmarshal(b, &p); err != nil {
+		if err := json.Unmarshal(b, p); err != nil {
 			panic(errors.Wrap(err, "json unmarshal failed"))
 		}
 		s.addPartition(p)
 	}
 
+	return nil
+}
+
+// CreateTopic creates topic with partitions count.
+func (s *Store) CreateTopic(topic string, partitions int) error {
+	for _, t := range s.Topics() {
+		if t == topic {
+			return errors.New("topic exists already")
+		}
+	}
+	numPartitions, err := s.NumPartitions()
+	if err != nil {
+		return err
+	}
+	if partitions != 0 {
+		numPartitions = partitions
+	}
+	brokers, err := s.Brokers()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < numPartitions; i++ {
+		broker := brokers[i%len(brokers)]
+		partition := cluster.TopicPartition{
+			Partition:       i,
+			Topic:           topic,
+			Leader:          broker,
+			PreferredLeader: broker,
+			Replicas:        []string{broker},
+		}
+		if err := s.AddPartition(partition); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

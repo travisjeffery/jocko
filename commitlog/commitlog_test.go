@@ -8,11 +8,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewCommitLog(t *testing.T) {
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
-	fmt.Println(path)
+	os.RemoveAll(path)
+	os.MkdirAll(path, 0755)
+
 	opts := Options{
 		Path:         path,
 		SegmentBytes: 6,
@@ -20,31 +24,43 @@ func TestNewCommitLog(t *testing.T) {
 	l, err := New(opts)
 
 	// remove old data
-	l.deleteAll()
+	assert.NoError(t, l.DeleteAll())
 
-	l.init()
-	l.open()
+	assert.NoError(t, l.Init())
+	assert.NoError(t, l.Open())
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = l.Write([]byte("one"))
+	err = l.Append(MessageSet{
+		Offset:  0,
+		Payload: []byte("one"),
+	})
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = l.Write([]byte("two"))
+	err = l.Append(MessageSet{
+		Offset:  1,
+		Payload: []byte("two"),
+	})
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = l.Write([]byte("three"))
+	err = l.Append(MessageSet{
+		Offset:  2,
+		Payload: []byte("three"),
+	})
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = l.Write([]byte("four"))
+	err = l.Append(MessageSet{
+		Offset:  3,
+		Payload: []byte("four"),
+	})
 	if err != nil {
 		t.Error(err)
 	}

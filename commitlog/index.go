@@ -27,25 +27,25 @@ type index struct {
 	offset int64
 }
 
-type entry struct {
+type Entry struct {
 	Offset   int64
 	Position int64
 }
 
-// relEntry is an entry relative to the base offset
+// relEntry is an Entry relative to the base offset
 type relEntry struct {
 	Offset   int8
 	Position int8
 }
 
-func newRelEntry(e entry, baseOffset int64) relEntry {
+func newRelEntry(e Entry, baseOffset int64) relEntry {
 	return relEntry{
 		Offset:   int8(e.Offset - baseOffset),
 		Position: int8(e.Position),
 	}
 }
 
-func (rel relEntry) fill(e *entry, baseOffset int64) {
+func (rel relEntry) fill(e *Entry, baseOffset int64) {
 	e.Offset = baseOffset + int64(rel.Offset)
 	e.Position = int64(rel.Position)
 }
@@ -68,6 +68,7 @@ func newIndex(opts options) (idx *index, err error) {
 	idx = &index{
 		options: opts,
 	}
+
 	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, errors.Wrap(err, "open file failed")
@@ -83,8 +84,9 @@ func newIndex(opts options) (idx *index, err error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "file truncate failed")
 		}
+	} else {
+		idx.offset = size
 	}
-	idx.offset = size
 	idx.mmap, err = gommap.Map(idx.file.Fd(), gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 	if err != nil {
 		return nil, errors.Wrap(err, "mmap file failed")
@@ -92,7 +94,7 @@ func newIndex(opts options) (idx *index, err error) {
 	return idx, nil
 }
 
-func (idx *index) WriteEntry(entry entry) (err error) {
+func (idx *index) WriteEntry(entry Entry) (err error) {
 	b := new(bytes.Buffer)
 	relEntry := newRelEntry(entry, idx.baseOffset)
 	if err = binary.Write(b, binary.BigEndian, relEntry); err != nil {
@@ -105,7 +107,7 @@ func (idx *index) WriteEntry(entry entry) (err error) {
 	return nil
 }
 
-func (idx *index) ReadEntry(e *entry, offset int64) error {
+func (idx *index) ReadEntry(e *Entry, offset int64) error {
 	p := make([]byte, entryWidth)
 	copy(p, idx.mmap[offset:offset+entryWidth])
 	b := bytes.NewReader(p)
@@ -119,7 +121,7 @@ func (idx *index) ReadEntry(e *entry, offset int64) error {
 }
 
 func (idx *index) ReadAt(p []byte, offset int64) (n int, err error) {
-	n = copy(idx.mmap[idx.offset:idx.offset+entryWidth], []byte("hellohellomanman"))
+	n = copy(idx.mmap[idx.offset:idx.offset+entryWidth], p)
 	return n, nil
 }
 

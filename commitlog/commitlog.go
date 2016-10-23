@@ -6,15 +6,28 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 )
+
+type Message struct {
+	Offset    int64     `json:"offset"`
+	Value     []byte    `json:"value"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type MessageSet struct {
+	Offset      int64  `json:"offset"`
+	MessageSize int32  `json:"message_size"`
+	Payload     []byte `json:"payload"`
+}
 
 type CommitLog struct {
 	Options
 	name           string
 	mu             sync.RWMutex
-	segments       []*segment
+	segments       []*Segment
 	vActiveSegment atomic.Value
 }
 
@@ -41,7 +54,7 @@ func New(opts Options) (*CommitLog, error) {
 	return l, nil
 }
 
-func (l *CommitLog) init() error {
+func (l *CommitLog) Init() error {
 	err := os.MkdirAll(l.Path, 0755)
 	if err != nil {
 		return errors.Wrap(err, "mkdir failed")
@@ -49,7 +62,7 @@ func (l *CommitLog) init() error {
 	return nil
 }
 
-func (l *CommitLog) open() error {
+func (l *CommitLog) Open() error {
 	_, err := ioutil.ReadDir(l.Path)
 	if err != nil {
 		return errors.Wrap(err, "read dir failed")
@@ -66,21 +79,26 @@ func (l *CommitLog) open() error {
 	return nil
 }
 
-func (l *CommitLog) deleteAll() error {
+func (l *CommitLog) DeleteAll() error {
 	return os.RemoveAll(l.Path)
 }
 
-func (l *CommitLog) Write(p []byte) (n int, err error) {
+func (l *CommitLog) Append(m MessageSet) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	if l.checkSplit() {
-		if err = l.split(); err != nil {
-			return 0, err
+		if err := l.split(); err != nil {
+			return err
 		}
 	}
-
-	return l.activeSegment().Write(p)
+	position := l.activeSegment().Position
+	if _, err := l.activeSegment().Write(m.Payload); err != nil {
+		return err
+	}
+	return l.activeSegment().Index.WriteEntry(Entry{
+		Offset:   m.Offset,
+		Position: position,
+	})
 }
 
 func (l *CommitLog) Read(p []byte) (n int, err error) {
@@ -104,9 +122,9 @@ func (l *CommitLog) split() error {
 }
 
 func (l *CommitLog) newestOffset() int64 {
-	return l.activeSegment().NextOffset()
+	return l.activeSegment().NextOffset
 }
 
-func (l *CommitLog) activeSegment() *segment {
-	return l.vActiveSegment.Load().(*segment)
+func (l *CommitLog) activeSegment() *Segment {
+	return l.vActiveSegment.Load().(*Segment)
 }
