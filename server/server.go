@@ -224,13 +224,18 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 	}
 	partition, err := s.store.Partition(produce.Topic, produce.Partition)
 	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to find partition; %v", err)
+		s.logger.Printf("[ERR] jocko: Failed to find partition: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if !s.store.IsLeaderOfPartition(partition) {
+		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	err = partition.CommitLog.Append(produce.MessageSet)
 	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to append messages; %v", err)
+		s.logger.Printf("[ERR] jocko: Failed to append messages: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
