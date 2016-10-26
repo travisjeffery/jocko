@@ -3,6 +3,7 @@ package commitlog
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -49,9 +50,9 @@ func TestNewCommitLog(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	p := make([]byte, msgSet.Size())
+	p := make([]byte, msgSet.Size()*2)
 	_, err = r.Read(p)
-	assert.NoError(t, err)
+	assert.Equal(t, io.EOF, err)
 	ms := MessageSet(p)
 	assert.Equal(t, int64(1), ms.Offset())
 	for i, m := range ms.Messages() {
