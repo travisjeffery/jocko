@@ -3,7 +3,6 @@ package commitlog
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -33,48 +32,31 @@ func TestNewCommitLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = l.Append(MessageSet{
-		Offset:  0,
-		Payload: []byte("one"),
+	msgs := []Message{
+		NewMessage([]byte("one")),
+		NewMessage([]byte("two")),
+		NewMessage([]byte("three")),
+		NewMessage([]byte("four")),
+	}
+	msgSet := NewMessageSet(msgs, 1)
+	err = l.Append(msgSet)
+	if err != nil {
+		t.Error(err)
+	}
+	r, err := l.NewReader(ReaderOptions{
+		Offset: 0,
 	})
 	if err != nil {
 		t.Error(err)
 	}
-
-	err = l.Append(MessageSet{
-		Offset:  1,
-		Payload: []byte("two"),
-	})
-	if err != nil {
-		t.Error(err)
+	p := make([]byte, msgSet.Size())
+	_, err = r.Read(p)
+	assert.NoError(t, err)
+	ms := MessageSet(p)
+	assert.Equal(t, int64(1), ms.Offset())
+	for i, m := range ms.Messages() {
+		assert.Equal(t, msgs[i], m)
 	}
-
-	err = l.Append(MessageSet{
-		Offset:  2,
-		Payload: []byte("three"),
-	})
-	if err != nil {
-		t.Error(err)
-	}
-
-	err = l.Append(MessageSet{
-		Offset:  3,
-		Payload: []byte("four"),
-	})
-	if err != nil {
-		t.Error(err)
-	}
-
-	r, err := l.NewReader(1)
-	if err != nil {
-		t.Error(err)
-	}
-	p, err := ioutil.ReadAll(r)
-	if err != nil {
-		t.Error(err)
-	}
-
-	check(t, p, []byte("twothreefour"))
 }
 
 func check(t *testing.T, got, want []byte) {

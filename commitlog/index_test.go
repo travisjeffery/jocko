@@ -14,7 +14,6 @@ func TestIndex(t *testing.T) {
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
 	os.RemoveAll(path)
 	os.MkdirAll(path, 0755)
-
 	path = filepath.Join(path, "test.index")
 
 	idx, err := newIndex(options{
@@ -43,7 +42,7 @@ func TestIndex(t *testing.T) {
 		if err = idx.ReadEntry(act, int64(i*entryWidth)); err != nil {
 			t.Fatal(err)
 		}
-		assert.Equal(t, exp.Offset, act.Offset)
-		assert.Equal(t, exp.Position, act.Position)
+		assert.Equal(t, exp.Offset, act.Offset, act)
+		assert.Equal(t, exp.Position, act.Position, act)
 	}
 }

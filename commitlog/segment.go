@@ -94,7 +94,7 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	e = &Entry{}
 	idx := sort.Search(int(s.Index.bytes/entryWidth), func(i int) bool {
 		_ = s.Index.ReadEntry(e, int64(i*entryWidth))
-		return int64(e.Offset) > offset || e.Offset == 0
+		return e.Offset > offset || e.Offset == 0
 	})
 	if idx == -1 {
 		return nil, errors.New("entry not found")

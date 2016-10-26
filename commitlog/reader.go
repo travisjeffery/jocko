@@ -8,11 +8,12 @@ import (
 )
 
 type Reader struct {
+	ReaderOptions
 	segment  *Segment
 	segments []*Segment
 	idx      int
 	mu       sync.Mutex
-	offset   int64
+	position int64
 }
 
 func (r *Reader) Read(p []byte) (n int, err error) {
@@ -21,7 +22,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 
 	var readSize int
 	for {
-		readSize, err = r.segment.ReadAt(p[n:], r.offset)
+		readSize, err = r.segment.ReadAt(p[n:], r.position)
 		n += readSize
 		if err != io.EOF {
 			break
@@ -32,25 +33,32 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 			break
 		}
 		r.segment = r.segments[r.idx]
-		r.offset = 0
+		r.position = 0
 	}
 
 	return n, err
 }
 
-func (l *CommitLog) NewReader(offset int64) (r *Reader, err error) {
-	segment, idx := findSegment(l.segments, offset)
-	entry, _ := segment.findEntry(offset)
-	offset = int64(entry.Position)
+type ReaderOptions struct {
+	Offset   int64
+	MaxBytes int32
+	P        []byte
+}
+
+func (l *CommitLog) NewReader(options ReaderOptions) (r *Reader, err error) {
+	segment, idx := findSegment(l.segments, options.Offset)
+	entry, _ := segment.findEntry(options.Offset)
+	position := int64(entry.Position)
 
 	if segment == nil {
 		return nil, errors.Wrap(err, "segment not found")
 	}
 
 	return &Reader{
-		segment:  segment,
-		segments: l.segments,
-		idx:      idx,
-		offset:   offset,
+		ReaderOptions: options,
+		segment:       segment,
+		segments:      l.segments,
+		idx:           idx,
+		position:      position,
 	}, nil
 }

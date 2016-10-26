@@ -6,22 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pkg/errors"
 )
-
-type Message struct {
-	Offset    int64     `json:"offset"`
-	Value     []byte    `json:"value"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-type MessageSet struct {
-	Offset      int64  `json:"offset"`
-	MessageSize int32  `json:"message_size"`
-	Payload     []byte `json:"payload"`
-}
 
 type CommitLog struct {
 	Options
@@ -83,7 +70,7 @@ func (l *CommitLog) DeleteAll() error {
 	return os.RemoveAll(l.Path)
 }
 
-func (l *CommitLog) Append(m MessageSet) error {
+func (l *CommitLog) Append(ms MessageSet) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.checkSplit() {
@@ -92,13 +79,17 @@ func (l *CommitLog) Append(m MessageSet) error {
 		}
 	}
 	position := l.activeSegment().Position
-	if _, err := l.activeSegment().Write(m.Payload); err != nil {
+	if _, err := l.activeSegment().Write(ms); err != nil {
 		return err
 	}
-	return l.activeSegment().Index.WriteEntry(Entry{
-		Offset:   m.Offset,
+	e := Entry{
+		Offset:   ms.Offset(),
 		Position: position,
-	})
+	}
+	if err := l.activeSegment().Index.WriteEntry(e); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (l *CommitLog) Read(p []byte) (n int, err error) {
