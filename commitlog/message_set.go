@@ -25,5 +25,23 @@ func (ms MessageSet) Offset() int64 {
 }
 
 func (ms MessageSet) Size() int32 {
-	return int32(big.Uint32(ms[sizePos : sizePos+4]))
+	return int32(big.Uint32(ms[sizePos:sizePos+4]) + msgSetHeaderLen)
+}
+
+func (ms MessageSet) Payload() []byte {
+	return ms[msgSetHeaderLen:]
+}
+
+func (ms MessageSet) Messages() (msgs []Message) {
+	p := ms.Payload()
+	for {
+		header := Message(p[:msgHeaderLen])
+		msg := Message(p[:header.Size()])
+		msgs = append(msgs, msg)
+		p = p[msg.Size():]
+		if len(p) == 0 {
+			break
+		}
+	}
+	return msgs
 }

@@ -34,3 +34,7 @@ func (m Message) Size() int32 {
 func (m Message) PLen() int32 {
 	return int32(big.Uint32(m[pLenPos : pLenPos+4]))
 }
+
+func (m Message) Payload() []byte {
+	return m[payloadPos:]
+}
