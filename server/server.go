@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -73,6 +74,7 @@ func (s *Server) Start() error {
 	r.Methods("POST").Path("/metadata/topic").HandlerFunc(s.handleTopic)
 	r.Methods("POST").Path("/join").HandlerFunc(s.handleJoin)
 	r.Methods("POST").Path("/produce").HandlerFunc(s.handleProduce)
+	r.Methods("POST").Path("/fetch").HandlerFunc(s.handleFetch)
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
 	http.Handle("/", r)
 
@@ -136,7 +138,7 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	brokers := make([]Broker, len(brokerIDs))
+	var brokers []Broker
 	for _, bID := range brokerIDs {
 		host, port, err := net.SplitHostPort(bID)
 		if err != nil {
@@ -194,6 +196,14 @@ func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if topic.Topic == "" {
+		http.Error(w, "topic is blank", http.StatusBadRequest)
+		return
+	}
+	if topic.Partitions <= 0 {
+		http.Error(w, "partitions is 0", http.StatusBadRequest)
+		return
+	}
 	if s.store.IsController() {
 		err := s.store.CreateTopic(topic.Topic, topic.Partitions)
 		if err != nil {
@@ -204,7 +214,9 @@ func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cID := s.store.ControllerID()
 		http.Redirect(w, r, cID, http.StatusSeeOther)
+		return
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 type ProduceRequest struct {
@@ -224,7 +236,7 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 	}
 	partition, err := s.store.Partition(produce.Topic, produce.Partition)
 	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to find partition: %v", err)
+		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, produce.Topic, produce.Partition)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -240,6 +252,69 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+type FetchRequest struct {
+	Topic       string `json:"topic"`
+	Partition   int    `json:"partition"`
+	FetchOffset int64  `json:"offset"`
+	MinBytes    int32  `json:"min_bytes"`
+	MaxBytes    int32  `json:"max_bytes"`
+}
+
+type FetchResponse struct {
+	Topic     string `json:"topic"`
+	Partition int    `json:"partition"`
+	// size in bytes
+	MessageSetSize int32                `json:"message_set_size"`
+	MessageSet     commitlog.MessageSet `json:"message_set"`
+}
+
+func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
+	var fetch FetchRequest
+	if err := json.NewDecoder(r.Body).Decode(&fetch); err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	partition, err := s.store.Partition(fetch.Topic, fetch.Partition)
+	if err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, fetch.Topic, fetch.Partition)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if !s.store.IsLeaderOfPartition(partition) {
+		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	rdr, err := partition.CommitLog.NewReader(commitlog.ReaderOptions{
+		Offset:   fetch.FetchOffset,
+		MaxBytes: fetch.MaxBytes,
+	})
+	if err != nil {
+		s.logger.Printf("[ERR] jocko: Failed to read partition: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	p := make([]byte, fetch.MaxBytes)
+	n, err := rdr.Read(p)
+	if err != nil && err != io.EOF {
+		s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	// if n < fetch.MinBytes {
+	// 	// wait and fetch again
+	// 	// or use io.ReadtAtLeast
+	// }
+	v := FetchResponse{
+		Topic:          fetch.Topic,
+		Partition:      fetch.Partition,
+		MessageSetSize: int32(n),
+		MessageSet:     p[:n],
+	}
+	writeJSON(w, v, http.StatusOK)
 }
 
 // Addr returns the address on which the Server is listening

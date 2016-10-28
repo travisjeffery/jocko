@@ -2,104 +2,76 @@ package server
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strings"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/store"
 )
 
 func TestNewServer(t *testing.T) {
-	store := newTestStore()
-	s := &testServer{New(":0", store)}
+	dir := os.TempDir()
+	os.RemoveAll(dir)
 
+	logs := filepath.Join(dir, "logs")
+	assert.NoError(t, os.MkdirAll(logs, 0755))
+
+	data := filepath.Join(dir, "data")
+	assert.NoError(t, os.MkdirAll(data, 0755))
+
+	store := store.New(store.Options{
+		DataDir:  data,
+		BindAddr: ":0",
+		LogDir:   logs,
+	})
+	assert.NoError(t, store.Open())
+	defer store.Close()
+
+	_, err := store.WaitForLeader(10 * time.Second)
+	assert.NoError(t, err)
+
+	s := New(":0", store)
 	assert.NotNil(t, s)
 	assert.NoError(t, s.Start())
 
-	b := doGet(t, s.URL(), "k1")
-	assert.Equal(t, `{"k1":""}`, string(b))
+	ms := commitlog.NewMessageSet([]commitlog.Message{commitlog.NewMessage([]byte("Hello, World"))}, 1)
+	mse := base64.StdEncoding.EncodeToString(ms)
 
-	doPost(t, s.URL(), "k1", "v1")
-	b = doGet(t, s.URL(), "k1")
-	assert.Equal(t, `{"k1":"v1"}`, string(b))
-
-	store.m["k2"] = []byte("v2")
-	b = doGet(t, s.URL(), "k2")
-	assert.Equal(t, `{"k2":"v2"}`, string(b))
-
-	doDelete(t, s.URL(), "k2")
-	b = doGet(t, s.URL(), "k2")
-	assert.Equal(t, `{"k2":""}`, string(b))
-}
-
-type testServer struct {
-	*Server
-}
-
-func (t *testServer) URL() string {
-	port := strings.TrimLeft(t.Addr().String(), "[::]:")
-	return fmt.Sprintf("http://127.0.0.1:%s", port)
-}
-
-type testStore struct {
-	m map[string][]byte
-}
-
-func newTestStore() *testStore {
-	return &testStore{
-		m: make(map[string][]byte),
-	}
-}
-
-func (t *testStore) Get(key []byte) ([]byte, error) {
-	return t.m[string(key)], nil
-}
-
-func (t *testStore) Set(key, value []byte) error {
-	t.m[string(key)] = value
-	return nil
-}
-
-func (t *testStore) Delete(key []byte) error {
-	delete(t.m, string(key))
-	return nil
-}
-
-func (t *testStore) Join(addr []byte) error {
-	return nil
-}
-
-func doGet(t *testing.T, url, key string) string {
-	resp, err := http.Get(fmt.Sprintf("%s/key/%s", url, key))
+	topic := http.HandlerFunc(s.handleTopic)
+	rr := httptest.NewRecorder()
+	r := bytes.NewReader([]byte(`{"partitions": 2, "topic": "my_topic"}`))
+	req, err := http.NewRequest("POST", "/metadata/topic", r)
 	assert.NoError(t, err)
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	assert.NoError(t, err)
-	return string(body)
-}
+	topic.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
 
-func doPost(t *testing.T, url, key, value string) {
-	b, err := json.Marshal(map[string]string{key: value})
+	produce := http.HandlerFunc(s.handleProduce)
+	rr = httptest.NewRecorder()
+	j := fmt.Sprintf(`{"partition": 0, "topic": "my_topic", "message_set": "%s"}`, mse)
+	r = bytes.NewReader([]byte(j))
+	req, err = http.NewRequest("POST", "/produce", r)
 	assert.NoError(t, err)
-	resp, err := http.Post(fmt.Sprintf("%s/key", url), "application-type/json", bytes.NewReader(b))
-	defer resp.Body.Close()
-	assert.NoError(t, err)
+	produce.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
 
-}
-
-func doDelete(t *testing.T, u, key string) {
-	ru, err := url.Parse(fmt.Sprintf("%s/key/%s", u, key))
+	fetch := http.HandlerFunc(s.handleFetch)
+	rr = httptest.NewRecorder()
+	r = bytes.NewReader([]byte(`{"topic": "my_topic", "partition": 0, "offset": 1, "max_bytes": 200}`))
+	req, err = http.NewRequest("POST", "/fetch", r)
 	assert.NoError(t, err)
-	req := &http.Request{
-		Method: "DELETE",
-		URL:    ru,
-	}
-	client := http.Client{}
-	resp, err := client.Do(req)
-	defer resp.Body.Close()
-	assert.NoError(t, err)
+	fetch.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	resp := new(FetchResponse)
+	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), resp))
+	assert.Equal(t, "my_topic", resp.Topic)
+	assert.Equal(t, 0, resp.Partition)
+	assert.True(t, bytes.Compare(ms, resp.MessageSet) == 0)
 }

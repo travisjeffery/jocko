@@ -191,17 +191,14 @@ func (s *Store) addPartition(partition *cluster.TopicPartition) {
 		s.topics[partition.Topic] = []*cluster.TopicPartition{partition}
 	}
 	if s.IsLeaderOfPartition(partition) {
-		// need to open log here
 		if err := partition.OpenCommitLog(s.LogDir); err != nil {
-			// log or panic
+			panic(err)
 		}
 	}
 }
 
 func (s *Store) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	// TODO: switch this to a map for perf
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, p := range s.topics[partition.Topic] {
 		if p.Partition == partition.Partition {
 			if partition.Leader == s.BrokerID() {

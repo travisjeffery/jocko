@@ -44,13 +44,15 @@ func TestNewCommitLog(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	maxBytes := msgSet.Size() * 2
 	r, err := l.NewReader(ReaderOptions{
-		Offset: 0,
+		Offset:   0,
+		MaxBytes: maxBytes,
 	})
 	if err != nil {
 		t.Error(err)
 	}
-	p := make([]byte, msgSet.Size()*2)
+	p := make([]byte, maxBytes)
 	_, err = r.Read(p)
 	assert.Equal(t, io.EOF, err)
 	ms := MessageSet(p)

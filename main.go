@@ -30,7 +30,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
 	}
-
 	server := server.New(*httpAddr, store)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)

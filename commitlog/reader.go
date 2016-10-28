@@ -48,7 +48,7 @@ type ReaderOptions struct {
 func (l *CommitLog) NewReader(options ReaderOptions) (r *Reader, err error) {
 	segment, idx := findSegment(l.segments, options.Offset)
 	entry, _ := segment.findEntry(options.Offset)
-	position := int64(entry.Position)
+	position := entry.Position
 
 	if segment == nil {
 		return nil, errors.Wrap(err, "segment not found")
