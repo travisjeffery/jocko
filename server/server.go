@@ -13,8 +13,8 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
+	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
-	"github.com/travisjeffery/jocko/store"
 )
 
 type MetadataRequest struct {
@@ -51,14 +51,14 @@ type Server struct {
 	ln   net.Listener
 
 	logger *log.Logger
-	store  *store.Store
+	broker  *broker.Broker
 }
 
-func New(addr string, store *store.Store) *Server {
+func New(addr string, broker *broker.Broker) *Server {
 	logger := log.New(os.Stderr, "", log.LstdFlags)
 	return &Server{
 		addr:   addr,
-		store:  store,
+		broker:  broker,
 		logger: logger,
 	}
 }
@@ -121,7 +121,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.Join(remoteAddr); err != nil {
+	if err := s.broker.Join(remoteAddr); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -135,7 +135,7 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	brokerIDs, err := s.store.Brokers()
+	brokerIDs, err := s.broker.Brokers()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -153,10 +153,10 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 			Port: port,
 		})
 	}
-	topic := s.store.Topics()
+	topic := s.broker.Topics()
 	var topicMetadata []TopicMetadata
 	for _, t := range topic {
-		partitions, err := s.store.PartitionsForTopic(t)
+		partitions, err := s.broker.PartitionsForTopic(t)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -176,7 +176,7 @@ func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 	v := MetadataResponse{
 		Brokers:       brokers,
-		ControllerID:  s.store.ControllerID(),
+		ControllerID:  s.broker.ControllerID(),
 		TopicMetadata: topicMetadata,
 	}
 	writeJSON(w, v)
@@ -206,15 +206,15 @@ func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "partitions is 0", http.StatusBadRequest)
 		return
 	}
-	if s.store.IsController() {
-		err := s.store.CreateTopic(topic.Topic, topic.Partitions)
+	if s.broker.IsController() {
+		err := s.broker.CreateTopic(topic.Topic, topic.Partitions)
 		if err != nil {
 			s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", topic.Topic, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	} else {
-		cID := s.store.ControllerID()
+		cID := s.broker.ControllerID()
 		http.Redirect(w, r, cID, http.StatusSeeOther)
 		return
 	}
@@ -236,13 +236,13 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	partition, err := s.store.Partition(produce.Topic, produce.Partition)
+	partition, err := s.broker.Partition(produce.Topic, produce.Partition)
 	if err != nil {
 		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, produce.Topic, produce.Partition)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !s.store.IsLeaderOfPartition(partition) {
+	if !s.broker.IsLeaderOfPartition(partition) {
 		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -281,13 +281,13 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	partition, err := s.store.Partition(fetch.Topic, fetch.Partition)
+	partition, err := s.broker.Partition(fetch.Topic, fetch.Partition)
 	if err != nil {
 		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, fetch.Topic, fetch.Partition)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !s.store.IsLeaderOfPartition(partition) {
+	if !s.broker.IsLeaderOfPartition(partition) {
 		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
 		w.WriteHeader(http.StatusBadRequest)
 		return

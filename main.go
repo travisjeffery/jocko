@@ -6,8 +6,8 @@ import (
 	"time"
 
 	gracefully "github.com/tj/go-gracefully"
+	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/store"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -21,7 +21,7 @@ var (
 func main() {
 	kingpin.Parse()
 
-	store := store.New(store.Options{
+	store := broker.New(broker.Options{
 		DataDir:  *raftDir,
 		BindAddr: *raftAddr,
 		LogDir:   *logDir,

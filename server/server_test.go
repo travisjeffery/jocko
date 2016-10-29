@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
-	"github.com/travisjeffery/jocko/store"
 )
 
 func TestNewServer(t *testing.T) {
@@ -27,7 +27,7 @@ func TestNewServer(t *testing.T) {
 	data := filepath.Join(dir, "data")
 	assert.NoError(t, os.MkdirAll(data, 0755))
 
-	store := store.New(store.Options{
+	store := broker.New(broker.Options{
 		DataDir:  data,
 		BindAddr: ":0",
 		LogDir:   logs,
@@ -73,6 +73,5 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), resp))
 	assert.Equal(t, "my_topic", resp.Topic)
 	assert.Equal(t, 0, resp.Partition)
-	fmt.Println(resp.MessageSet)
 	assert.True(t, bytes.Compare(ms, resp.MessageSet) == 0)
 }

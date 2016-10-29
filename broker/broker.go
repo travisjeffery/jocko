@@ -1,4 +1,4 @@
-package store
+package broker
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ type Options struct {
 	transport     raft.Transport
 }
 
-type Store struct {
+type Broker struct {
 	Options
 
 	mu sync.Mutex
@@ -68,14 +68,14 @@ type Store struct {
 	store *raftboltdb.BoltStore
 }
 
-func New(options Options) *Store {
-	return &Store{
+func New(options Options) *Broker {
+	return &Broker{
 		topics:  make(map[string][]*cluster.TopicPartition),
 		Options: options,
 	}
 }
 
-func (s *Store) Open() error {
+func (s *Broker) Open() error {
 	conf := raft.DefaultConfig()
 
 	conf.EnableSingleNode = true
@@ -113,35 +113,35 @@ func (s *Store) Open() error {
 	return nil
 }
 
-func (s *Store) Close() error {
+func (s *Broker) Close() error {
 	return s.raft.Shutdown().Error()
 }
 
-func (s *Store) IsController() bool {
+func (s *Broker) IsController() bool {
 	return s.raft.State() == raft.Leader
 }
 
-func (s *Store) ControllerID() string {
+func (s *Broker) ControllerID() string {
 	return s.raft.Leader()
 }
 
-func (s *Store) BrokerID() string {
+func (s *Broker) BrokerID() string {
 	return s.transport.LocalAddr()
 }
 
-func (s *Store) Brokers() ([]string, error) {
+func (s *Broker) Brokers() ([]string, error) {
 	return s.peerStore.Peers()
 }
 
-func (s *Store) Partitions() ([]*cluster.TopicPartition, error) {
+func (s *Broker) Partitions() ([]*cluster.TopicPartition, error) {
 	return s.partitions, nil
 }
 
-func (s *Store) PartitionsForTopic(topic string) (found []*cluster.TopicPartition, err error) {
+func (s *Broker) PartitionsForTopic(topic string) (found []*cluster.TopicPartition, err error) {
 	return s.topics[topic], nil
 }
 
-func (s *Store) Partition(topic string, partition int) (*cluster.TopicPartition, error) {
+func (s *Broker) Partition(topic string, partition int) (*cluster.TopicPartition, error) {
 	found, err := s.PartitionsForTopic(topic)
 	if err != nil {
 		return nil, err
@@ -154,7 +154,7 @@ func (s *Store) Partition(topic string, partition int) (*cluster.TopicPartition,
 	return nil, errors.New("partition not found")
 }
 
-func (s *Store) NumPartitions() (int, error) {
+func (s *Broker) NumPartitions() (int, error) {
 	// TODO: need to get to get from store
 	if s.numPartitions == 0 {
 		return 4, nil
@@ -164,11 +164,11 @@ func (s *Store) NumPartitions() (int, error) {
 
 }
 
-func (s *Store) AddPartition(partition cluster.TopicPartition) error {
+func (s *Broker) AddPartition(partition cluster.TopicPartition) error {
 	return s.apply(addPartition, partition)
 }
 
-func (s *Store) apply(cmdType CmdType, data interface{}) error {
+func (s *Broker) apply(cmdType CmdType, data interface{}) error {
 	c, err := newCommand(cmdType, data)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (s *Store) apply(cmdType CmdType, data interface{}) error {
 	return f.Error()
 }
 
-func (s *Store) addPartition(partition *cluster.TopicPartition) {
+func (s *Broker) addPartition(partition *cluster.TopicPartition) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.partitions = append(s.partitions, partition)
@@ -197,7 +197,7 @@ func (s *Store) addPartition(partition *cluster.TopicPartition) {
 	}
 }
 
-func (s *Store) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
+func (s *Broker) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	// TODO: switch this to a map for perf
 	for _, p := range s.topics[partition.Topic] {
 		if p.Partition == partition.Partition {
@@ -210,7 +210,7 @@ func (s *Store) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	return false
 }
 
-func (s *Store) Topics() []string {
+func (s *Broker) Topics() []string {
 	topics := []string{}
 	for k := range s.topics {
 		topics = append(topics, k)
@@ -218,12 +218,12 @@ func (s *Store) Topics() []string {
 	return topics
 }
 
-func (s *Store) Join(addr string) error {
+func (s *Broker) Join(addr string) error {
 	f := s.raft.AddPeer(addr)
 	return f.Error()
 }
 
-func (s *Store) Apply(l *raft.Log) interface{} {
+func (s *Broker) Apply(l *raft.Log) interface{} {
 	var c command
 	if err := json.Unmarshal(l.Data, &c); err != nil {
 		panic(errors.Wrap(err, "json unmarshal failed"))
@@ -245,7 +245,7 @@ func (s *Store) Apply(l *raft.Log) interface{} {
 }
 
 // CreateTopic creates topic with partitions count.
-func (s *Store) CreateTopic(topic string, partitions int) error {
+func (s *Broker) CreateTopic(topic string, partitions int) error {
 	for _, t := range s.Topics() {
 		if t == topic {
 			return errors.New("topic exists already")
@@ -278,7 +278,7 @@ func (s *Store) CreateTopic(topic string, partitions int) error {
 	return nil
 }
 
-func (s *Store) Restore(rc io.ReadCloser) error {
+func (s *Broker) Restore(rc io.ReadCloser) error {
 	return nil
 }
 
@@ -291,11 +291,11 @@ func (f *FSMSnapshot) Persist(sink raft.SnapshotSink) error {
 
 func (f *FSMSnapshot) Release() {}
 
-func (s *Store) Snapshot() (raft.FSMSnapshot, error) {
+func (s *Broker) Snapshot() (raft.FSMSnapshot, error) {
 	return &FSMSnapshot{}, nil
 }
 
-func (s *Store) WaitForLeader(timeout time.Duration) (string, error) {
+func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
 	tick := time.NewTicker(waitDelay)
 	defer tick.Stop()
 
@@ -314,7 +314,7 @@ func (s *Store) WaitForLeader(timeout time.Duration) (string, error) {
 	}
 }
 
-func (s *Store) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
+func (s *Broker) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
 	tick := time.NewTicker(waitDelay)
 	defer tick.Stop()
 	timer := time.NewTimer(timeout)

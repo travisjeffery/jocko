@@ -1,4 +1,4 @@
-package store
+package broker
 
 import (
 	"io/ioutil"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/travisjeffery/jocko/cluster"
 )
 
 func TestStoreOpen(t *testing.T) {
@@ -43,7 +44,7 @@ func TestStoreOpen(t *testing.T) {
 	err = s0.Join(s1.BrokerID())
 	assert.NoError(t, err)
 
-	tp := TopicPartition{
+	tp := cluster.TopicPartition{
 		Topic:           "test",
 		Partition:       0,
 		Leader:          s0.BrokerID(),
@@ -54,7 +55,7 @@ func TestStoreOpen(t *testing.T) {
 	err = s0.AddPartition(tp)
 	assert.NoError(t, err)
 
-	isLeader := s0.IsLeaderOfPartition(tp)
+	isLeader := s0.IsLeaderOfPartition(&tp)
 	assert.True(t, isLeader)
 
 	err = s1.WaitForAppliedIndex(2, 10*time.Second)
