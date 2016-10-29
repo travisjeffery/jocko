@@ -24,14 +24,18 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 	for {
 		readSize, err = r.segment.ReadAt(p[n:], r.position)
 		n += readSize
+		r.position += int64(readSize)
+		if err == nil {
+			continue
+		}
 		if err != io.EOF {
 			break
 		}
-		r.idx++
-		if len(r.segments) <= r.idx {
+		if len(r.segments) <= r.idx+1 {
 			err = io.EOF
 			break
 		}
+		r.idx++
 		r.segment = r.segments[r.idx]
 		r.position = 0
 	}

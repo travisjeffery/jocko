@@ -64,7 +64,7 @@ func TestNewServer(t *testing.T) {
 
 	fetch := http.HandlerFunc(s.handleFetch)
 	rr = httptest.NewRecorder()
-	r = bytes.NewReader([]byte(`{"topic": "my_topic", "partition": 0, "offset": 1, "max_bytes": 200}`))
+	r = bytes.NewReader([]byte(`{"topic": "my_topic", "partition": 0, "offset": 1, "min_bytes": 100, "max_bytes": 200}`))
 	req, err = http.NewRequest("POST", "/fetch", r)
 	assert.NoError(t, err)
 	fetch.ServeHTTP(rr, req)
@@ -73,5 +73,6 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(rr.Body.Bytes(), resp))
 	assert.Equal(t, "my_topic", resp.Topic)
 	assert.Equal(t, 0, resp.Partition)
+	fmt.Println(resp.MessageSet)
 	assert.True(t, bytes.Compare(ms, resp.MessageSet) == 0)
 }

@@ -2,11 +2,13 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -260,6 +262,7 @@ type FetchRequest struct {
 	FetchOffset int64  `json:"offset"`
 	MinBytes    int32  `json:"min_bytes"`
 	MaxBytes    int32  `json:"max_bytes"`
+	MaxWaitTime int32  `json:"max_wait_time"` // in ms
 }
 
 type FetchResponse struct {
@@ -272,6 +275,7 @@ type FetchResponse struct {
 
 func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 	var fetch FetchRequest
+	received := time.Now()
 	if err := json.NewDecoder(r.Body).Decode(&fetch); err != nil {
 		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
 		w.WriteHeader(http.StatusBadRequest)
@@ -298,20 +302,30 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := make([]byte, fetch.MaxBytes)
-	n, err := rdr.Read(p)
-	if err != nil && err != io.EOF {
-		s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	var n int32
+	for n < fetch.MinBytes {
+		fmt.Println(int32(time.Since(received).Nanoseconds() / 1e6))
+		if fetch.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > fetch.MaxWaitTime {
+			break
+		}
+
+		// TODO: copy these bytes to outer bytes
+		nn, err := rdr.Read(p)
+		if err != nil && err != io.EOF {
+			s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		n += int32(nn)
+		if err == io.EOF {
+			break
+		}
 	}
-	// if n < fetch.MinBytes {
-	// 	// wait and fetch again
-	// 	// or use io.ReadtAtLeast
-	// }
 	v := FetchResponse{
 		Topic:          fetch.Topic,
 		Partition:      fetch.Partition,
-		MessageSetSize: int32(n),
+		MessageSetSize: n,
 		MessageSet:     p[:n],
 	}
 	writeJSON(w, v, http.StatusOK)
