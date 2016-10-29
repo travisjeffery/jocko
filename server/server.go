@@ -1,8 +1,8 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -301,16 +301,15 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	p := make([]byte, fetch.MaxBytes)
+	p := bytes.NewBuffer(make([]byte, 0))
 	var n int32
 	for n < fetch.MinBytes {
-		fmt.Println(int32(time.Since(received).Nanoseconds() / 1e6))
 		if fetch.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > fetch.MaxWaitTime {
 			break
 		}
 
 		// TODO: copy these bytes to outer bytes
-		nn, err := rdr.Read(p)
+		nn, err := io.Copy(p, rdr)
 		if err != nil && err != io.EOF {
 			s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -326,7 +325,7 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		Topic:          fetch.Topic,
 		Partition:      fetch.Partition,
 		MessageSetSize: n,
-		MessageSet:     p[:n],
+		MessageSet:     p.Bytes(),
 	}
 	writeJSON(w, v, http.StatusOK)
 }

@@ -64,7 +64,7 @@ func TestNewServer(t *testing.T) {
 
 	fetch := http.HandlerFunc(s.handleFetch)
 	rr = httptest.NewRecorder()
-	r = bytes.NewReader([]byte(`{"topic": "my_topic", "partition": 0, "offset": 1, "min_bytes": 100, "max_bytes": 200}`))
+	r = bytes.NewReader([]byte(`{"max_wait_time": 100, "topic": "my_topic", "partition": 0, "offset": 1, "min_bytes": 100, "max_bytes": 200}`))
 	req, err = http.NewRequest("POST", "/fetch", r)
 	assert.NoError(t, err)
 	fetch.ServeHTTP(rr, req)
