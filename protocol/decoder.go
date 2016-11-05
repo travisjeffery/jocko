@@ -1,4 +1,4 @@
-package encoding
+package protocol
 
 import (
 	"errors"
@@ -10,49 +10,66 @@ var ErrInvalidStringLength = errors.New("kafka: invalid string length")
 var ErrInvalidArrayLength = errors.New("kafka: invalid array length")
 var ErrInvalidByteSliceLength = errors.New("invalid byteslice length")
 
-type Decoder struct {
+type Decoder interface {
+	Int16() (int16, error)
+	Int32() (int32, error)
+	Int64() (int64, error)
+	ArrayLength() (int, error)
+	Bytes() ([]byte, error)
+	String() (string, error)
+	Int32Array() ([]int32, error)
+	Int64Array() ([]int64, error)
+	StringArray() ([]string, error)
+	remaining() int
+}
+
+type ByteDecoder struct {
 	b   []byte
 	off int
 }
 
-func NewDecoder(b []byte) *Decoder {
-	return &Decoder{
+func (d *ByteDecoder) Offset() int {
+	return d.off
+}
+
+func NewDecoder(b []byte) *ByteDecoder {
+	return &ByteDecoder{
 		b: b,
 	}
 }
 
-func (d *Decoder) Int16() (int16, error) {
-	tmp := int16(Enc.Uint16(d.b[d.off:]))
+func (d *ByteDecoder) Int16() (int16, error) {
+	tmp := int16(Encoding.Uint16(d.b[d.off:]))
 	d.off += 2
 	return tmp, nil
 }
 
-func (d *Decoder) Int32() (int32, error) {
+func (d *ByteDecoder) Int32() (int32, error) {
 	if d.remaining() < 4 {
 		d.off = len(d.b)
 		return -1, ErrInsufficientData
 	}
-	tmp := int32(Enc.Uint32(d.b[d.off:]))
+	tmp := int32(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 	return tmp, nil
 }
 
-func (d *Decoder) Int64() (int64, error) {
+func (d *ByteDecoder) Int64() (int64, error) {
 	if d.remaining() < 8 {
 		d.off = len(d.b)
 		return -1, ErrInsufficientData
 	}
-	tmp := int64(Enc.Uint64(d.b[d.off:]))
+	tmp := int64(Encoding.Uint64(d.b[d.off:]))
 	d.off += 8
 	return tmp, nil
 }
 
-func (d *Decoder) ArrayLength() (int, error) {
+func (d *ByteDecoder) ArrayLength() (int, error) {
 	if d.remaining() < 4 {
 		d.off = len(d.b)
 		return -1, ErrInsufficientData
 	}
-	tmp := int(Enc.Uint32(d.b[d.off:]))
+	tmp := int(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 	if tmp > d.remaining() {
 		d.off = len(d.b)
@@ -65,7 +82,7 @@ func (d *Decoder) ArrayLength() (int, error) {
 
 // collections
 
-func (d *Decoder) Bytes() ([]byte, error) {
+func (d *ByteDecoder) Bytes() ([]byte, error) {
 	tmp, err := d.Int32()
 
 	if err != nil {
@@ -91,7 +108,7 @@ func (d *Decoder) Bytes() ([]byte, error) {
 	return tmpStr, nil
 }
 
-func (d *Decoder) String() (string, error) {
+func (d *ByteDecoder) String() (string, error) {
 	tmp, err := d.Int16()
 
 	if err != nil {
@@ -117,12 +134,12 @@ func (d *Decoder) String() (string, error) {
 	return tmpStr, nil
 }
 
-func (d *Decoder) Int32Array() ([]int32, error) {
+func (d *ByteDecoder) Int32Array() ([]int32, error) {
 	if d.remaining() < 4 {
 		d.off = len(d.b)
 		return nil, ErrInsufficientData
 	}
-	n := int(Enc.Uint32(d.b[d.off:]))
+	n := int(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 
 	if d.remaining() < 4*n {
@@ -140,18 +157,18 @@ func (d *Decoder) Int32Array() ([]int32, error) {
 
 	ret := make([]int32, n)
 	for i := range ret {
-		ret[i] = int32(Enc.Uint32(d.b[d.off:]))
+		ret[i] = int32(Encoding.Uint32(d.b[d.off:]))
 		d.off += 4
 	}
 	return ret, nil
 }
 
-func (d *Decoder) Int64Array() ([]int64, error) {
+func (d *ByteDecoder) Int64Array() ([]int64, error) {
 	if d.remaining() < 4 {
 		d.off = len(d.b)
 		return nil, ErrInsufficientData
 	}
-	n := int(Enc.Uint32(d.b[d.off:]))
+	n := int(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 
 	if d.remaining() < 8*n {
@@ -169,18 +186,18 @@ func (d *Decoder) Int64Array() ([]int64, error) {
 
 	ret := make([]int64, n)
 	for i := range ret {
-		ret[i] = int64(Enc.Uint64(d.b[d.off:]))
+		ret[i] = int64(Encoding.Uint64(d.b[d.off:]))
 		d.off += 8
 	}
 	return ret, nil
 }
 
-func (d *Decoder) StringArray() ([]string, error) {
+func (d *ByteDecoder) StringArray() ([]string, error) {
 	if d.remaining() < 4 {
 		d.off = len(d.b)
 		return nil, ErrInsufficientData
 	}
-	n := int(Enc.Uint32(d.b[d.off:]))
+	n := int(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 
 	if n == 0 {
@@ -202,6 +219,6 @@ func (d *Decoder) StringArray() ([]string, error) {
 	return ret, nil
 }
 
-func (d *Decoder) remaining() int {
+func (d *ByteDecoder) remaining() int {
 	return len(d.b) - d.off
 }

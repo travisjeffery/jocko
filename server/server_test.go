@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/encoding"
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 func TestNewServer(t *testing.T) {
@@ -45,34 +44,57 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	b := new(bytes.Buffer)
-	p := make([]byte, 4)
-	encoding.Enc.PutUint32(p, 0)
-	assert.NoError(t, err)
-	_, err = b.Write(p)
-	assert.NoError(t, err)
-
-	clientID := "test_client"
-	header := RequestHeader{
-		Size:          0,
-		APIKey:        0,
-		APIVersion:    2,
-		CorrelationID: int32(1),
-		ClientIDSize:  int16(len(clientID)),
-	}
-	err = encoding.Write(b, header)
+	req := &protocol.CreateTopicRequests{
+		Requests: []*protocol.CreateTopicRequest{{
+			Topic:             "test_topic",
+			NumPartitions:     int32(8),
+			ReplicationFactor: int16(2),
+			ReplicaAssignment: map[int32][]int32{
+				0: []int32{1, 2},
+			},
+			Configs: map[string]string{
+				"config_key": "config_val",
+			},
+		},
+		}}
+	b, err := req.Encode()
 	assert.NoError(t, err)
 
-	lclientID := len(clientID)
-	size := encoding.Size(header)
-	size += lclientID
-	err = encoding.Write(b, int16(lclientID))
+	_, err = conn.Write(b)
 	assert.NoError(t, err)
 
-	encoding.Enc.PutUint32(b.Bytes()[0:4], uint32(size))
+	time.Sleep(5 * time.Second)
 
-	_, err = b.WriteTo(conn)
-	assert.NoError(t, err)
+	return
+
+	// b := new(bytes.Buffer)
+	// p := make([]byte, 4)
+	// encoding.Enc.PutUint32(p, 0)
+	// assert.NoError(t, err)
+	// _, err = b.Write(p)
+	// assert.NoError(t, err)
+
+	// clientID := "test_client"
+	// header := RequestHeader{
+	// 	Size:          0,
+	// 	APIKey:        0,
+	// 	APIVersion:    2,
+	// 	CorrelationID: int32(1),
+	// 	ClientIDSize:  int16(len(clientID)),
+	// }
+	// err = encoding.Write(b, header)
+	// assert.NoError(t, err)
+
+	// lclientID := len(clientID)
+	// size := encoding.Size(header)
+	// size += lclientID
+	// err = encoding.Write(b, int16(lclientID))
+	// assert.NoError(t, err)
+
+	// encoding.Enc.PutUint32(b.Bytes()[0:4], uint32(size))
+
+	// _, err = b.WriteTo(conn)
+	// assert.NoError(t, err)
 
 	// ms := commitlog.NewMessageSet([]commitlog.Message{commitlog.NewMessage([]byte("Hello, World"))}, 1)
 	// mse := base64.StdEncoding.EncodeToString(ms)

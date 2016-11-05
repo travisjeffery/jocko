@@ -16,38 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
-	"github.com/travisjeffery/jocko/encoding"
+	"github.com/travisjeffery/jocko/protocol"
 )
-
-type RequestHeader struct {
-	// Size of the request
-	Size int32
-	// ID of the API (e.g. produce, fetch, metadata)
-	APIKey int16
-	// Version of the API to use
-	APIVersion int16
-	// User defined ID to correlate requests between server and client
-	CorrelationID int32
-	// Size of the Client ID
-	ClientIDSize int16
-	// ClientID
-	// RequestMessage
-}
-
-type CreateTopicRequest struct {
-	Topic             string
-	NumPartitions     uint32
-	ReplicationFactor uint16
-	ReplicaAssignment map[uint32][]uint32
-	Configs           map[string]string
-}
-
-type CreateTopicRequests struct {
-	Requests []CreateTopicRequest
-	Timeout  int32
-}
-
-const RequestHeaderSize = 14
 
 type response struct {
 	// Size of the response
@@ -159,116 +129,25 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 	r := bufio.NewReader(conn)
 
-	b := make([]byte, 4)
-	_, err := r.Read(b)
-	if err != nil {
-		s.logger.Print(errors.Wrap(err, "read failed"))
-	}
-
-	size := encoding.Enc.Uint32(b)
-
-	var header RequestHeader
-	err = encoding.Read(r, &header)
-	if err != nil && err != io.EOF {
-		s.logger.Print(errors.Wrap(err, "read failed"))
-	}
-	n := int(size - RequestHeaderSize)
+	header := new(protocol.RequestHeader)
+	p := make([]byte, 4)
+	r.Read(p)
+	size := protocol.Encoding.Uint32(p)
+	b := make([]byte, size)
+	copy(b, p)
+	io.ReadFull(r, b[4:])
+	d := protocol.NewDecoder(b)
+	header.Decode(d)
 
 	switch header.APIKey {
 	case 19:
-		s.handleCreateTopic(r, n)
+		req := &protocol.CreateTopicRequests{}
+		req.Decode(d)
+		s.handleCreateTopic(req)
 	}
 }
 
-func (s *Server) handleCreateTopic(r io.Reader, size int) error {
-	p := make([]byte, size)
-	if _, err := r.Read(p); err != nil {
-		return err
-	}
-	rlen := encoding.Enc.Uint32(p)
-	reqs := make([]CreateTopicRequest, rlen)
-	for _, req := range reqs {
-		zero(p)
-		if _, err := r.Read(p[0:2]); err != nil {
-			return err
-		}
-		tsize := encoding.Enc.Uint16(p)
-		tb := make([]byte, tsize)
-		if _, err := r.Read(tb); err != nil {
-			return err
-		}
-		req.Topic = string(tb)
-		zero(p)
-		if _, err := r.Read(p); err != nil {
-			return err
-		}
-		np := encoding.Enc.Uint32(p)
-		req.NumPartitions = np
-		zero(p)
-		if _, err := r.Read(p[0:2]); err != nil {
-			return err
-		}
-		rf := encoding.Enc.Uint16(p)
-		req.ReplicationFactor = rf
-		zero(p)
-		if _, err := r.Read(p); err != nil {
-			return err
-		}
-		ralen := encoding.Enc.Uint32(p)
-		ra := make(map[uint32][]uint32, ralen)
-		for j := uint32(0); j < ralen; j++ {
-			zero(p)
-			if _, err := r.Read(p); err != nil {
-				return err
-			}
-			pid := encoding.Enc.Uint32(p)
-			zero(p)
-			if _, err := r.Read(p); err != nil {
-				return err
-			}
-			rlen := encoding.Enc.Uint32(p)
-			reps := make([]uint32, rlen)
-			for i := range reps {
-				zero(p)
-				if _, err := r.Read(p); err != nil {
-					return err
-				}
-				reps[i] = encoding.Enc.Uint32(p)
-			}
-			ra[pid] = reps
-			zero(p)
-			if _, err := r.Read(p); err != nil {
-				return err
-			}
-		}
-		req.ReplicaAssignment = ra
-
-		clen := encoding.Enc.Uint32(p)
-		c := make(map[string]string, clen)
-		for j := uint32(0); j < clen; j++ {
-			zero(p)
-			if _, err := r.Read(p[0:2]); err != nil {
-				return err
-			}
-			cklen := encoding.Enc.Uint16(p)
-			k := make([]byte, cklen)
-			if _, err := r.Read(k); err != nil {
-				return err
-			}
-			zero(p)
-			if _, err := r.Read(p[0:2]); err != nil {
-				return err
-			}
-			cvlen := encoding.Enc.Uint16(p)
-			v := make([]byte, cvlen)
-			if _, err := r.Read(v); err != nil {
-				return err
-			}
-			c[string(k)] = string(v)
-		}
-		req.Configs = c
-	}
-
+func (s *Server) handleCreateTopic(req *protocol.CreateTopicRequests) (err error) {
 	return nil
 }
 
