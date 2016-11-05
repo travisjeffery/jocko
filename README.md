@@ -13,6 +13,7 @@ Kafka/distributed commit log service in Go.
   - Able to use percentages of disk space for retention policies rather than only bytes and time kept
   - Handling size configs when you change the number of partitions or add topics
 - Learn a lot and have fun
+- Communicate over HTTP/2
 
 ## TODO
 

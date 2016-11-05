@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -15,7 +16,43 @@ import (
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/encoding"
 )
+
+type RequestHeader struct {
+	// Size of the request
+	Size int32
+	// ID of the API (e.g. produce, fetch, metadata)
+	APIKey int16
+	// Version of the API to use
+	APIVersion int16
+	// User defined ID to correlate requests between server and client
+	CorrelationID int32
+	// Size of the Client ID
+	ClientIDSize int16
+	// ClientID
+	// RequestMessage
+}
+
+type CreateTopicRequest struct {
+	Topic             string
+	NumPartitions     uint32
+	ReplicationFactor uint16
+	ReplicaAssignment map[uint32][]uint32
+	Configs           map[string]string
+}
+
+type CreateTopicRequests struct {
+	Requests []CreateTopicRequest
+	Timeout  int32
+}
+
+const RequestHeaderSize = 14
+
+type response struct {
+	// Size of the response
+	Size int32
+}
 
 type MetadataRequest struct {
 	Topics []string `json:"topics"`
@@ -29,7 +66,7 @@ type Broker struct {
 
 type PartitionMetadata struct {
 	ErrorCode int      `json:"error_code"`
-	ID        int      `json:"id"`
+	ID        int32    `json:"id"`
 	Leader    string   `json:"leader"`
 	Replicas  []string `json:"replicas"`
 }
@@ -48,35 +85,41 @@ type MetadataResponse struct {
 
 type Server struct {
 	addr string
-	ln   net.Listener
+	ln   *net.TCPListener
 
 	logger *log.Logger
-	broker  *broker.Broker
+	broker *broker.Broker
 }
 
 func New(addr string, broker *broker.Broker) *Server {
-	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger := log.New(os.Stderr, "server", log.LstdFlags)
 	return &Server{
 		addr:   addr,
-		broker:  broker,
+		broker: broker,
 		logger: logger,
 	}
 }
 
 // Start starts the service.
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.addr)
+	addr, err := net.ResolveTCPAddr("tcp", s.addr)
+	if err != nil {
+		panic(err)
+	}
+
+	ln, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		return err
 	}
 	s.ln = ln
 
 	r := mux.NewRouter()
-	r.Methods("POST").Path("/metadata").HandlerFunc(s.handleMetadata)
-	r.Methods("POST").Path("/metadata/topic").HandlerFunc(s.handleTopic)
 	r.Methods("POST").Path("/join").HandlerFunc(s.handleJoin)
-	r.Methods("POST").Path("/produce").HandlerFunc(s.handleProduce)
-	r.Methods("POST").Path("/fetch").HandlerFunc(s.handleFetch)
+
+	// r.Methods("POST").Path("/metadata").HandlerFunc(s.handleMetadata)
+	// r.Methods("POST").Path("/metadata/topic").HandlerFunc(s.handleTopic)
+	// 	r.Methods("POST").Path("/produce").HandlerFunc(s.handleProduce)
+	// r.Methods("POST").Path("/fetch").HandlerFunc(s.handleFetch)
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
 	http.Handle("/", r)
 
@@ -85,6 +128,15 @@ func (s *Server) Start() error {
 	server := http.Server{
 		Handler: loggedRouter,
 	}
+
+	go func() {
+		conn, err := s.ln.Accept()
+		if err != nil {
+			s.logger.Fatalf("Listener accept failed: %s", err)
+		}
+
+		go s.handleRequest(conn)
+	}()
 
 	go func() {
 		err := server.Serve(s.ln)
@@ -100,6 +152,130 @@ func (s *Server) Start() error {
 func (s *Server) Close() {
 	s.ln.Close()
 	return
+}
+
+func (s *Server) handleRequest(conn net.Conn) {
+	defer conn.Close()
+
+	r := bufio.NewReader(conn)
+
+	b := make([]byte, 4)
+	_, err := r.Read(b)
+	if err != nil {
+		s.logger.Print(errors.Wrap(err, "read failed"))
+	}
+
+	size := encoding.Enc.Uint32(b)
+
+	var header RequestHeader
+	err = encoding.Read(r, &header)
+	if err != nil && err != io.EOF {
+		s.logger.Print(errors.Wrap(err, "read failed"))
+	}
+	n := int(size - RequestHeaderSize)
+
+	switch header.APIKey {
+	case 19:
+		s.handleCreateTopic(r, n)
+	}
+}
+
+func (s *Server) handleCreateTopic(r io.Reader, size int) error {
+	p := make([]byte, size)
+	if _, err := r.Read(p); err != nil {
+		return err
+	}
+	rlen := encoding.Enc.Uint32(p)
+	reqs := make([]CreateTopicRequest, rlen)
+	for _, req := range reqs {
+		zero(p)
+		if _, err := r.Read(p[0:2]); err != nil {
+			return err
+		}
+		tsize := encoding.Enc.Uint16(p)
+		tb := make([]byte, tsize)
+		if _, err := r.Read(tb); err != nil {
+			return err
+		}
+		req.Topic = string(tb)
+		zero(p)
+		if _, err := r.Read(p); err != nil {
+			return err
+		}
+		np := encoding.Enc.Uint32(p)
+		req.NumPartitions = np
+		zero(p)
+		if _, err := r.Read(p[0:2]); err != nil {
+			return err
+		}
+		rf := encoding.Enc.Uint16(p)
+		req.ReplicationFactor = rf
+		zero(p)
+		if _, err := r.Read(p); err != nil {
+			return err
+		}
+		ralen := encoding.Enc.Uint32(p)
+		ra := make(map[uint32][]uint32, ralen)
+		for j := uint32(0); j < ralen; j++ {
+			zero(p)
+			if _, err := r.Read(p); err != nil {
+				return err
+			}
+			pid := encoding.Enc.Uint32(p)
+			zero(p)
+			if _, err := r.Read(p); err != nil {
+				return err
+			}
+			rlen := encoding.Enc.Uint32(p)
+			reps := make([]uint32, rlen)
+			for i := range reps {
+				zero(p)
+				if _, err := r.Read(p); err != nil {
+					return err
+				}
+				reps[i] = encoding.Enc.Uint32(p)
+			}
+			ra[pid] = reps
+			zero(p)
+			if _, err := r.Read(p); err != nil {
+				return err
+			}
+		}
+		req.ReplicaAssignment = ra
+
+		clen := encoding.Enc.Uint32(p)
+		c := make(map[string]string, clen)
+		for j := uint32(0); j < clen; j++ {
+			zero(p)
+			if _, err := r.Read(p[0:2]); err != nil {
+				return err
+			}
+			cklen := encoding.Enc.Uint16(p)
+			k := make([]byte, cklen)
+			if _, err := r.Read(k); err != nil {
+				return err
+			}
+			zero(p)
+			if _, err := r.Read(p[0:2]); err != nil {
+				return err
+			}
+			cvlen := encoding.Enc.Uint16(p)
+			v := make([]byte, cvlen)
+			if _, err := r.Read(v); err != nil {
+				return err
+			}
+			c[string(k)] = string(v)
+		}
+		req.Configs = c
+	}
+
+	return nil
+}
+
+func zero(p []byte) {
+	for i := range p {
+		p[i] = 0
+	}
 }
 
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +302,10 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// func (s *Server) Metadata(req MetadataRequest) (resp MetadataResponse, err error) {
+
+// }
 
 func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	var m MetadataRequest
@@ -224,9 +404,17 @@ func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
 type ProduceRequest struct {
 	RequiredAcks int                  `json:"required_acks"`
 	Timeout      int                  `json:"timeout"`
-	Partition    int                  `json:"partition"`
+	Partition    int32                `json:"partition"`
 	Topic        string               `json:"topic"`
 	MessageSet   commitlog.MessageSet `json:"message_set"`
+}
+
+type ProduceResponse struct {
+	Topic     string `json:"topic"`
+	Partition int32  `json:"partition"`
+	ErrorCode int16  `json:"error_code"`
+	Offset    int64  `json:"offset"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
@@ -253,12 +441,15 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, ProduceResponse{
+		Topic:     produce.Topic,
+		Partition: produce.Partition,
+	}, http.StatusOK)
 }
 
 type FetchRequest struct {
 	Topic       string `json:"topic"`
-	Partition   int    `json:"partition"`
+	Partition   int32  `json:"partition"`
 	FetchOffset int64  `json:"offset"`
 	MinBytes    int32  `json:"min_bytes"`
 	MaxBytes    int32  `json:"max_bytes"`
@@ -267,8 +458,8 @@ type FetchRequest struct {
 
 type FetchResponse struct {
 	Topic     string `json:"topic"`
-	Partition int    `json:"partition"`
-	// size in bytes
+	Partition int32  `json:"partition"`
+	// b in bytes
 	MessageSetSize int32                `json:"message_set_size"`
 	MessageSet     commitlog.MessageSet `json:"message_set"`
 }

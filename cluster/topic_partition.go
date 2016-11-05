@@ -9,7 +9,7 @@ import (
 
 type TopicPartition struct {
 	Topic     string `json:"topic"`
-	Partition int    `json:"partition"`
+	Partition int32  `json:"partition"`
 
 	// broker ids
 	Replicas        []string `json:"replicas"`

@@ -141,7 +141,7 @@ func (s *Broker) PartitionsForTopic(topic string) (found []*cluster.TopicPartiti
 	return s.topics[topic], nil
 }
 
-func (s *Broker) Partition(topic string, partition int) (*cluster.TopicPartition, error) {
+func (s *Broker) Partition(topic string, partition int32) (*cluster.TopicPartition, error) {
 	found, err := s.PartitionsForTopic(topic)
 	if err != nil {
 		return nil, err
@@ -265,7 +265,7 @@ func (s *Broker) CreateTopic(topic string, partitions int) error {
 	for i := 0; i < numPartitions; i++ {
 		broker := brokers[i%len(brokers)]
 		partition := cluster.TopicPartition{
-			Partition:       i,
+			Partition:       int32(i),
 			Topic:           topic,
 			Leader:          broker,
 			PreferredLeader: broker,

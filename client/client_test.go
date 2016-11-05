@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,8 +21,9 @@ type ClientTestSuite struct {
 }
 
 func (suite *ClientTestSuite) SetupSuite() {
-	dir := os.TempDir()
-	os.RemoveAll(dir)
+	dir, err := ioutil.TempDir(os.TempDir(), "clientest")
+	assert.NoError(suite.T(), err)
+	defer os.RemoveAll(dir)
 	logs := filepath.Join(dir, "logs")
 	assert.NoError(suite.T(), os.MkdirAll(logs, 0755))
 
@@ -35,7 +37,7 @@ func (suite *ClientTestSuite) SetupSuite() {
 	})
 	assert.NoError(suite.T(), suite.broker.Open())
 
-	_, err := suite.broker.WaitForLeader(10 * time.Second)
+	_, err = suite.broker.WaitForLeader(10 * time.Second)
 	assert.NoError(suite.T(), err)
 
 	err = suite.broker.CreateTopic("my_topic", 2)
