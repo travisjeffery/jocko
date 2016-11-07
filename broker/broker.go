@@ -245,7 +245,7 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 }
 
 // CreateTopic creates topic with partitions count.
-func (s *Broker) CreateTopic(topic string, partitions int) error {
+func (s *Broker) CreateTopic(topic string, partitions int32) error {
 	for _, t := range s.Topics() {
 		if t == topic {
 			return errors.New("topic exists already")
@@ -255,9 +255,7 @@ func (s *Broker) CreateTopic(topic string, partitions int) error {
 	if err != nil {
 		return err
 	}
-	if partitions != 0 {
-		numPartitions = partitions
-	}
+
 	brokers, err := s.Brokers()
 	if err != nil {
 		return err

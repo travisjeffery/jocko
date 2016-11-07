@@ -1,6 +1,9 @@
 package server
 
 import (
+	"bytes"
+	"io"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -44,7 +47,7 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	req := &protocol.CreateTopicRequests{
+	body := &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             "test_topic",
 			NumPartitions:     int32(8),
@@ -57,13 +60,30 @@ func TestNewServer(t *testing.T) {
 			},
 		},
 		}}
-	b, err := req.Encode()
+
+	req := &protocol.Request{
+		CorrelationID: int32(rand.Uint32()),
+		ClientID:      "test_client",
+		Body:          body,
+	}
+
+	b, err := protocol.Encode(req)
 	assert.NoError(t, err)
 
 	_, err = conn.Write(b)
 	assert.NoError(t, err)
 
-	time.Sleep(5 * time.Second)
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, conn)
+	assert.NoError(t, err)
+
+	var resp protocol.CreateTopicsResponse
+	err = protocol.Decode(buf.Bytes(), &resp)
+	assert.NoError(t, err)
+
+	assert.Equal(t, 1, len(resp.TopicErrorCodes))
+	assert.Equal(t, "test_topic", resp.TopicErrorCodes[0].Topic)
+	assert.Equal(t, protocol.ErrNone, resp.TopicErrorCodes[0].ErrorCode)
 
 	return
 

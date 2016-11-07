@@ -19,11 +19,6 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type response struct {
-	// Size of the response
-	Size int32
-}
-
 type MetadataRequest struct {
 	Topics []string `json:"topics"`
 }
@@ -143,11 +138,38 @@ func (s *Server) handleRequest(conn net.Conn) {
 	case 19:
 		req := &protocol.CreateTopicRequests{}
 		req.Decode(d)
-		s.handleCreateTopic(req)
+		s.handleCreateTopic(conn, req)
 	}
 }
 
-func (s *Server) handleCreateTopic(req *protocol.CreateTopicRequests) (err error) {
+func (s *Server) handleCreateTopic(conn net.Conn, reqs *protocol.CreateTopicRequests) (err error) {
+	resp := new(protocol.CreateTopicsResponse)
+	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
+
+	if s.broker.IsController() {
+		for i, req := range reqs.Requests {
+			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
+			if err != nil {
+				s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", req.Topic, err)
+				return
+			}
+			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+				Topic:     req.Topic,
+				ErrorCode: protocol.ErrNone,
+			}
+		}
+	} else {
+		// cID := s.broker.ControllerID()
+		// send the request to the controller
+		return
+	}
+
+	b, err := protocol.Encode(resp)
+	if err != nil {
+		return err
+	}
+	conn.Write(b)
+
 	return nil
 }
 
@@ -251,33 +273,33 @@ type TopicRequest struct {
 }
 
 func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
-	var topic TopicRequest
-	if err := json.NewDecoder(r.Body).Decode(&topic); err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	if topic.Topic == "" {
-		http.Error(w, "topic is blank", http.StatusBadRequest)
-		return
-	}
-	if topic.Partitions <= 0 {
-		http.Error(w, "partitions is 0", http.StatusBadRequest)
-		return
-	}
-	if s.broker.IsController() {
-		err := s.broker.CreateTopic(topic.Topic, topic.Partitions)
-		if err != nil {
-			s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", topic.Topic, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	} else {
-		cID := s.broker.ControllerID()
-		http.Redirect(w, r, cID, http.StatusSeeOther)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	// var topic TopicRequest
+	// if err := json.NewDecoder(r.Body).Decode(&topic); err != nil {
+	// 	s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+	// if topic.Topic == "" {
+	// 	http.Error(w, "topic is blank", http.StatusBadRequest)
+	// 	return
+	// }
+	// if topic.Partitions <= 0 {
+	// 	http.Error(w, "partitions is 0", http.StatusBadRequest)
+	// 	return
+	// }
+	// if s.broker.IsController() {
+	// 	err := s.broker.CreateTopic(topic.Topic, topic.Partitions)
+	// 	if err != nil {
+	// 		s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", topic.Topic, err)
+	// 		w.WriteHeader(http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// } else {
+	// 	cID := s.broker.ControllerID()
+	// 	http.Redirect(w, r, cID, http.StatusSeeOther)
+	// 	return
+	// }
+	// w.WriteHeader(http.StatusOK)
 }
 
 type ProduceRequest struct {

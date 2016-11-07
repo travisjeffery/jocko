@@ -10,7 +10,7 @@ var ErrInvalidStringLength = errors.New("kafka: invalid string length")
 var ErrInvalidArrayLength = errors.New("kafka: invalid array length")
 var ErrInvalidByteSliceLength = errors.New("invalid byteslice length")
 
-type Decoder interface {
+type PacketDecoder interface {
 	Int16() (int16, error)
 	Int32() (int32, error)
 	Int64() (int64, error)
@@ -21,6 +21,15 @@ type Decoder interface {
 	Int64Array() ([]int64, error)
 	StringArray() ([]string, error)
 	remaining() int
+}
+
+type Decoder interface {
+	Decode(d PacketDecoder) error
+}
+
+func Decode(b []byte, in Decoder) error {
+	d := NewDecoder(b)
+	return in.Decode(d)
 }
 
 type ByteDecoder struct {

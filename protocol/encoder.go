@@ -2,7 +2,7 @@ package protocol
 
 import "math"
 
-type Encoder interface {
+type PacketEncoder interface {
 	PutInt8(in int8)
 	PutInt16(in int16)
 	PutInt32(in int32)
@@ -14,13 +14,41 @@ type Encoder interface {
 	PutStringArray(in []string) error
 	PutInt32Array(in []int32) error
 	PutInt64Array(in []int64) error
+	Push(pe PushEncoder)
+	Pop()
+}
+
+type PushEncoder interface {
+	SaveOffset(in int)
+	ReserveSize() int
+	PutSize(curOffset int, buf []byte) error
+}
+
+type Encoder interface {
+	Encode(e PacketEncoder) error
+}
+
+func Encode(e Encoder) ([]byte, error) {
+	lenEnc := new(LenEncoder)
+	err := e.Encode(lenEnc)
+	if err != nil {
+		return nil, err
+	}
+
+	b := make([]byte, lenEnc.Length)
+	byteEnc := NewByteEncoder(b)
+	err = e.Encode(byteEnc)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
 }
 
 type LenEncoder struct {
 	Length int
+	stack  []int
 }
-
-// primitives
 
 func (e *LenEncoder) PutInt8(in int8) {
 	e.Length++
@@ -110,20 +138,16 @@ func (e *LenEncoder) PutInt64Array(in []int64) error {
 	return nil
 }
 
-// stackable
-
-func (e *LenEncoder) push(len int) {
-	e.Length += len
+func (e *LenEncoder) Push(pe PushEncoder) {
+	e.Length += pe.ReserveSize()
 }
 
-func (e *LenEncoder) pop() error {
-	return nil
-}
+func (e *LenEncoder) Pop() {}
 
 type ByteEncoder struct {
 	b     []byte
 	off   int
-	stack []int
+	stack []PushEncoder
 }
 
 func (b *ByteEncoder) Bytes() []byte {
@@ -220,13 +244,15 @@ func (e *ByteEncoder) PutInt64Array(in []int64) error {
 	return nil
 }
 
-func (e *ByteEncoder) Push(len int) {
-	e.stack = append(e.stack, e.off)
-	e.off += len
+func (e *ByteEncoder) Push(pe PushEncoder) {
+	pe.SaveOffset(e.off)
+	e.off += pe.ReserveSize()
+	e.stack = append(e.stack, pe)
 }
 
 func (e *ByteEncoder) Pop() {
 	// this is go's ugly pop pattern (the inverse of append)
-	e.off = e.stack[len(e.stack)-1]
+	pe := e.stack[len(e.stack)-1]
 	e.stack = e.stack[:len(e.stack)-1]
+	pe.PutSize(e.off, e.b)
 }

@@ -1,54 +1,27 @@
 package protocol
 
-import "math/rand"
+type Body interface {
+	Encoder
+	Key() int16
+	Version() int16
+}
 
-type RequestHeader struct {
-	// Size of the request
-	Size int32
-	// ID of the API (e.g. produce, fetch, metadata)
-	APIKey int16
-	// Version of the API to use
-	APIVersion int16
-	// User defined ID to correlate requests between server and client
+type Request struct {
 	CorrelationID int32
-	// Size of the Client ID
-	ClientID string
+	ClientID      string
+	Body          Body
 }
 
-func (r *RequestHeader) Encode(e Encoder) {
-	e.PutInt32(r.Size)
-	e.PutInt16(r.APIKey)
-	e.PutInt16(r.APIVersion)
-	e.PutInt32(r.CorrelationID)
-	e.PutString(r.ClientID)
-}
-
-func (r *RequestHeader) Decode(d Decoder) error {
-	var err error
-	r.Size, err = d.Int32()
+func (r *Request) Encode(pe PacketEncoder) (err error) {
+	pe.Push(&SizeField{})
+	pe.PutInt16(r.Body.Key())
+	pe.PutInt16(r.Body.Version())
+	pe.PutInt32(r.CorrelationID)
+	pe.PutString(r.ClientID)
 	if err != nil {
 		return err
 	}
-	r.APIKey, err = d.Int16()
-	if err != nil {
-		return err
-	}
-	r.APIVersion, err = d.Int16()
-	if err != nil {
-		return err
-	}
-	r.CorrelationID, err = d.Int32()
-	if err != nil {
-		return err
-	}
-	r.ClientID, err = d.String()
-	return err
-}
-
-func CorrelationID() int32 {
-	return int32(rand.Uint32())
-}
-
-func ClientID() string {
-	return "jocko"
+	r.Body.Encode(pe)
+	pe.Pop()
+	return nil
 }

@@ -13,7 +13,30 @@ type CreateTopicRequests struct {
 	Timeout  int32
 }
 
-func (c *CreateTopicRequests) Decode(d Decoder) error {
+func (c *CreateTopicRequests) Encode(e PacketEncoder) error {
+	e.PutArrayLength(len(c.Requests))
+	for _, r := range c.Requests {
+		e.PutString(r.Topic)
+		e.PutInt32(r.NumPartitions)
+		e.PutInt16(r.ReplicationFactor)
+		e.PutArrayLength(len(r.ReplicaAssignment))
+		for pid, ass := range r.ReplicaAssignment {
+			e.PutInt32(pid)
+			for _, a := range ass {
+				e.PutInt32(a)
+			}
+		}
+		e.PutArrayLength(len(r.Configs))
+		for k, v := range r.Configs {
+			e.PutString(k)
+			e.PutString(v)
+		}
+	}
+	e.PutInt32(c.Timeout)
+	return nil
+}
+
+func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 	var err error
 	reqslen, err := d.ArrayLength()
 	if err != nil {
@@ -76,64 +99,15 @@ func (c *CreateTopicRequests) Decode(d Decoder) error {
 		}
 		req.Configs = c
 	}
+	c.Timeout, err = d.Int32()
 
-	return nil
+	return err
 }
 
-func (c *CreateTopicRequests) encode(e Encoder) {
-	e.PutArrayLength(len(c.Requests))
-	for _, r := range c.Requests {
-		e.PutString(r.Topic)
-		e.PutInt32(r.NumPartitions)
-		e.PutInt16(r.ReplicationFactor)
-		e.PutArrayLength(len(r.ReplicaAssignment))
-		for pid, ass := range r.ReplicaAssignment {
-			e.PutInt32(pid)
-			for _, a := range ass {
-				e.PutInt32(a)
-			}
-		}
-		e.PutArrayLength(len(r.Configs))
-		for k, v := range r.Configs {
-			e.PutString(k)
-			e.PutString(v)
-		}
-	}
-}
-
-func (c *CreateTopicRequests) key() int16 {
+func (c *CreateTopicRequests) Key() int16 {
 	return 19
 }
 
-func (c *CreateTopicRequests) version() int16 {
+func (c *CreateTopicRequests) Version() int16 {
 	return 0
-}
-
-func (c *CreateTopicRequests) Encode() ([]byte, error) {
-	rh := &RequestHeader{
-		APIKey:        19,
-		APIVersion:    0,
-		CorrelationID: CorrelationID(),
-		ClientID:      ClientID(),
-	}
-	le := &LenEncoder{}
-	rh.Encode(le)
-	rhlen := le.Length
-	b := make([]byte, rhlen)
-	e := NewByteEncoder(b)
-	rh.Encode(e)
-	rhb := e.Bytes()
-
-	le = &LenEncoder{}
-	c.encode(le)
-	l := le.Length + rhlen
-	b = make([]byte, l)
-
-	e = NewByteEncoder(b)
-	e.PutRawBytes(rhb)
-	c.encode(e)
-
-	Encoding.PutUint32(b, uint32(l))
-
-	return b, nil
 }
