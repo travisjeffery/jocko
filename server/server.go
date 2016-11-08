@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -122,27 +122,60 @@ func (s *Server) Close() {
 func (s *Server) handleRequest(conn net.Conn) {
 	defer conn.Close()
 
-	r := bufio.NewReader(conn)
-
 	header := new(protocol.RequestHeader)
 	p := make([]byte, 4)
-	r.Read(p)
-	size := protocol.Encoding.Uint32(p)
-	b := make([]byte, size)
-	copy(b, p)
-	io.ReadFull(r, b[4:])
-	d := protocol.NewDecoder(b)
-	header.Decode(d)
 
-	switch header.APIKey {
-	case 19:
-		req := &protocol.CreateTopicRequests{}
-		req.Decode(d)
-		s.handleCreateTopic(conn, req)
+	for {
+		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		if err != nil {
+			s.logger.Printf("read deadline failed: %s", err)
+			continue
+		}
+
+		n, err := io.ReadFull(conn, p[:])
+		if err == io.EOF {
+			s.logger.Printf("conn read EOF: %s", err)
+			break
+		}
+		if n == 0 || err != nil {
+			// TODO: handle err
+			s.logger.Printf("Conn read failed: %s", err)
+			continue
+		}
+
+		size := protocol.Encoding.Uint32(p)
+		if size == 0 {
+			continue
+		}
+		b := make([]byte, size+4) //+4 since we're going to copy the size into b
+		copy(b, p)
+
+		_, err = io.ReadFull(conn, b[4:])
+		if err != nil {
+			panic(err)
+		}
+
+		d := protocol.NewDecoder(b)
+		header.Decode(d)
+
+		switch header.APIKey {
+		case 3:
+			req := &protocol.MetadataRequest{}
+			req.Decode(d)
+			if err = s.handleMetadata(conn, header, req); err != nil {
+				s.logger.Printf("metadata failed: %s", err)
+			}
+		case 19:
+			req := &protocol.CreateTopicRequests{}
+			req.Decode(d)
+			if err = s.handleCreateTopic(conn, header, req); err != nil {
+				s.logger.Printf("create topic failed: %s", err)
+			}
+		}
 	}
 }
 
-func (s *Server) handleCreateTopic(conn net.Conn, reqs *protocol.CreateTopicRequests) (err error) {
+func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 
@@ -163,14 +196,20 @@ func (s *Server) handleCreateTopic(conn net.Conn, reqs *protocol.CreateTopicRequ
 		// send the request to the controller
 		return
 	}
+	r := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
+	}
 
-	b, err := protocol.Encode(resp)
+	b, err := protocol.Encode(r)
+
 	if err != nil {
 		return err
 	}
-	conn.Write(b)
 
-	return nil
+	_, err = conn.Write(b)
+
+	return err
 }
 
 func zero(p []byte) {
@@ -204,63 +243,61 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// func (s *Server) Metadata(req MetadataRequest) (resp MetadataResponse, err error) {
-
-// }
-
-func (s *Server) handleMetadata(w http.ResponseWriter, r *http.Request) {
-	var m MetadataRequest
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		s.logger.Print(errors.Wrap(err, "json decode failed"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
+func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, req *protocol.MetadataRequest) error {
 	brokerIDs, err := s.broker.Brokers()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	var brokers []Broker
-	for _, bID := range brokerIDs {
+	brokers := make([]*protocol.Broker, len(brokerIDs))
+	topics := make([]*protocol.TopicMetadata, len(req.Topics))
+	for i, bID := range brokerIDs {
 		host, port, err := net.SplitHostPort(bID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
-		brokers = append(brokers, Broker{
-			ID:   bID,
-			Host: host,
-			Port: port,
-		})
+		// TODO: replace this with an actual id
+		nodeID := i
+		if err != nil {
+			return err
+		}
+		nPort, err := strconv.Atoi(port)
+		if err != nil {
+			return err
+		}
+		brokers[i] = &protocol.Broker{
+			NodeID: int32(nodeID),
+			Host:   host,
+			Port:   int32(nPort),
+		}
 	}
-	topic := s.broker.Topics()
-	var topicMetadata []TopicMetadata
-	for _, t := range topic {
+	for i, t := range req.Topics {
 		partitions, err := s.broker.PartitionsForTopic(t)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
-		var partitionMetadata []PartitionMetadata
-		for _, p := range partitions {
-			partitionMetadata = append(partitionMetadata, PartitionMetadata{
-				ID:       p.Partition,
-				Replicas: p.Replicas,
-				Leader:   p.Leader,
-			})
+		partitionMetadata := make([]*protocol.PartitionMetadata, len(partitions))
+		for i, p := range partitions {
+			partitionMetadata[i] = &protocol.PartitionMetadata{
+				ParititionID: p.Partition,
+			}
 		}
-		topicMetadata = append(topicMetadata, TopicMetadata{
+		topics[i] = &protocol.TopicMetadata{
+			TopicErrorCode:    protocol.ErrNone,
 			Topic:             t,
 			PartitionMetadata: partitionMetadata,
-		})
+		}
 	}
-	v := MetadataResponse{
+	resp := &protocol.MetadataResponse{
 		Brokers:       brokers,
-		ControllerID:  s.broker.ControllerID(),
-		TopicMetadata: topicMetadata,
+		TopicMetadata: topics,
 	}
-	writeJSON(w, v)
+	r := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
+	}
+	b, err := protocol.Encode(r)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write(b)
+	return err
 }
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
