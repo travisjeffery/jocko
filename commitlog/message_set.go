@@ -13,7 +13,7 @@ const (
 
 type MessageSet []byte
 
-func NewMessageSet(msgs []Message, offset uint64) MessageSet {
+func NewMessageSet(offset uint64, msgs ...Message) MessageSet {
 	ms := make([]byte, msgSetHeaderLen)
 	var n uint32
 	big.PutUint64(ms[offsetPos:offsetOffset+8], offset)

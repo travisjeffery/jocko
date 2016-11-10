@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/cluster"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
 )
@@ -134,7 +135,6 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		n, err := io.ReadFull(conn, p[:])
 		if err == io.EOF {
-			s.logger.Printf("conn read EOF: %s", err)
 			break
 		}
 		if n == 0 || err != nil {
@@ -159,6 +159,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 		header.Decode(d)
 
 		switch header.APIKey {
+		case 0:
+			req := &protocol.ProduceRequest{}
+			req.Decode(d)
+			if err = s.handleProduce(conn, header, req); err != nil {
+				s.logger.Printf("produce failed: %s", err)
+			}
 		case 3:
 			req := &protocol.MetadataRequest{}
 			req.Decode(d)
@@ -355,34 +361,51 @@ type ProduceResponse struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
-func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
-	var produce ProduceRequest
-	if err := json.NewDecoder(r.Body).Decode(&produce); err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
+func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, r *protocol.ProduceRequest) error {
+
+	resp := new(protocol.ProduceResponses)
+	resp.Responses = make([]*protocol.ProduceResponse, len(r.TopicData))
+	for i, td := range r.TopicData {
+		presps := make([]*protocol.PartitionResponse, len(td.Data))
+		for j, p := range td.Data {
+
+			partition := &cluster.TopicPartition{
+				Topic:     td.Topic,
+				Partition: p.Partition,
+			}
+			presp := &protocol.PartitionResponse{}
+			partition, err := s.broker.Partition(td.Topic, p.Partition)
+			if err != nil {
+				presp.ErrorCode = protocol.ErrUnknownTopicOrPartition
+			}
+			if !s.broker.IsLeaderOfPartition(partition) {
+				presp.ErrorCode = protocol.ErrNotLeaderForPartition
+			}
+			err = partition.CommitLog.Append(p.RecordSet)
+			if err != nil {
+				s.logger.Printf("commitlog append failed: %s", err)
+				presp.ErrorCode = protocol.ErrUnknown
+			}
+			presp.Partition = p.Partition
+			// TODO: presp.BaseOffset
+			presp.Timestamp = time.Now().Unix()
+			presps[j] = presp
+		}
+		resp.Responses[i] = &protocol.ProduceResponse{
+			Topic:              td.Topic,
+			PartitionResponses: presps,
+		}
 	}
-	partition, err := s.broker.Partition(produce.Topic, produce.Partition)
+
+	b, err := protocol.Encode(&protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
+	})
 	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, produce.Topic, produce.Partition)
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		return err
 	}
-	if !s.broker.IsLeaderOfPartition(partition) {
-		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	err = partition.CommitLog.Append(produce.MessageSet)
-	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to append messages: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, ProduceResponse{
-		Topic:     produce.Topic,
-		Partition: produce.Partition,
-	}, http.StatusOK)
+	_, err = conn.Write(b)
+	return err
 }
 
 type FetchRequest struct {
@@ -406,7 +429,7 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 	var fetch FetchRequest
 	received := time.Now()
 	if err := json.NewDecoder(r.Body).Decode(&fetch); err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
+		s.logger.Printf("[ERR] jocko: Failed to decode json: %v", errors.Wrap(err, "json decode failed"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

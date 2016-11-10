@@ -13,7 +13,7 @@ func TestMessageSet(t *testing.T) {
 		msg0,
 		msg1,
 	}
-	ms := NewMessageSet(msgs, 3)
+	ms := NewMessageSet(3, msgs...)
 	assert.Equal(t, int64(3), ms.Offset())
 	assert.Equal(t, msg0.Size()+msg1.Size()+msgSetHeaderLen, ms.Size())
 	for i, m := range ms.Messages() {

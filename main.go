@@ -35,7 +35,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
 	}
-
 	gracefully.Timeout = 10 * time.Second
 	gracefully.Shutdown()
 

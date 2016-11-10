@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
@@ -121,4 +122,39 @@ func TestNewServer(t *testing.T) {
 	assert.Equal(t, 1, len(metadataResponse.Brokers))
 	assert.Equal(t, "test_topic", metadataResponse.TopicMetadata[0].Topic)
 
+	m0 := commitlog.NewMessage([]byte("Hello world!"))
+	ms := commitlog.NewMessageSet(0, m0)
+	body = &protocol.ProduceRequest{
+		TopicData: []*protocol.TopicData{{
+			Topic: "test_topic",
+			Data: []*protocol.Data{{
+				Partition: 0,
+				RecordSet: ms,
+			}},
+		}},
+	}
+	req = &protocol.Request{
+		CorrelationID: rand.Int31(),
+		ClientID:      "test_client",
+		Body:          body,
+	}
+	b, err = protocol.Encode(req)
+	assert.NoError(t, err)
+	_, err = conn.Write(b)
+
+	buf.Reset()
+	_, err = io.CopyN(buf, conn, 8)
+	assert.NoError(t, err)
+	protocol.Decode(buf.Bytes(), &header)
+
+	buf.Reset()
+	_, err = io.CopyN(buf, conn, int64(header.Size-4))
+	produceResponse := &protocol.ProduceResponses{}
+	err = protocol.Decode(buf.Bytes(), produceResponse)
+	assert.NoError(t, err)
+
+	assert.Equal(t, req.(*protocol.Request).CorrelationID, header.CorrelationID)
+	assert.Equal(t, "test_topic", produceResponse.Responses[0].Topic)
+	assert.Equal(t, protocol.ErrNone, produceResponse.Responses[0].PartitionResponses[0].ErrorCode)
+	assert.NotEqual(t, 0, produceResponse.Responses[0].PartitionResponses[0].Timestamp)
 }
