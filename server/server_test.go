@@ -16,9 +16,13 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+const (
+	clientID = "test_client"
+)
+
 func TestNewServer(t *testing.T) {
 	dir := os.TempDir()
-	os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	logs := filepath.Join(dir, "logs")
 	assert.NoError(t, os.MkdirAll(logs, 0755))
@@ -63,7 +67,7 @@ func TestNewServer(t *testing.T) {
 	}
 	var req protocol.Encoder = &protocol.Request{
 		CorrelationID: rand.Int31(),
-		ClientID:      "test_client",
+		ClientID:      clientID,
 		Body:          body,
 	}
 
@@ -97,7 +101,7 @@ func TestNewServer(t *testing.T) {
 	}
 	req = &protocol.Request{
 		CorrelationID: rand.Int31(),
-		ClientID:      "test_client",
+		ClientID:      clientID,
 		Body:          body,
 	}
 	b, err = protocol.Encode(req)
@@ -135,7 +139,7 @@ func TestNewServer(t *testing.T) {
 	}
 	req = &protocol.Request{
 		CorrelationID: rand.Int31(),
-		ClientID:      "test_client",
+		ClientID:      clientID,
 		Body:          body,
 	}
 	b, err = protocol.Encode(req)
@@ -157,4 +161,43 @@ func TestNewServer(t *testing.T) {
 	assert.Equal(t, "test_topic", produceResponse.Responses[0].Topic)
 	assert.Equal(t, protocol.ErrNone, produceResponse.Responses[0].PartitionResponses[0].ErrorCode)
 	assert.NotEqual(t, 0, produceResponse.Responses[0].PartitionResponses[0].Timestamp)
+
+	body = &protocol.FetchRequest{
+		MinBytes: 5,
+		MaxBytes: 5000,
+		Topics: []*protocol.FetchTopic{{
+			Topic: "test_topic",
+			Partitions: []*protocol.FetchPartition{{
+				Partition:   int32(0),
+				FetchOffset: int64(0),
+				MaxBytes:    int32(5000),
+			}},
+		}},
+	}
+	req = &protocol.Request{
+		CorrelationID: rand.Int31(),
+		ClientID:      clientID,
+		Body:          body,
+	}
+	b, err = protocol.Encode(req)
+	assert.NoError(t, err)
+	_, err = conn.Write(b)
+	assert.NoError(t, err)
+
+	buf.Reset()
+	_, err = io.CopyN(buf, conn, 8)
+	assert.NoError(t, err)
+	err = protocol.Decode(buf.Bytes(), &header)
+	assert.NoError(t, err)
+
+	buf.Reset()
+	_, err = io.CopyN(buf, conn, int64(header.Size-4))
+	fetchResponse := &protocol.FetchResponses{}
+	err = protocol.Decode(buf.Bytes(), fetchResponse)
+	assert.NoError(t, err)
+
+	recordSet := commitlog.MessageSet(fetchResponse.Responses[0].PartitionResponses[0].RecordSet)
+	assert.Equal(t, int64(0), recordSet.Offset())
+	msg := recordSet.Messages()[0]
+	assert.Equal(t, []byte("Hello world!"), msg.Payload())
 }

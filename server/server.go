@@ -165,6 +165,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 			if err = s.handleProduce(conn, header, req); err != nil {
 				s.logger.Printf("produce failed: %s", err)
 			}
+		case 1:
+			req := &protocol.FetchRequest{}
+			req.Decode(d)
+			if err = s.handleFetch(conn, header, req); err != nil {
+				s.logger.Printf("fetch failed: %s", err)
+			}
 		case 3:
 			req := &protocol.MetadataRequest{}
 			req.Decode(d)
@@ -315,36 +321,6 @@ type TopicRequest struct {
 	Partitions int    `json"partitions"`
 }
 
-func (s *Server) handleTopic(w http.ResponseWriter, r *http.Request) {
-	// var topic TopicRequest
-	// if err := json.NewDecoder(r.Body).Decode(&topic); err != nil {
-	// 	s.logger.Printf("[ERR] jocko: Failed to decode json; %v", errors.Wrap(err, "json decode failed"))
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	return
-	// }
-	// if topic.Topic == "" {
-	// 	http.Error(w, "topic is blank", http.StatusBadRequest)
-	// 	return
-	// }
-	// if topic.Partitions <= 0 {
-	// 	http.Error(w, "partitions is 0", http.StatusBadRequest)
-	// 	return
-	// }
-	// if s.broker.IsController() {
-	// 	err := s.broker.CreateTopic(topic.Topic, topic.Partitions)
-	// 	if err != nil {
-	// 		s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", topic.Topic, err)
-	// 		w.WriteHeader(http.StatusInternalServerError)
-	// 		return
-	// 	}
-	// } else {
-	// 	cID := s.broker.ControllerID()
-	// 	http.Redirect(w, r, cID, http.StatusSeeOther)
-	// 	return
-	// }
-	// w.WriteHeader(http.StatusOK)
-}
-
 type ProduceRequest struct {
 	RequiredAcks int                  `json:"required_acks"`
 	Timeout      int                  `json:"timeout"`
@@ -362,18 +338,16 @@ type ProduceResponse struct {
 }
 
 func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, r *protocol.ProduceRequest) error {
-
 	resp := new(protocol.ProduceResponses)
 	resp.Responses = make([]*protocol.ProduceResponse, len(r.TopicData))
 	for i, td := range r.TopicData {
-		presps := make([]*protocol.PartitionResponse, len(td.Data))
+		presps := make([]*protocol.ProducePartitionresponse, len(td.Data))
 		for j, p := range td.Data {
-
 			partition := &cluster.TopicPartition{
 				Topic:     td.Topic,
 				Partition: p.Partition,
 			}
-			presp := &protocol.PartitionResponse{}
+			presp := &protocol.ProducePartitionresponse{}
 			partition, err := s.broker.Partition(td.Topic, p.Partition)
 			if err != nil {
 				presp.ErrorCode = protocol.ErrUnknownTopicOrPartition
@@ -425,61 +399,72 @@ type FetchResponse struct {
 	MessageSet     commitlog.MessageSet `json:"message_set"`
 }
 
-func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
-	var fetch FetchRequest
+func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *protocol.FetchRequest) error {
+	resp := &protocol.FetchResponses{}
+	resp.Responses = make([]*protocol.FetchResponse, len(r.Topics))
 	received := time.Now()
-	if err := json.NewDecoder(r.Body).Decode(&fetch); err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to decode json: %v", errors.Wrap(err, "json decode failed"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	for i, topic := range r.Topics {
+		fr := &protocol.FetchResponse{}
+		resp.Responses[i] = fr
+		fr.PartitionResponses = make([]*protocol.FetchPartitionResponse, len(topic.Partitions))
+		for j, p := range topic.Partitions {
+			partition, err := s.broker.Partition(topic.Topic, p.Partition)
+			if err != nil {
+				// TODO set err code
+				s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
+				break
+			}
+			if !s.broker.IsLeaderOfPartition(partition) {
+				s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
+				// TODO set err code
+				break
+			}
+			rdr, err := partition.CommitLog.NewReader(commitlog.ReaderOptions{
+				Offset:   p.FetchOffset,
+				MaxBytes: p.MaxBytes,
+			})
+			if err != nil {
+				s.logger.Printf("[ERR] jocko: Failed to read partition: %v", err)
+				// TODO set err code
+				break
+			}
+			b := bytes.NewBuffer(make([]byte, 0))
+			var n int32
+			for n < r.MinBytes {
+				if r.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > r.MaxWaitTime {
+					break
+				}
+
+				// TODO: copy these bytes to outer bytes
+				nn, err := io.Copy(b, rdr)
+				if err != nil && err != io.EOF {
+					s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
+					// TODO seT error code
+					break
+				}
+				n += int32(nn)
+				if err == io.EOF {
+					break
+				}
+			}
+			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+				Partition:     p.Partition,
+				ErrorCode:     protocol.ErrNone,
+				HighWatermark: 0, // TODO get last committed offset
+				RecordSet:     b.Bytes(),
+			}
+		}
 	}
-	partition, err := s.broker.Partition(fetch.Topic, fetch.Partition)
-	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, fetch.Topic, fetch.Partition)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	if !s.broker.IsLeaderOfPartition(partition) {
-		s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	rdr, err := partition.CommitLog.NewReader(commitlog.ReaderOptions{
-		Offset:   fetch.FetchOffset,
-		MaxBytes: fetch.MaxBytes,
+
+	b, err := protocol.Encode(&protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
 	})
 	if err != nil {
-		s.logger.Printf("[ERR] jocko: Failed to read partition: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return err
 	}
-	p := bytes.NewBuffer(make([]byte, 0))
-	var n int32
-	for n < fetch.MinBytes {
-		if fetch.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > fetch.MaxWaitTime {
-			break
-		}
-
-		// TODO: copy these bytes to outer bytes
-		nn, err := io.Copy(p, rdr)
-		if err != nil && err != io.EOF {
-			s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		n += int32(nn)
-		if err == io.EOF {
-			break
-		}
-	}
-	v := FetchResponse{
-		Topic:          fetch.Topic,
-		Partition:      fetch.Partition,
-		MessageSetSize: n,
-		MessageSet:     p.Bytes(),
-	}
-	writeJSON(w, v, http.StatusOK)
+	_, err = conn.Write(b)
+	return err
 }
 
 // Addr returns the address on which the Server is listening
