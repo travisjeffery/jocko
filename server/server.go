@@ -20,33 +20,10 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type MetadataRequest struct {
-	Topics []string `json:"topics"`
-}
-
 type Broker struct {
 	ID   string `json:"id"`
 	Host string `json:"host"`
 	Port string `json:"port"`
-}
-
-type PartitionMetadata struct {
-	ErrorCode int      `json:"error_code"`
-	ID        int32    `json:"id"`
-	Leader    string   `json:"leader"`
-	Replicas  []string `json:"replicas"`
-}
-
-type TopicMetadata struct {
-	ErrorCode         int                 `json:"error_code"`
-	Topic             string              `json:"topic"`
-	PartitionMetadata []PartitionMetadata `json:"partition_metadata"`
-}
-
-type MetadataResponse struct {
-	Brokers       []Broker        `json:"brokers"`
-	ControllerID  string          `json:"controller_id"`
-	TopicMetadata []TopicMetadata `json:"topic_metadata"`
 }
 
 type Server struct {
@@ -81,11 +58,6 @@ func (s *Server) Start() error {
 
 	r := mux.NewRouter()
 	r.Methods("POST").Path("/join").HandlerFunc(s.handleJoin)
-
-	// r.Methods("POST").Path("/metadata").HandlerFunc(s.handleMetadata)
-	// r.Methods("POST").Path("/metadata/topic").HandlerFunc(s.handleTopic)
-	// 	r.Methods("POST").Path("/produce").HandlerFunc(s.handleProduce)
-	// r.Methods("POST").Path("/fetch").HandlerFunc(s.handleFetch)
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
 	http.Handle("/", r)
 
@@ -312,31 +284,6 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 	return err
 }
 
-func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-}
-
-type TopicRequest struct {
-	Topic      string `json:"topic"`
-	Partitions int    `json"partitions"`
-}
-
-type ProduceRequest struct {
-	RequiredAcks int                  `json:"required_acks"`
-	Timeout      int                  `json:"timeout"`
-	Partition    int32                `json:"partition"`
-	Topic        string               `json:"topic"`
-	MessageSet   commitlog.MessageSet `json:"message_set"`
-}
-
-type ProduceResponse struct {
-	Topic     string `json:"topic"`
-	Partition int32  `json:"partition"`
-	ErrorCode int16  `json:"error_code"`
-	Offset    int64  `json:"offset"`
-	Timestamp int64  `json:"timestamp"`
-}
-
 func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, r *protocol.ProduceRequest) error {
 	resp := new(protocol.ProduceResponses)
 	resp.Responses = make([]*protocol.ProduceResponse, len(r.TopicData))
@@ -380,23 +327,6 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, r 
 	}
 	_, err = conn.Write(b)
 	return err
-}
-
-type FetchRequest struct {
-	Topic       string `json:"topic"`
-	Partition   int32  `json:"partition"`
-	FetchOffset int64  `json:"offset"`
-	MinBytes    int32  `json:"min_bytes"`
-	MaxBytes    int32  `json:"max_bytes"`
-	MaxWaitTime int32  `json:"max_wait_time"` // in ms
-}
-
-type FetchResponse struct {
-	Topic     string `json:"topic"`
-	Partition int32  `json:"partition"`
-	// b in bytes
-	MessageSetSize int32                `json:"message_set_size"`
-	MessageSet     commitlog.MessageSet `json:"message_set"`
 }
 
 func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *protocol.FetchRequest) error {
@@ -472,17 +402,6 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
-func writeJSON(w http.ResponseWriter, v interface{}, code ...int) {
-	var b []byte
-	var err error
-	b, err = json.Marshal(v)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if len(code) > 0 {
-		w.WriteHeader(code[0])
-	}
-	w.Write(b)
+func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
 }
