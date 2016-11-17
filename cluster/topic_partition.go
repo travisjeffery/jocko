@@ -12,9 +12,9 @@ type TopicPartition struct {
 	Partition int32  `json:"partition"`
 
 	// broker ids
-	Replicas        []string `json:"replicas"`
-	Leader          string   `json:"leader"`
-	PreferredLeader string   `json:"preferred_leader"`
+	Replicas        []int `json:"replicas"`
+	Leader          int   `json:"leader"`
+	PreferredLeader int   `json:"preferred_leader"`
 
 	CommitLog *commitlog.CommitLog `json:"-"`
 }
