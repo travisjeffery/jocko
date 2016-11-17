@@ -32,8 +32,9 @@ func TestNewServer(t *testing.T) {
 
 	store := broker.New(broker.Options{
 		DataDir:  data,
-		BindAddr: "localhost:0",
+		BindAddr: "localhost:4000",
 		LogDir:   logs,
+		ID:       0,
 	})
 	assert.NoError(t, store.Open())
 	defer store.Close()
@@ -164,7 +165,6 @@ func TestNewServer(t *testing.T) {
 
 	body = &protocol.FetchRequest{
 		MinBytes: 5,
-		MaxBytes: 5000,
 		Topics: []*protocol.FetchTopic{{
 			Topic: "test_topic",
 			Partitions: []*protocol.FetchPartition{{

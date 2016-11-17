@@ -101,7 +101,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			s.logger.Printf("read deadline failed: %s", err)
+			s.logger.Printf("[ERR] jocko: Read deadline failed: %s", err)
 			continue
 		}
 
@@ -109,9 +109,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 		if err == io.EOF {
 			break
 		}
-		if n == 0 || err != nil {
+		if err != nil {
 			// TODO: handle err
-			s.logger.Printf("Conn read failed: %s", err)
+			s.logger.Printf("[ERR] jocko: Conn read failed: %s", err)
+			break
+		}
+		if n == 0 {
 			continue
 		}
 
@@ -119,6 +122,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		if size == 0 {
 			continue
 		}
+		s.logger.Printf("Got request with size: %d", size)
 		b := make([]byte, size+4) //+4 since we're going to copy the size into b
 		copy(b, p)
 
@@ -129,31 +133,32 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		d := protocol.NewDecoder(b)
 		header.Decode(d)
+		s.logger.Printf("Got request with key: %d", header.APIKey)
 
 		switch header.APIKey {
 		case 0:
 			req := &protocol.ProduceRequest{}
 			req.Decode(d)
 			if err = s.handleProduce(conn, header, req); err != nil {
-				s.logger.Printf("produce failed: %s", err)
+				s.logger.Printf("[ERR] jocko: Produce failed: %s", err)
 			}
 		case 1:
 			req := &protocol.FetchRequest{}
 			req.Decode(d)
 			if err = s.handleFetch(conn, header, req); err != nil {
-				s.logger.Printf("fetch failed: %s", err)
+				s.logger.Printf("[ERR] jocko: Fetch failed: %s", err)
 			}
 		case 3:
 			req := &protocol.MetadataRequest{}
 			req.Decode(d)
 			if err = s.handleMetadata(conn, header, req); err != nil {
-				s.logger.Printf("metadata failed: %s", err)
+				s.logger.Printf("[ERR] jocko: Metadata request failed: %s", err)
 			}
 		case 19:
 			req := &protocol.CreateTopicRequests{}
 			req.Decode(d)
 			if err = s.handleCreateTopic(conn, header, req); err != nil {
-				s.logger.Printf("create topic failed: %s", err)
+				s.logger.Printf("[ERR] jocko: Create topic failed: %s", err)
 			}
 		}
 	}
@@ -162,8 +167,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
+	isController, err := s.broker.IsController()
+	if err != nil {
+		return err
+	}
 
-	if s.broker.IsController() {
+	if isController {
 		for i, req := range reqs.Requests {
 			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
 			if err != nil {
@@ -203,52 +212,32 @@ func zero(p []byte) {
 }
 
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
-	m := map[string]string{}
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+	b := new(cluster.Broker)
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
-	if len(m) != 1 {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	remoteAddr, ok := m["addr"]
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := s.broker.Join(remoteAddr); err != nil {
+	// TODO: change join to take a broker
+	if err := s.broker.Join(b.ID, b.Host); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, req *protocol.MetadataRequest) error {
-	brokerIDs, err := s.broker.Brokers()
-	brokers := make([]*protocol.Broker, len(brokerIDs))
+	brokers := make([]*protocol.Broker, len(s.broker.Brokers))
 	topics := make([]*protocol.TopicMetadata, len(req.Topics))
-	for i, bID := range brokerIDs {
-		host, port, err := net.SplitHostPort(bID)
-		if err != nil {
-			return err
-		}
-		// TODO: replace this with an actual id
-		nodeID := i
-		if err != nil {
-			return err
-		}
-		nPort, err := strconv.Atoi(port)
+	for i, b := range s.broker.Brokers {
+		port, err := strconv.Atoi(b.Port)
 		if err != nil {
 			return err
 		}
 		brokers[i] = &protocol.Broker{
-			NodeID: int32(nodeID),
-			Host:   host,
-			Port:   int32(nPort),
+			NodeID: int32(b.ID),
+			Host:   b.Host,
+			Port:   int32(port),
 		}
 	}
 	for i, t := range req.Topics {
