@@ -39,7 +39,7 @@ func TestNewCommitLog(t *testing.T) {
 		NewMessage([]byte("three")),
 		NewMessage([]byte("four")),
 	}
-	msgSet := NewMessageSet(1, msgs)
+	msgSet := NewMessageSet(1, msgs...)
 	err = l.Append(msgSet)
 	if err != nil {
 		t.Error(err)
