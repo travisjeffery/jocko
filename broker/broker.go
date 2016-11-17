@@ -22,6 +22,8 @@ const (
 
 const (
 	addPartition CmdType = iota
+	addBroker
+	removeBroker
 )
 
 type CmdType int
@@ -48,9 +50,18 @@ type Options struct {
 	DataDir  string
 	BindAddr string
 	LogDir   string
+	ID       int
 
-	numPartitions int
-	transport     raft.Transport
+	DefaultNumPartitions int
+	Brokers              []*cluster.Broker
+
+	transport raft.Transport
+}
+
+type broker struct {
+	ID   int    `json:"id"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 type Broker struct {
@@ -58,8 +69,10 @@ type Broker struct {
 
 	mu sync.Mutex
 
+	// state for fsm
 	partitions []*cluster.TopicPartition
 	topics     map[string][]*cluster.TopicPartition
+	peers      []*cluster.Broker
 
 	peerStore raft.PeerStore
 	transport raft.Transport
@@ -76,9 +89,17 @@ func New(options Options) *Broker {
 }
 
 func (s *Broker) Open() error {
-	conf := raft.DefaultConfig()
+	host, port, err := net.SplitHostPort(s.BindAddr)
+	if err != nil {
+		return err
+	}
+	s.Brokers = append(s.Brokers, &cluster.Broker{
+		Host: host,
+		Port: port,
+		ID:   s.ID,
+	})
 
-	conf.EnableSingleNode = true
+	conf := raft.DefaultConfig()
 
 	addr, err := net.ResolveTCPAddr("tcp", s.BindAddr)
 	if err != nil {
@@ -88,11 +109,25 @@ func (s *Broker) Open() error {
 	if s.transport == nil {
 		s.transport, err = raft.NewTCPTransport(s.BindAddr, addr, 3, timeout, os.Stderr)
 		if err != nil {
-			return errors.Wrap(err, "tcp transport failede")
+			return errors.Wrap(err, "tcp transport failed")
 		}
 	}
 
 	s.peerStore = raft.NewJSONPeers(s.DataDir, s.transport)
+	os.MkdirAll(s.DataDir, 0755)
+
+	if len(s.Brokers) == 1 {
+		conf.EnableSingleNode = true
+	} else {
+		var peers []string
+		for _, b := range s.Brokers {
+			peers = append(peers, b.Addr())
+		}
+		err = s.peerStore.SetPeers(peers)
+		if err != nil {
+			return errors.Wrap(err, "set peers failed")
+		}
+	}
 
 	snapshots, err := raft.NewFileSnapshotStore(s.DataDir, 2, os.Stderr)
 	if err != nil {
@@ -117,20 +152,12 @@ func (s *Broker) Close() error {
 	return s.raft.Shutdown().Error()
 }
 
-func (s *Broker) IsController() bool {
-	return s.raft.State() == raft.Leader
+func (s *Broker) IsController() (bool, error) {
+	return s.raft.State() == raft.Leader, nil
 }
 
 func (s *Broker) ControllerID() string {
 	return s.raft.Leader()
-}
-
-func (s *Broker) BrokerID() string {
-	return s.transport.LocalAddr()
-}
-
-func (s *Broker) Brokers() ([]string, error) {
-	return s.peerStore.Peers()
 }
 
 func (s *Broker) Partitions() ([]*cluster.TopicPartition, error) {
@@ -156,16 +183,19 @@ func (s *Broker) Partition(topic string, partition int32) (*cluster.TopicPartiti
 
 func (s *Broker) NumPartitions() (int, error) {
 	// TODO: need to get to get from store
-	if s.numPartitions == 0 {
+	if s.DefaultNumPartitions == 0 {
 		return 4, nil
 	} else {
-		return s.numPartitions, nil
+		return s.DefaultNumPartitions, nil
 	}
-
 }
 
 func (s *Broker) AddPartition(partition cluster.TopicPartition) error {
 	return s.apply(addPartition, partition)
+}
+
+func (s *Broker) AddBroker(broker cluster.Broker) error {
+	return s.apply(addBroker, broker)
 }
 
 func (s *Broker) apply(cmdType CmdType, data interface{}) error {
@@ -197,11 +227,17 @@ func (s *Broker) addPartition(partition *cluster.TopicPartition) {
 	}
 }
 
+func (s *Broker) addBroker(broker *cluster.Broker) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Brokers = append(s.Brokers, broker)
+}
+
 func (s *Broker) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	// TODO: switch this to a map for perf
 	for _, p := range s.topics[partition.Topic] {
 		if p.Partition == partition.Partition {
-			if partition.Leader == s.BrokerID() {
+			if partition.Leader == s.ID {
 				return true
 			}
 			break
@@ -218,7 +254,7 @@ func (s *Broker) Topics() []string {
 	return topics
 }
 
-func (s *Broker) Join(addr string) error {
+func (s *Broker) Join(id int, addr string) error {
 	f := s.raft.AddPeer(addr)
 	return f.Error()
 }
@@ -229,6 +265,16 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 		panic(errors.Wrap(err, "json unmarshal failed"))
 	}
 	switch c.Cmd {
+	case addBroker:
+		broker := new(cluster.Broker)
+		b, err := c.Data.MarshalJSON()
+		if err != nil {
+			panic(errors.Wrap(err, "json unmarshal failed"))
+		}
+		if err := json.Unmarshal(b, broker); err != nil {
+			panic(errors.Wrap(err, "json unmarshal failed"))
+		}
+		s.addBroker(broker)
 	case addPartition:
 		p := new(cluster.TopicPartition)
 		b, err := c.Data.MarshalJSON()
@@ -256,7 +302,7 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 		return err
 	}
 
-	brokers, err := s.Brokers()
+	brokers := s.Brokers
 	if err != nil {
 		return err
 	}
@@ -265,9 +311,9 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 		partition := cluster.TopicPartition{
 			Partition:       int32(i),
 			Topic:           topic,
-			Leader:          broker,
-			PreferredLeader: broker,
-			Replicas:        []string{broker},
+			Leader:          broker.ID,
+			PreferredLeader: broker.ID,
+			Replicas:        []int{broker.ID},
 		}
 		if err := s.AddPartition(partition); err != nil {
 			return err
