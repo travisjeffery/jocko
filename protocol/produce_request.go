@@ -11,7 +11,7 @@ type TopicData struct {
 }
 
 type ProduceRequest struct {
-	// unsupported: Acks int16
+	Acks      int16
 	Timeout   int32
 	TopicData []*TopicData
 }
@@ -32,6 +32,10 @@ func (r *ProduceRequest) Encode(e PacketEncoder) error {
 
 func (r *ProduceRequest) Decode(d PacketDecoder) error {
 	var err error
+	r.Acks, err = d.Int16()
+	if err != nil {
+		return err
+	}
 	r.Timeout, err = d.Int32()
 	if err != nil {
 		return err
