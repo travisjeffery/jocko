@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
 )
@@ -24,6 +25,8 @@ type Segment struct {
 	NextOffset int64
 	Position   int64
 	maxBytes   int64
+
+	sync.Mutex
 }
 
 func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error) {
@@ -62,10 +65,14 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 }
 
 func (s *Segment) IsFull() bool {
+	s.Lock()
+	defer s.Unlock()
 	return s.Position >= s.maxBytes
 }
 
 func (s *Segment) Write(p []byte) (n int, err error) {
+	s.Lock()
+	defer s.Unlock()
 	n, err = s.writer.Write(p)
 	if err != nil {
 		return n, errors.Wrap(err, "log write failed")
@@ -76,14 +83,20 @@ func (s *Segment) Write(p []byte) (n int, err error) {
 }
 
 func (s *Segment) Read(p []byte) (n int, err error) {
+	s.Lock()
+	defer s.Unlock()
 	return s.reader.Read(p)
 }
 
 func (s *Segment) ReadAt(p []byte, off int64) (n int, err error) {
+	s.Lock()
+	defer s.Unlock()
 	return s.log.ReadAt(p, off)
 }
 
 func (s *Segment) Close() error {
+	s.Lock()
+	defer s.Unlock()
 	if err := s.log.Close(); err != nil {
 		return err
 	}
@@ -91,6 +104,8 @@ func (s *Segment) Close() error {
 }
 
 func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
+	s.Lock()
+	defer s.Unlock()
 	e = &Entry{}
 	idx := sort.Search(int(s.Index.bytes/entryWidth), func(i int) bool {
 		_ = s.Index.ReadEntry(e, int64(i*entryWidth))
