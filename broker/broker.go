@@ -13,6 +13,7 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/cluster"
+	"github.com/travisjeffery/simplelog"
 )
 
 const (
@@ -48,9 +49,11 @@ func newCommand(cmd CmdType, data interface{}) (c command, err error) {
 
 type Options struct {
 	DataDir  string
-	BindAddr string
+	RaftAddr string
+	TCPAddr  string
 	LogDir   string
 	ID       int
+	Logger   *simplelog.Logger
 
 	DefaultNumPartitions int
 	Brokers              []*cluster.Broker
@@ -89,7 +92,7 @@ func New(options Options) *Broker {
 }
 
 func (s *Broker) Open() error {
-	host, port, err := net.SplitHostPort(s.BindAddr)
+	host, port, err := net.SplitHostPort(s.TCPAddr)
 	if err != nil {
 		return err
 	}
@@ -101,13 +104,13 @@ func (s *Broker) Open() error {
 
 	conf := raft.DefaultConfig()
 
-	addr, err := net.ResolveTCPAddr("tcp", s.BindAddr)
+	addr, err := net.ResolveTCPAddr("tcp", s.RaftAddr)
 	if err != nil {
 		return errors.Wrap(err, "resolve bind addr failed")
 	}
 
 	if s.transport == nil {
-		s.transport, err = raft.NewTCPTransport(s.BindAddr, addr, 3, timeout, os.Stderr)
+		s.transport, err = raft.NewTCPTransport(s.RaftAddr, addr, 3, timeout, os.Stderr)
 		if err != nil {
 			return errors.Wrap(err, "tcp transport failed")
 		}
@@ -297,16 +300,8 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 			return errors.New("topic exists already")
 		}
 	}
-	numPartitions, err := s.NumPartitions()
-	if err != nil {
-		return err
-	}
-
 	brokers := s.Brokers
-	if err != nil {
-		return err
-	}
-	for i := 0; i < numPartitions; i++ {
+	for i := 0; i < int(partitions); i++ {
 		broker := brokers[i%len(brokers)]
 		partition := cluster.TopicPartition{
 			Partition:       int32(i),

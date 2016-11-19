@@ -21,7 +21,7 @@ func TestStoreOpen(t *testing.T) {
 
 	s0 := New(Options{
 		DataDir:              filepath.Join(DataDir, "0"),
-		BindAddr:             bind0,
+		RaftAddr:             bind0,
 		ID:                   0,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{
@@ -42,7 +42,7 @@ func TestStoreOpen(t *testing.T) {
 
 	s1 := New(Options{
 		DataDir:              filepath.Join(DataDir, "1"),
-		BindAddr:             bind1,
+		RaftAddr:             bind1,
 		ID:                   1,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{
@@ -61,7 +61,7 @@ func TestStoreOpen(t *testing.T) {
 
 	s2 := New(Options{
 		DataDir:              filepath.Join(DataDir, "2"),
-		BindAddr:             bind2,
+		RaftAddr:             bind2,
 		ID:                   2,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{
@@ -92,7 +92,7 @@ func TestStoreOpen(t *testing.T) {
 	var peer, leader *Broker
 	bs := []*Broker{s0, s1, s2}
 	for _, b := range bs {
-		if b.BindAddr == l {
+		if b.RaftAddr == l {
 			leader = b
 		} else {
 			peer = b
