@@ -273,10 +273,46 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 	return err
 }
 
-func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, r *protocol.ProduceRequest) error {
+func (s *Server) handleOffsets(conn net.Conn, header *protocol.RequestHeader, req *protocol.OffsetsRequest) error {
+	spew.Dump(req)
+	oResp := new(protocol.OffsetsResponse)
+	oResp.Responses = make([]*protocol.OffsetResponse, len(req.Topics))
+	for i, t := range req.Topics {
+		oResp.Responses[i] = new(protocol.OffsetResponse)
+		oResp.Responses[i].Topic = t.Topic
+		oResp.Responses[i].PartitionResponses = make([]*protocol.PartitionResponse, len(t.Partitions))
+		for j, p := range t.Partitions {
+			pResp := new(protocol.PartitionResponse)
+			pResp.Partition = p.Partition
+
+			partition, err := s.broker.Partition(t.Topic, p.Partition)
+
+			var offset int64
+			if err != nil {
+				pResp.ErrorCode = protocol.ErrUnknown
+				continue
+			}
+			if p.Timestamp == -2 {
+				offset = partition.CommitLog.OldestOffset()
+			} else {
+				offset = partition.CommitLog.LatestOffset()
+			}
+			pResp.Offsets = []int64{offset}
+
+			oResp.Responses[i].PartitionResponses[j] = pResp
+		}
+	}
+	resp := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          oResp,
+	}
+	return s.write(conn, header, resp)
+}
+
+func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, req *protocol.ProduceRequest) error {
 	resp := new(protocol.ProduceResponses)
-	resp.Responses = make([]*protocol.ProduceResponse, len(r.TopicData))
-	for i, td := range r.TopicData {
+	resp.Responses = make([]*protocol.ProduceResponse, len(req.TopicData))
+	for i, td := range req.TopicData {
 		presps := make([]*protocol.ProducePartitionresponse, len(td.Data))
 		for j, p := range td.Data {
 			partition := &cluster.TopicPartition{
