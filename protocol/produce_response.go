@@ -22,7 +22,6 @@ func (r *ProduceResponses) Encode(e PacketEncoder) error {
 	for _, r := range r.Responses {
 		e.PutString(r.Topic)
 		e.PutArrayLength(len(r.PartitionResponses))
-
 		for _, p := range r.PartitionResponses {
 			e.PutInt32(p.Partition)
 			e.PutInt16(p.ErrorCode)
@@ -30,6 +29,7 @@ func (r *ProduceResponses) Encode(e PacketEncoder) error {
 			e.PutInt64(p.Timestamp)
 		}
 	}
+	e.PutInt32(r.ThrottleTimeMs)
 	return nil
 }
 
@@ -74,6 +74,10 @@ func (r *ProduceResponses) Decode(d PacketDecoder) error {
 			}
 		}
 		resp.PartitionResponses = ps
+	}
+	r.ThrottleTimeMs, err = d.Int32()
+	if err != nil {
+		return err
 	}
 	return nil
 }
