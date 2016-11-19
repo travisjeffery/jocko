@@ -17,6 +17,7 @@ type ProduceRequest struct {
 }
 
 func (r *ProduceRequest) Encode(e PacketEncoder) error {
+	e.PutInt16(r.Acks)
 	e.PutInt32(r.Timeout)
 	e.PutArrayLength(len(r.TopicData))
 	for _, td := range r.TopicData {
