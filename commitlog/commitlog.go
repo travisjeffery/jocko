@@ -79,11 +79,13 @@ func (l *CommitLog) Append(ms MessageSet) error {
 		}
 	}
 	position := l.activeSegment().Position
+	offset := l.activeSegment().NextOffset
+	ms.PutOffset(offset)
 	if _, err := l.activeSegment().Write(ms); err != nil {
 		return err
 	}
 	e := Entry{
-		Offset:   ms.Offset(),
+		Offset:   offset,
 		Position: position,
 	}
 	if err := l.activeSegment().Index.WriteEntry(e); err != nil {
