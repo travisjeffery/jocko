@@ -105,7 +105,7 @@ func (l *CommitLog) checkSplit() bool {
 }
 
 func (l *CommitLog) split() error {
-	seg, err := NewSegment(l.Path, l.newestOffset(), l.SegmentBytes)
+	seg, err := NewSegment(l.Path, l.NewestOffset(), l.SegmentBytes)
 	if err != nil {
 		return err
 	}
@@ -114,8 +114,12 @@ func (l *CommitLog) split() error {
 	return nil
 }
 
-func (l *CommitLog) newestOffset() int64 {
+func (l *CommitLog) NewestOffset() int64 {
 	return l.activeSegment().NextOffset
+}
+
+func (l *CommitLog) OldestOffset() int64 {
+	return l.segments[0].BaseOffset
 }
 
 func (l *CommitLog) activeSegment() *Segment {
