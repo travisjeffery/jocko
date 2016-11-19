@@ -15,15 +15,15 @@ type FetchRequest struct {
 	ReplicaID   int32
 	MaxWaitTime int32
 	MinBytes    int32
-	MaxBytes    int32
-	Topics      []*FetchTopic
+	// MaxBytes    int32
+	Topics []*FetchTopic
 }
 
 func (r *FetchRequest) Encode(e PacketEncoder) error {
-	e.PutInt32(r.ReplicaID)
+	e.PutInt32(-1) // replica ID is -1 for clients
 	e.PutInt32(r.MaxWaitTime)
 	e.PutInt32(r.MinBytes)
-	e.PutInt32(r.MaxBytes)
+	// e.PutInt32(r.MaxBytes)
 	e.PutArrayLength(len(r.Topics))
 	for _, t := range r.Topics {
 		e.PutString(t.Topic)
@@ -51,10 +51,10 @@ func (r *FetchRequest) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	r.MaxBytes, err = d.Int32()
-	if err != nil {
-		return err
-	}
+	// r.MaxBytes, err = d.Int32()
+	// if err != nil {
+	// 	return err
+	// }
 	tlen, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -99,5 +99,5 @@ func (r *FetchRequest) Key() int16 {
 }
 
 func (r *FetchRequest) Version() int16 {
-	return 3
+	return 1
 }
