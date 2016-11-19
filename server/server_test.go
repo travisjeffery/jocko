@@ -14,6 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/simplelog"
 )
 
 const (
@@ -32,7 +33,7 @@ func TestNewServer(t *testing.T) {
 
 	store := broker.New(broker.Options{
 		DataDir:  data,
-		BindAddr: "localhost:4000",
+		RaftAddr: "localhost:4000",
 		LogDir:   logs,
 		ID:       0,
 	})
@@ -42,7 +43,9 @@ func TestNewServer(t *testing.T) {
 	_, err := store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
 
-	s := New(":8000", store)
+	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko")
+
+	s := New(":8000", store, logger)
 	assert.NotNil(t, s)
 	assert.NoError(t, s.Start())
 

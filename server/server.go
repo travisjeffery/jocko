@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -18,6 +18,7 @@ import (
 	"github.com/travisjeffery/jocko/cluster"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/simplelog"
 )
 
 type Broker struct {
@@ -30,12 +31,11 @@ type Server struct {
 	addr string
 	ln   *net.TCPListener
 
-	logger *log.Logger
+	logger *simplelog.Logger
 	broker *broker.Broker
 }
 
-func New(addr string, broker *broker.Broker) *Server {
-	logger := log.New(os.Stderr, "server", log.LstdFlags)
+func New(addr string, broker *broker.Broker, logger *simplelog.Logger) *Server {
 	return &Server{
 		addr:   addr,
 		broker: broker,
@@ -68,18 +68,20 @@ func (s *Server) Start() error {
 	}
 
 	go func() {
-		conn, err := s.ln.Accept()
-		if err != nil {
-			s.logger.Fatalf("Listener accept failed: %s", err)
-		}
+		for {
+			conn, err := s.ln.Accept()
+			if err != nil {
+				panic(errors.Wrap(err, "Listener accept failed"))
+			}
 
-		go s.handleRequest(conn)
+			go s.handleRequest(conn)
+		}
 	}()
 
 	go func() {
 		err := server.Serve(s.ln)
 		if err != nil {
-			s.logger.Fatalf("HTTP serve: %s", err)
+			panic(errors.Wrap(err, "HTTP serve"))
 		}
 	}()
 
@@ -101,17 +103,16 @@ func (s *Server) handleRequest(conn net.Conn) {
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			s.logger.Printf("[ERR] jocko: Read deadline failed: %s", err)
+			s.logger.Info("Read deadilne failed: %s", err)
 			continue
 		}
-
 		n, err := io.ReadFull(conn, p[:])
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			// TODO: handle err
-			s.logger.Printf("[ERR] jocko: Conn read failed: %s", err)
+			s.logger.Info("Conn read failed: %s", err)
 			break
 		}
 		if n == 0 {
@@ -122,7 +123,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 		if size == 0 {
 			continue
 		}
-		s.logger.Printf("Got request with size: %d", size)
+
+		s.logger.Debug("request with size: %d", size)
 		b := make([]byte, size+4) //+4 since we're going to copy the size into b
 		copy(b, p)
 
@@ -133,35 +135,50 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		d := protocol.NewDecoder(b)
 		header.Decode(d)
-		s.logger.Printf("Got request with key: %d", header.APIKey)
+		s.logger.Debug("correlation id [%d], request size [%d], key [%d]", header.CorrelationID, size, header.APIKey)
 
 		switch header.APIKey {
 		case 0:
 			req := &protocol.ProduceRequest{}
-			req.Decode(d)
+			s.decode(header, req, d)
 			if err = s.handleProduce(conn, header, req); err != nil {
-				s.logger.Printf("[ERR] jocko: Produce failed: %s", err)
+				s.logger.Info("Produce failed: %s", err)
 			}
 		case 1:
 			req := &protocol.FetchRequest{}
-			req.Decode(d)
+			s.decode(header, req, d)
 			if err = s.handleFetch(conn, header, req); err != nil {
-				s.logger.Printf("[ERR] jocko: Fetch failed: %s", err)
+				s.logger.Info("Fetch failed: %s", err)
+			}
+		case 2:
+			req := &protocol.OffsetsRequest{}
+			s.decode(header, req, d)
+			if err = s.handleOffsets(conn, header, req); err != nil {
+				s.logger.Info("Offsets failed: %s", err)
 			}
 		case 3:
 			req := &protocol.MetadataRequest{}
-			req.Decode(d)
+			s.decode(header, req, d)
 			if err = s.handleMetadata(conn, header, req); err != nil {
-				s.logger.Printf("[ERR] jocko: Metadata request failed: %s", err)
+				s.logger.Info("Metadata request failed: %s", err)
 			}
 		case 19:
 			req := &protocol.CreateTopicRequests{}
-			req.Decode(d)
+			s.decode(header, req, d)
 			if err = s.handleCreateTopic(conn, header, req); err != nil {
-				s.logger.Printf("[ERR] jocko: Create topic failed: %s", err)
+				s.logger.Info("Create topic failed: %s", err)
 			}
 		}
 	}
+}
+
+func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d protocol.PacketDecoder) error {
+	err := req.Decode(d)
+	if err != nil {
+		return err
+	}
+	s.logger.Debug("[%d], request: %s", header.CorrelationID, spew.Sdump(req))
+	return nil
 }
 
 func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
@@ -171,12 +188,11 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 	if err != nil {
 		return err
 	}
-
 	if isController {
 		for i, req := range reqs.Requests {
 			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
 			if err != nil {
-				s.logger.Printf("[ERR] jocko: Failed to create topic %s: %v", req.Topic, err)
+				s.logger.Info("Failed to create topic %s: %v", req.Topic, err)
 				return
 			}
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
@@ -193,16 +209,7 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 		CorrelationID: header.CorrelationID,
 		Body:          resp,
 	}
-
-	b, err := protocol.Encode(r)
-
-	if err != nil {
-		return err
-	}
-
-	_, err = conn.Write(b)
-
-	return err
+	return s.write(conn, header, r)
 }
 
 func zero(p []byte) {
@@ -265,7 +272,12 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 		CorrelationID: header.CorrelationID,
 		Body:          resp,
 	}
-	b, err := protocol.Encode(r)
+	return s.write(conn, header, r)
+}
+
+func (s *Server) write(conn net.Conn, header *protocol.RequestHeader, e protocol.Encoder) error {
+	s.logger.Debug("correlation id [%d], response: %s", header.CorrelationID, spew.Sdump(e))
+	b, err := protocol.Encode(e)
 	if err != nil {
 		return err
 	}
@@ -329,7 +341,7 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			}
 			err = partition.CommitLog.Append(p.RecordSet)
 			if err != nil {
-				s.logger.Printf("commitlog append failed: %s", err)
+				s.logger.Info("commitlog append failed: %s", err)
 				presp.ErrorCode = protocol.ErrUnknown
 			}
 			presp.Partition = p.Partition
@@ -342,35 +354,31 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			PartitionResponses: presps,
 		}
 	}
-
-	b, err := protocol.Encode(&protocol.Response{
+	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,
 		Body:          resp,
-	})
-	if err != nil {
-		return err
 	}
-	_, err = conn.Write(b)
-	return err
+	return s.write(conn, header, r)
 }
 
 func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *protocol.FetchRequest) error {
-	resp := &protocol.FetchResponses{}
-	resp.Responses = make([]*protocol.FetchResponse, len(r.Topics))
+	fresp := &protocol.FetchResponses{}
+	fresp.Responses = make([]*protocol.FetchResponse, len(r.Topics))
 	received := time.Now()
 	for i, topic := range r.Topics {
 		fr := &protocol.FetchResponse{}
-		resp.Responses[i] = fr
+		fresp.Responses[i] = fr
+		fr.Topic = topic.Topic
 		fr.PartitionResponses = make([]*protocol.FetchPartitionResponse, len(topic.Partitions))
 		for j, p := range topic.Partitions {
 			partition, err := s.broker.Partition(topic.Topic, p.Partition)
 			if err != nil {
 				// TODO set err code
-				s.logger.Printf("[ERR] jocko: Failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
+				s.logger.Info("Failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
 				break
 			}
 			if !s.broker.IsLeaderOfPartition(partition) {
-				s.logger.Printf("[ERR] jocko: Failed to produce: %v", errors.New("broker is not partition leader"))
+				s.logger.Info("Failed to produce: %v", errors.New("broker is not partition leader"))
 				// TODO set err code
 				break
 			}
@@ -379,21 +387,20 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 				MaxBytes: p.MaxBytes,
 			})
 			if err != nil {
-				s.logger.Printf("[ERR] jocko: Failed to read partition: %v", err)
+				s.logger.Info("Failed to read partition: %v", err)
 				// TODO set err code
 				break
 			}
-			b := bytes.NewBuffer(make([]byte, 0))
+			b := new(bytes.Buffer)
 			var n int32
 			for n < r.MinBytes {
 				if r.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > r.MaxWaitTime {
 					break
 				}
-
 				// TODO: copy these bytes to outer bytes
 				nn, err := io.Copy(b, rdr)
 				if err != nil && err != io.EOF {
-					s.logger.Printf("[ERR] jocko: Failed to fetch messages: %v", err)
+					s.logger.Info("Failed to fetch messages: %v", err)
 					// TODO seT error code
 					break
 				}
@@ -410,16 +417,11 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 			}
 		}
 	}
-
-	b, err := protocol.Encode(&protocol.Response{
+	resp := &protocol.Response{
 		CorrelationID: header.CorrelationID,
-		Body:          resp,
-	})
-	if err != nil {
-		return err
+		Body:          fresp,
 	}
-	_, err = conn.Write(b)
-	return err
+	return s.write(conn, header, resp)
 }
 
 // Addr returns the address on which the Server is listening
