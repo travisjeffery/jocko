@@ -49,9 +49,6 @@ func (r *OffsetsRequest) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("hey hey")
-	bd := d.(*ByteDecoder)
-	fmt.Printf("bytes: %v, offset: %d, curr: %v\n", bd.b, bd.off, bd.b[bd.off:])
 	topicCount, err := d.ArrayLength()
 	if err != nil {
 		fmt.Println("errror!", err)
