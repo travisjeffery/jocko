@@ -307,7 +307,7 @@ func (s *Server) handleOffsets(conn net.Conn, header *protocol.RequestHeader, re
 			if p.Timestamp == -2 {
 				offset = partition.CommitLog.OldestOffset()
 			} else {
-				offset = partition.CommitLog.LatestOffset()
+				offset = partition.CommitLog.NewestOffset()
 			}
 			pResp.Offsets = []int64{offset}
 
@@ -412,7 +412,7 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone,
-				HighWatermark: 0, // TODO get last committed offset
+				HighWatermark: partition.CommitLog.NewestOffset(),
 				RecordSet:     b.Bytes(),
 			}
 		}
