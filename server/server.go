@@ -339,13 +339,13 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			if !s.broker.IsLeaderOfPartition(partition) {
 				presp.ErrorCode = protocol.ErrNotLeaderForPartition
 			}
-			err = partition.CommitLog.Append(p.RecordSet)
+			offset, err := partition.CommitLog.Append(p.RecordSet)
 			if err != nil {
 				s.logger.Info("commitlog append failed: %s", err)
 				presp.ErrorCode = protocol.ErrUnknown
 			}
 			presp.Partition = p.Partition
-			// TODO: presp.BaseOffset
+			presp.BaseOffset = offset
 			presp.Timestamp = time.Now().Unix()
 			presps[j] = presp
 		}

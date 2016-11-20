@@ -70,28 +70,28 @@ func (l *CommitLog) DeleteAll() error {
 	return os.RemoveAll(l.Path)
 }
 
-func (l *CommitLog) Append(ms MessageSet) error {
+func (l *CommitLog) Append(ms MessageSet) (offset int64, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.checkSplit() {
 		if err := l.split(); err != nil {
-			return err
+			return offset, err
 		}
 	}
 	position := l.activeSegment().Position
-	offset := l.activeSegment().NextOffset
+	offset = l.activeSegment().NextOffset
 	ms.PutOffset(offset)
 	if _, err := l.activeSegment().Write(ms); err != nil {
-		return err
+		return offset, err
 	}
 	e := Entry{
 		Offset:   offset,
 		Position: position,
 	}
 	if err := l.activeSegment().Index.WriteEntry(e); err != nil {
-		return err
+		return offset, err
 	}
-	return nil
+	return offset, nil
 }
 
 func (l *CommitLog) Read(p []byte) (n int, err error) {
