@@ -28,32 +28,46 @@ type MetadataResponse struct {
 	TopicMetadata []*TopicMetadata
 }
 
-func (r *MetadataResponse) Encode(e PacketEncoder) error {
-	e.PutArrayLength(len(r.Brokers))
+func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
+	if err = e.PutArrayLength(len(r.Brokers)); err != nil {
+		return err
+	}
 	for _, b := range r.Brokers {
 		e.PutInt32(b.NodeID)
-		e.PutString(b.Host)
+		if err = e.PutString(b.Host); err != nil {
+			return err
+		}
 		e.PutInt32(b.Port)
 	}
-	e.PutArrayLength(len(r.TopicMetadata))
+	if err = e.PutArrayLength(len(r.TopicMetadata)); err != nil {
+		return err
+	}
 	for _, t := range r.TopicMetadata {
 		e.PutInt16(t.TopicErrorCode)
-		e.PutString(t.Topic)
-		e.PutArrayLength(len(t.PartitionMetadata))
+		if err = e.PutString(t.Topic); err != nil {
+			return err
+		}
+		if err = e.PutArrayLength(len(t.PartitionMetadata)); err != nil {
+			return err
+		}
 		for _, p := range t.PartitionMetadata {
 			e.PutInt16(p.PartitionErrorCode)
 			e.PutInt32(p.ParititionID)
 			e.PutInt32(p.Leader)
-			e.PutInt32Array(p.Replicas)
-			e.PutInt32Array(p.ISR)
+			if err = e.PutInt32Array(p.Replicas); err != nil {
+				return err
+			}
+			if err = e.PutInt32Array(p.ISR); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (r *MetadataResponse) Decode(d PacketDecoder) error {
-	blen, err := d.ArrayLength()
-	r.Brokers = make([]*Broker, blen)
+	brokerCount, err := d.ArrayLength()
+	r.Brokers = make([]*Broker, brokerCount)
 	for i := range r.Brokers {
 		nodeID, err := d.Int32()
 		if err != nil {
@@ -73,8 +87,8 @@ func (r *MetadataResponse) Decode(d PacketDecoder) error {
 			Port:   port,
 		}
 	}
-	tlen, err := d.ArrayLength()
-	r.TopicMetadata = make([]*TopicMetadata, tlen)
+	topicCount, err := d.ArrayLength()
+	r.TopicMetadata = make([]*TopicMetadata, topicCount)
 	for i := range r.TopicMetadata {
 		m := &TopicMetadata{}
 		m.TopicErrorCode, err = d.Int16()
@@ -85,11 +99,11 @@ func (r *MetadataResponse) Decode(d PacketDecoder) error {
 		if err != nil {
 			return err
 		}
-		plen, err := d.ArrayLength()
+		partitionCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		partitions := make([]*PartitionMetadata, plen)
+		partitions := make([]*PartitionMetadata, partitionCount)
 		for i := range partitions {
 			p := &PartitionMetadata{}
 			p.PartitionErrorCode, err = d.Int16()

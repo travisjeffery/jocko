@@ -55,22 +55,22 @@ func (r *FetchRequest) Decode(d PacketDecoder) error {
 	// if err != nil {
 	// 	return err
 	// }
-	tlen, err := d.ArrayLength()
+	topicCount, err := d.ArrayLength()
 	if err != nil {
 		return err
 	}
-	topics := make([]*FetchTopic, tlen)
+	topics := make([]*FetchTopic, topicCount)
 	for i := range topics {
 		t := &FetchTopic{}
 		t.Topic, err = d.String()
 		if err != nil {
 			return err
 		}
-		plen, err := d.ArrayLength()
+		partitionCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		ps := make([]*FetchPartition, plen)
+		ps := make([]*FetchPartition, partitionCount)
 		for j := range ps {
 			p := &FetchPartition{}
 			p.Partition, err = d.Int32()

@@ -39,8 +39,7 @@ func (r *ProduceRequest) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *ProduceRequest) Decode(d PacketDecoder) error {
-	var err error
+func (r *ProduceRequest) Decode(d PacketDecoder) (err error) {
 	r.Acks, err = d.Int16()
 	if err != nil {
 		return err
@@ -49,8 +48,8 @@ func (r *ProduceRequest) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	tdlen, err := d.ArrayLength()
-	r.TopicData = make([]*TopicData, tdlen)
+	topicCount, err := d.ArrayLength()
+	r.TopicData = make([]*TopicData, topicCount)
 	for i := range r.TopicData {
 		td := new(TopicData)
 		r.TopicData[i] = td
@@ -58,11 +57,11 @@ func (r *ProduceRequest) Decode(d PacketDecoder) error {
 		if err != nil {
 			return err
 		}
-		dlen, err := d.ArrayLength()
+		dataCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		td.Data = make([]*Data, dlen)
+		td.Data = make([]*Data, dataCount)
 		for j := range td.Data {
 			data := new(Data)
 			td.Data[j] = data

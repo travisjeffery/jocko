@@ -17,18 +17,25 @@ type FetchResponses struct {
 	Responses      []*FetchResponse
 }
 
-func (r *FetchResponses) Encode(e PacketEncoder) error {
+func (r *FetchResponses) Encode(e PacketEncoder) (err error) {
 	e.PutInt32(r.ThrottleTimeMs)
-	e.PutArrayLength(len(r.Responses))
+	if err = e.PutArrayLength(len(r.Responses)); err != nil {
+		return err
+	}
 	for _, r := range r.Responses {
-		e.PutString(r.Topic)
-		e.PutArrayLength(len(r.PartitionResponses))
-
+		if err = e.PutString(r.Topic); err != nil {
+			return err
+		}
+		if err = e.PutArrayLength(len(r.PartitionResponses)); err != nil {
+			return err
+		}
 		for _, p := range r.PartitionResponses {
 			e.PutInt32(p.Partition)
 			e.PutInt16(p.ErrorCode)
 			e.PutInt64(p.HighWatermark)
-			e.PutBytes(p.RecordSet)
+			if err = e.PutBytes(p.RecordSet); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -40,8 +47,8 @@ func (r *FetchResponses) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	rlen, err := d.ArrayLength()
-	r.Responses = make([]*FetchResponse, rlen)
+	responseCount, err := d.ArrayLength()
+	r.Responses = make([]*FetchResponse, responseCount)
 
 	for i := range r.Responses {
 		resp := &FetchResponse{}
@@ -49,8 +56,8 @@ func (r *FetchResponses) Decode(d PacketDecoder) error {
 		if err != nil {
 			return err
 		}
-		plen, err := d.ArrayLength()
-		ps := make([]*FetchPartitionResponse, plen)
+		partitionCount, err := d.ArrayLength()
+		ps := make([]*FetchPartitionResponse, partitionCount)
 		for j := range ps {
 			p := &FetchPartitionResponse{}
 			p.Partition, err = d.Int32()

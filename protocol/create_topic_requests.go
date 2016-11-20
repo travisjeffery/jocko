@@ -38,11 +38,11 @@ func (c *CreateTopicRequests) Encode(e PacketEncoder) error {
 
 func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 	var err error
-	reqslen, err := d.ArrayLength()
+	requestCount, err := d.ArrayLength()
 	if err != nil {
 		return err
 	}
-	c.Requests = make([]*CreateTopicRequest, reqslen)
+	c.Requests = make([]*CreateTopicRequest, requestCount)
 	for i := range c.Requests {
 		req := new(CreateTopicRequest)
 		c.Requests[i] = req
@@ -59,18 +59,18 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 		if err != nil {
 			return err
 		}
-		ralen, err := d.ArrayLength()
-		ra := make(map[int32][]int32, ralen)
-		for i := 0; i < ralen; i++ {
+		assignmentCount, err := d.ArrayLength()
+		ra := make(map[int32][]int32, assignmentCount)
+		for i := 0; i < assignmentCount; i++ {
 			pid, err := d.Int32()
 			if err != nil {
 				return err
 			}
-			replen, err := d.ArrayLength()
+			replicaCount, err := d.ArrayLength()
 			if err != nil {
 				return err
 			}
-			reps := make([]int32, replen)
+			reps := make([]int32, replicaCount)
 			for i := range reps {
 				reps[i], err = d.Int32()
 				if err != nil {
@@ -81,12 +81,12 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 		}
 		req.ReplicaAssignment = ra
 
-		clen, err := d.ArrayLength()
+		configCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		c := make(map[string]string, clen)
-		for j := 0; j < clen; j++ {
+		c := make(map[string]string, configCount)
+		for j := 0; j < configCount; j++ {
 			k, err := d.String()
 			if err != nil {
 				return err
