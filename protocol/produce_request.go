@@ -16,16 +16,24 @@ type ProduceRequest struct {
 	TopicData []*TopicData
 }
 
-func (r *ProduceRequest) Encode(e PacketEncoder) error {
+func (r *ProduceRequest) Encode(e PacketEncoder) (err error) {
 	e.PutInt16(r.Acks)
 	e.PutInt32(r.Timeout)
-	e.PutArrayLength(len(r.TopicData))
+	if err = e.PutArrayLength(len(r.TopicData)); err != nil {
+		return err
+	}
 	for _, td := range r.TopicData {
-		e.PutString(td.Topic)
-		e.PutArrayLength(len(td.Data))
+		if err = e.PutString(td.Topic); err != nil {
+			return err
+		}
+		if err = e.PutArrayLength(len(td.Data)); err != nil {
+			return err
+		}
 		for _, d := range td.Data {
 			e.PutInt32(d.Partition)
-			e.PutBytes(d.RecordSet)
+			if err = e.PutBytes(d.RecordSet); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
