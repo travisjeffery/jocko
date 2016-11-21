@@ -112,7 +112,7 @@ func TestStoreOpen(t *testing.T) {
 	assert.NoError(t, err)
 
 	// check that consensus was made to peer
-	ps, err := peer.Partitions()
+	ps, err := peer.PartitionsForTopic(tp.Topic)
 	assert.NoError(t, err)
 	for _, p := range ps {
 		assert.Equal(t, tp.Topic, p.Topic)

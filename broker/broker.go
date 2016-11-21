@@ -25,6 +25,7 @@ const (
 	addPartition CmdType = iota
 	addBroker
 	removeBroker
+	deleteTopic
 )
 
 type CmdType int
@@ -73,9 +74,8 @@ type Broker struct {
 	mu sync.Mutex
 
 	// state for fsm
-	partitions []*cluster.TopicPartition
-	topics     map[string][]*cluster.TopicPartition
-	peers      []*cluster.Broker
+	topics map[string][]*cluster.TopicPartition
+	peers  []*cluster.Broker
 
 	peerStore raft.PeerStore
 	transport raft.Transport
@@ -85,6 +85,10 @@ type Broker struct {
 }
 
 func New(options Options) *Broker {
+	if options.DefaultNumPartitions == 0 {
+		options.DefaultNumPartitions = 4
+	}
+
 	return &Broker{
 		topics:  make(map[string][]*cluster.TopicPartition),
 		Options: options,
@@ -134,6 +138,7 @@ func (s *Broker) Open() error {
 
 	snapshots, err := raft.NewFileSnapshotStore(s.DataDir, 2, os.Stderr)
 	if err != nil {
+		return err
 	}
 
 	boltStore, err := raftboltdb.NewBoltStore(filepath.Join(s.DataDir, "store.db"))
@@ -163,10 +168,6 @@ func (s *Broker) ControllerID() string {
 	return s.raft.Leader()
 }
 
-func (s *Broker) Partitions() ([]*cluster.TopicPartition, error) {
-	return s.partitions, nil
-}
-
 func (s *Broker) PartitionsForTopic(topic string) (found []*cluster.TopicPartition, err error) {
 	return s.topics[topic], nil
 }
@@ -182,15 +183,6 @@ func (s *Broker) Partition(topic string, partition int32) (*cluster.TopicPartiti
 		}
 	}
 	return nil, errors.New("partition not found")
-}
-
-func (s *Broker) NumPartitions() (int, error) {
-	// TODO: need to get to get from store
-	if s.DefaultNumPartitions == 0 {
-		return 4, nil
-	} else {
-		return s.DefaultNumPartitions, nil
-	}
 }
 
 func (s *Broker) AddPartition(partition cluster.TopicPartition) error {
@@ -217,7 +209,6 @@ func (s *Broker) apply(cmdType CmdType, data interface{}) error {
 func (s *Broker) addPartition(partition *cluster.TopicPartition) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.partitions = append(s.partitions, partition)
 	if v, ok := s.topics[partition.Topic]; ok {
 		s.topics[partition.Topic] = append(v, partition)
 	} else {
@@ -288,8 +279,17 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 			panic(errors.Wrap(err, "json unmarshal failed"))
 		}
 		s.addPartition(p)
+	case deleteTopic:
+		p := new(cluster.TopicPartition)
+		b, err := c.Data.MarshalJSON()
+		if err != nil {
+			panic(errors.Wrap(err, "json unmarshal failed"))
+		}
+		if err := json.Unmarshal(b, p); err != nil {
+			panic(errors.Wrap(err, "json unmarshal failed"))
+		}
+		s.deleteTopic(p)
 	}
-
 	return nil
 }
 
@@ -314,6 +314,39 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// DeleteTopics creates topic with partitions count.
+func (s *Broker) DeleteTopics(topics ...string) error {
+	for _, topic := range topics {
+		if err := s.DeleteTopic(topic); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Broker) DeleteTopic(topic string) error {
+	return s.apply(deleteTopic, cluster.TopicPartition{
+		Topic: topic,
+	})
+}
+
+func (s *Broker) deleteTopic(tp *cluster.TopicPartition) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	partitions, err := s.PartitionsForTopic(tp.Topic)
+	if err != nil {
+		return err
+	}
+	for _, p := range partitions {
+		if err := p.CommitLog.DeleteAll(); err != nil {
+			return err
+		}
+	}
+	delete(s.topics, tp.Topic)
 	return nil
 }
 

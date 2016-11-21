@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -168,6 +167,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 			if err = s.handleCreateTopic(conn, header, req); err != nil {
 				s.logger.Info("Create topic failed: %s", err)
 			}
+		case 20:
+			req := &protocol.DeleteTopicsRequest{}
+			s.decode(header, req, d)
+			if err = s.handleDeleteTopics(conn, header, req); err != nil {
+				s.logger.Info("Delete topic failed: %s", err)
+			}
 		}
 	}
 }
@@ -177,7 +182,7 @@ func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d 
 	if err != nil {
 		return err
 	}
-	s.logger.Debug("[%d], request: %s", header.CorrelationID, spew.Sdump(req))
+	// s.logger.Debug("[%d], request: %s", header.CorrelationID, spew.Sdump(req))
 	return nil
 }
 
@@ -197,6 +202,37 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 			}
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
+				ErrorCode: protocol.ErrNone,
+			}
+		}
+	} else {
+		// cID := s.broker.ControllerID()
+		// send the request to the controller
+		return
+	}
+	r := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
+	}
+	return s.write(conn, header, r)
+}
+
+func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.DeleteTopicsRequest) (err error) {
+	resp := new(protocol.DeleteTopicsResponse)
+	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Topics))
+	isController, err := s.broker.IsController()
+	if err != nil {
+		return err
+	}
+	if isController {
+		for i, topic := range reqs.Topics {
+			err = s.broker.DeleteTopic(topic)
+			if err != nil {
+				s.logger.Info("Failed to delete topic %s: %v", topic, err)
+				return
+			}
+			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+				Topic:     topic,
 				ErrorCode: protocol.ErrNone,
 			}
 		}
@@ -276,7 +312,7 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 }
 
 func (s *Server) write(conn net.Conn, header *protocol.RequestHeader, e protocol.Encoder) error {
-	s.logger.Debug("correlation id [%d], response: %s", header.CorrelationID, spew.Sdump(e))
+	// s.logger.Debug("correlation id [%d], response: %s", header.CorrelationID, spew.Sdump(e))
 	b, err := protocol.Encode(e)
 	if err != nil {
 		return err
@@ -286,7 +322,6 @@ func (s *Server) write(conn net.Conn, header *protocol.RequestHeader, e protocol
 }
 
 func (s *Server) handleOffsets(conn net.Conn, header *protocol.RequestHeader, req *protocol.OffsetsRequest) error {
-	spew.Dump(req)
 	oResp := new(protocol.OffsetsResponse)
 	oResp.Responses = make([]*protocol.OffsetResponse, len(req.Topics))
 	for i, t := range req.Topics {
