@@ -24,9 +24,9 @@ Kafka/distributed commit log service in Go.
     - [x] Produce
     - [x] Fetch
     - [x] Metadata
-    - [x] CreateTopics
+    - [x] Create Topics    
+    - [x] Delete Topics    
 - [ ] Distributed replication
-- [ ] Clients
 
 ## License
 
