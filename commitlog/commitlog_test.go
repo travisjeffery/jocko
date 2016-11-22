@@ -3,7 +3,6 @@ package commitlog
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -22,6 +21,7 @@ func TestNewCommitLog(t *testing.T) {
 		SegmentBytes: 6,
 	}
 	l, err := New(opts)
+	assert.NoError(t, err)
 
 	// remove old data
 	assert.NoError(t, l.DeleteAll())
@@ -29,36 +29,41 @@ func TestNewCommitLog(t *testing.T) {
 	assert.NoError(t, l.Init())
 	assert.NoError(t, l.Open())
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	msgs := []Message{
 		NewMessage([]byte("one")),
 		NewMessage([]byte("two")),
 		NewMessage([]byte("three")),
 		NewMessage([]byte("four")),
 	}
-	msgSet := NewMessageSet(1, msgs...)
-	err = l.Append(msgSet)
-	if err != nil {
-		t.Error(err)
+	msgSets := []MessageSet{
+		NewMessageSet(0, msgs...),
+		NewMessageSet(1, msgs...),
 	}
-	maxBytes := msgSet.Size() * 2
+	for _, msgSet := range msgSets {
+		_, err = l.Append(msgSet)
+		assert.NoError(t, err)
+	}
+	maxBytes := msgSets[0].Size()
 	r, err := l.NewReader(ReaderOptions{
 		Offset:   0,
 		MaxBytes: maxBytes,
 	})
-	if err != nil {
-		t.Error(err)
-	}
-	p := make([]byte, maxBytes)
-	_, err = r.Read(p)
-	assert.Equal(t, io.EOF, err)
-	ms := MessageSet(p)
-	assert.Equal(t, int64(1), ms.Offset())
-	for i, m := range ms.Messages() {
-		assert.Equal(t, msgs[i], m)
+	assert.NoError(t, err)
+
+	for i, _ := range msgSets {
+		p := make([]byte, maxBytes)
+		_, err = r.Read(p)
+		assert.NoError(t, err)
+
+		ms := MessageSet(p)
+		assert.Equal(t, int64(i), ms.Offset())
+
+		payload := ms.Payload()
+		var offset int
+		for _, msg := range msgs {
+			assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+			offset += len(msg)
+		}
 	}
 }
 

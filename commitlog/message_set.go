@@ -1,10 +1,5 @@
 package commitlog
 
-import (
-	"bytes"
-	"io"
-)
-
 const (
 	offsetPos       = 0
 	sizePos         = 8
@@ -39,28 +34,4 @@ func (ms MessageSet) Size() int32 {
 
 func (ms MessageSet) Payload() []byte {
 	return ms[msgSetHeaderLen:]
-}
-
-func (ms MessageSet) Messages() (msgs []Message) {
-	var r io.Reader = bytes.NewReader(ms.Payload())
-	for {
-		hp := make([]byte, msgHeaderLen)
-		n, err := r.Read(hp)
-		if err != nil {
-			break
-		}
-		if n != msgHeaderLen {
-			break
-		}
-		header := Message(hp)
-		p := make([]byte, header.Size())
-		copy(p, header)
-		n, err = r.Read(p[msgHeaderLen:])
-		if err != nil || n == 0 {
-			break
-		}
-		msg := Message(p)
-		msgs = append(msgs, msg)
-	}
-	return msgs
 }

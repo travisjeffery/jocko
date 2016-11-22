@@ -15,8 +15,11 @@ func TestMessageSet(t *testing.T) {
 	}
 	ms := NewMessageSet(3, msgs...)
 	assert.Equal(t, int64(3), ms.Offset())
-	assert.Equal(t, msg0.Size()+msg1.Size()+msgSetHeaderLen, ms.Size())
-	for i, m := range ms.Messages() {
-		assert.Equal(t, msgs[i], m)
+
+	payload := ms.Payload()
+	var offset int
+	for _, msg := range msgs {
+		assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+		offset += len(msg)
 	}
 }
