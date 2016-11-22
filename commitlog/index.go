@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"os"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -24,6 +25,7 @@ type index struct {
 	options
 	mmap   gommap.MMap
 	file   *os.File
+	mu     sync.RWMutex
 	offset int64
 }
 
@@ -101,7 +103,9 @@ func (idx *index) WriteEntry(entry Entry) (err error) {
 		return errors.Wrap(err, "binary write failed")
 	}
 	idx.WriteAt(b.Bytes(), idx.offset)
+	idx.mu.Lock()
 	idx.offset += entryWidth
+	idx.mu.Unlock()
 	return nil
 }
 
@@ -114,11 +118,15 @@ func (idx *index) ReadEntry(e *Entry, offset int64) error {
 	if err != nil {
 		return errors.Wrap(err, "binar read failed")
 	}
+	idx.mu.RLock()
 	rel.fill(e, idx.baseOffset)
+	idx.mu.RUnlock()
 	return nil
 }
 
 func (idx *index) ReadAt(p []byte, offset int64) (n int) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
 	return copy(p, idx.mmap[offset:offset+entryWidth])
 }
 
@@ -127,10 +135,14 @@ func (idx *index) Write(p []byte) (n int, err error) {
 }
 
 func (idx *index) WriteAt(p []byte, offset int64) (n int) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	return copy(idx.mmap[offset:offset+entryWidth], p)
 }
 
 func (idx *index) Sync() error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 	if err := idx.file.Sync(); err != nil {
 		return errors.Wrap(err, "file sync failed")
 	}

@@ -29,6 +29,10 @@ func (ms MessageSet) Offset() int64 {
 	return int64(big.Uint64(ms[offsetPos : offsetPos+8]))
 }
 
+func (ms MessageSet) PutOffset(offset int64) {
+	big.PutUint64(ms[offsetPos:offsetPos+8], uint64(offset))
+}
+
 func (ms MessageSet) Size() int32 {
 	return int32(big.Uint32(ms[sizePos:sizePos+4]) + msgSetHeaderLen)
 }

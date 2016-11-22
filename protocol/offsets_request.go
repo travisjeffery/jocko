@@ -1,7 +1,5 @@
 package protocol
 
-import "fmt"
-
 type OffsetsPartition struct {
 	Partition int32
 	Timestamp int64 // -1 to receive latest offset, -2 to receive earliest offset
@@ -51,10 +49,8 @@ func (r *OffsetsRequest) Decode(d PacketDecoder) error {
 	}
 	topicCount, err := d.ArrayLength()
 	if err != nil {
-		fmt.Println("errror!", err)
 		return err
 	}
-	fmt.Println("topic count:", topicCount)
 	r.Topics = make([]*OffsetsTopic, topicCount)
 	for i := range r.Topics {
 		ot := new(OffsetsTopic)

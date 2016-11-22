@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -27,9 +28,9 @@ type Broker struct {
 }
 
 type Server struct {
-	addr string
-	ln   *net.TCPListener
-
+	addr   string
+	ln     *net.TCPListener
+	mu     sync.Mutex
 	logger *simplelog.Logger
 	broker *broker.Broker
 }
@@ -70,7 +71,8 @@ func (s *Server) Start() error {
 		for {
 			conn, err := s.ln.Accept()
 			if err != nil {
-				panic(errors.Wrap(err, "Listener accept failed"))
+				s.logger.Debug("listener accept failed: %v", err)
+				continue
 			}
 
 			go s.handleRequest(conn)
@@ -123,7 +125,6 @@ func (s *Server) handleRequest(conn net.Conn) {
 			continue
 		}
 
-		s.logger.Debug("request with size: %d", size)
 		b := make([]byte, size+4) //+4 since we're going to copy the size into b
 		copy(b, p)
 
@@ -182,7 +183,6 @@ func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d 
 	if err != nil {
 		return err
 	}
-	// s.logger.Debug("[%d], request: %s", header.CorrelationID, spew.Sdump(req))
 	return nil
 }
 
@@ -206,6 +206,7 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 			}
 		}
 	} else {
+		s.logger.Info("Failed to create topic %s: %v", errors.New("broker is not controller"))
 		// cID := s.broker.ControllerID()
 		// send the request to the controller
 		return
@@ -312,7 +313,6 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 }
 
 func (s *Server) write(conn net.Conn, header *protocol.RequestHeader, e protocol.Encoder) error {
-	// s.logger.Debug("correlation id [%d], response: %s", header.CorrelationID, spew.Sdump(e))
 	b, err := protocol.Encode(e)
 	if err != nil {
 		return err
@@ -376,7 +376,7 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			}
 			offset, err := partition.CommitLog.Append(p.RecordSet)
 			if err != nil {
-				s.logger.Info("commitlog append failed: %s", err)
+				s.logger.Info("commitlog/append failed: %s", err)
 				presp.ErrorCode = protocol.ErrUnknown
 			}
 			presp.Partition = p.Partition

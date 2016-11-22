@@ -71,7 +71,7 @@ type broker struct {
 type Broker struct {
 	Options
 
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// state for fsm
 	topics map[string][]*cluster.TopicPartition
@@ -169,6 +169,8 @@ func (s *Broker) ControllerID() string {
 }
 
 func (s *Broker) PartitionsForTopic(topic string) (found []*cluster.TopicPartition, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.topics[topic], nil
 }
 
@@ -207,13 +209,13 @@ func (s *Broker) apply(cmdType CmdType, data interface{}) error {
 }
 
 func (s *Broker) addPartition(partition *cluster.TopicPartition) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 	if v, ok := s.topics[partition.Topic]; ok {
 		s.topics[partition.Topic] = append(v, partition)
 	} else {
 		s.topics[partition.Topic] = []*cluster.TopicPartition{partition}
 	}
+	s.mu.RUnlock()
 	if s.IsLeaderOfPartition(partition) {
 		if err := partition.OpenCommitLog(s.LogDir); err != nil {
 			panic(err)
@@ -228,7 +230,8 @@ func (s *Broker) addBroker(broker *cluster.Broker) {
 }
 
 func (s *Broker) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
-	// TODO: switch this to a map for perf
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, p := range s.topics[partition.Topic] {
 		if p.Partition == partition.Partition {
 			if partition.Leader == s.ID {
@@ -258,6 +261,7 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 	if err := json.Unmarshal(l.Data, &c); err != nil {
 		panic(errors.Wrap(err, "json unmarshal failed"))
 	}
+	s.Logger.Debug("broker/apply cmd [%d]", c.Cmd)
 	switch c.Cmd {
 	case addBroker:
 		broker := new(cluster.Broker)
@@ -335,8 +339,6 @@ func (s *Broker) DeleteTopic(topic string) error {
 }
 
 func (s *Broker) deleteTopic(tp *cluster.TopicPartition) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	partitions, err := s.PartitionsForTopic(tp.Topic)
 	if err != nil {
 		return err
@@ -346,7 +348,9 @@ func (s *Broker) deleteTopic(tp *cluster.TopicPartition) error {
 			return err
 		}
 	}
+	s.mu.Lock()
 	delete(s.topics, tp.Topic)
+	s.mu.Unlock()
 	return nil
 }
 

@@ -66,13 +66,7 @@ func (l *CommitLog) Open() error {
 	return nil
 }
 
-func (l *CommitLog) DeleteAll() error {
-	return os.RemoveAll(l.Path)
-}
-
 func (l *CommitLog) Append(ms MessageSet) (offset int64, err error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	if l.checkSplit() {
 		if err := l.split(); err != nil {
 			return offset, err
@@ -99,6 +93,37 @@ func (l *CommitLog) Read(p []byte) (n int, err error) {
 	defer l.mu.Unlock()
 	return l.activeSegment().Read(p)
 }
+func (l *CommitLog) NewestOffset() int64 {
+	return l.activeSegment().NextOffset
+}
+
+func (l *CommitLog) OldestOffset() int64 {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.segments[0].BaseOffset
+}
+
+func (l *CommitLog) activeSegment() *Segment {
+	return l.vActiveSegment.Load().(*Segment)
+}
+
+func (l *CommitLog) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, segment := range l.segments {
+		if err := segment.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *CommitLog) DeleteAll() error {
+	if err := l.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(l.Path)
+}
 
 func (l *CommitLog) checkSplit() bool {
 	return l.activeSegment().IsFull()
@@ -109,19 +134,9 @@ func (l *CommitLog) split() error {
 	if err != nil {
 		return err
 	}
+	l.mu.Lock()
 	l.segments = append(l.segments, seg)
+	l.mu.Unlock()
 	l.vActiveSegment.Store(seg)
 	return nil
-}
-
-func (l *CommitLog) NewestOffset() int64 {
-	return l.activeSegment().NextOffset
-}
-
-func (l *CommitLog) OldestOffset() int64 {
-	return l.segments[0].BaseOffset
-}
-
-func (l *CommitLog) activeSegment() *Segment {
-	return l.vActiveSegment.Load().(*Segment)
 }
