@@ -1,18 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
-	"math/rand"
-	"net"
 	"os"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -25,8 +20,10 @@ type check struct {
 }
 
 const (
-	topic        = "test_topic"
-	messageCount = 15
+	topic         = "test_topic"
+	messageCount  = 15
+	clientID      = "test_client"
+	numPartitions = int32(8)
 )
 
 var (
@@ -60,53 +57,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	clientID := "test_client"
-	tcpAddr, err := net.ResolveTCPAddr("tcp", *tcpaddr)
-	if err != nil {
-		panic(err)
-	}
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	defer conn.Close()
-
-	_, err = store.WaitForLeader(10 * time.Second)
-	if err != nil {
+	if _, err := store.WaitForLeader(10 * time.Second); err != nil {
 		panic(err)
 	}
 
-	numPartitions := int32(8)
-
-	var body protocol.Body = &protocol.CreateTopicRequests{
-		Requests: []*protocol.CreateTopicRequest{{
-			Topic:             topic,
-			NumPartitions:     numPartitions,
-			ReplicationFactor: int16(0),
-			ReplicaAssignment: nil,
-			Configs: map[string]string{
-				"config_key": "config_val",
-			},
-		}},
+	if err := store.CreateTopic(topic, numPartitions); err != nil {
+		panic(err)
 	}
-	var req protocol.Encoder = &protocol.Request{
-		CorrelationID: rand.Int31(),
-		ClientID:      clientID,
-		Body:          body,
-	}
-
-	b, err := protocol.Encode(req)
-
-	_, err = conn.Write(b)
-
-	buf := new(bytes.Buffer)
-	_, err = io.CopyN(buf, conn, 8)
-
-	var header protocol.Response
-	protocol.Decode(buf.Bytes(), &header)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, int64(header.Size-4))
-
-	createTopicsResponse := &protocol.CreateTopicsResponse{}
-	err = protocol.Decode(buf.Bytes(), createTopicsResponse)
+	defer store.DeleteTopic(topic)
 
 	config := sarama.NewConfig()
 	config.ChannelBufferSize = 1
@@ -176,9 +134,5 @@ func main() {
 			}
 		}
 	}
-	if err = store.DeleteTopic(topic); err != nil {
-		panic(err)
-	}
-
 	fmt.Printf("producer and consumer worked! %d messages ok\n", totalChecked)
 }
