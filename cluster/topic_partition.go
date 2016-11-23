@@ -27,8 +27,8 @@ func (p TopicPartition) String() string {
 func (partition *TopicPartition) OpenCommitLog(logDir string) error {
 	var err error
 	partition.CommitLog, err = commitlog.New(commitlog.Options{
-		Path:         path.Join(logDir, partition.String()),
-		SegmentBytes: 1024,
+		Path:            path.Join(logDir, partition.String()),
+		MaxSegmentBytes: 1024,
 	})
 	if err != nil {
 		return err

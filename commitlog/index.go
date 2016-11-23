@@ -62,33 +62,17 @@ func newIndex(opts options) (idx *index, err error) {
 	if opts.bytes == 0 {
 		opts.bytes = 10 * 1024 * 1024
 	}
-
 	if opts.path == "" {
 		return nil, errors.New("path is empty")
 	}
-
 	idx = &index{
 		options: opts,
 	}
-
 	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, errors.Wrap(err, "open file failed")
 	}
-	fi, err := idx.file.Stat()
-	if err != nil {
-		return nil, errors.Wrap(err, "file stat failed")
-	}
-	size := fi.Size()
-	if size == 0 {
-		// "Truncate" ensures the file will fit the indexes
-		err := idx.file.Truncate(opts.bytes)
-		if err != nil {
-			return nil, errors.Wrap(err, "file truncate failed")
-		}
-	} else {
-		idx.offset = size
-	}
+	idx.file.Truncate(opts.bytes)
 	idx.mmap, err = gommap.Map(idx.file.Fd(), gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 	if err != nil {
 		return nil, errors.Wrap(err, "mmap file failed")

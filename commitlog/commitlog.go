@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -19,8 +21,8 @@ type CommitLog struct {
 }
 
 type Options struct {
-	Path         string
-	SegmentBytes int64
+	Path            string
+	MaxSegmentBytes int64
 }
 
 func New(opts Options) (*CommitLog, error) {
@@ -28,7 +30,7 @@ func New(opts Options) (*CommitLog, error) {
 		return nil, errors.New("path is empty")
 	}
 
-	if opts.SegmentBytes == 0 {
+	if opts.MaxSegmentBytes == 0 {
 		// TODO default here
 	}
 
@@ -50,19 +52,30 @@ func (l *CommitLog) Init() error {
 }
 
 func (l *CommitLog) Open() error {
-	_, err := ioutil.ReadDir(l.Path)
+	files, err := ioutil.ReadDir(l.Path)
 	if err != nil {
 		return errors.Wrap(err, "read dir failed")
 	}
-
-	activeSegment, err := NewSegment(l.Path, 0, l.SegmentBytes)
-	if err != nil {
-		return err
+	for _, file := range files {
+		if !strings.HasSuffix(file.Name(), ".log") {
+			continue
+		}
+		offsetStr := strings.TrimSuffix(file.Name(), ".log")
+		baseOffset, err := strconv.Atoi(offsetStr)
+		segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes)
+		if err != nil {
+			return err
+		}
+		l.segments = append(l.segments, segment)
 	}
-	l.vActiveSegment.Store(activeSegment)
-
-	l.segments = append(l.segments, activeSegment)
-
+	if len(l.segments) == 0 {
+		segment, err := NewSegment(l.Path, 0, l.MaxSegmentBytes)
+		if err != nil {
+			return err
+		}
+		l.segments = append(l.segments, segment)
+	}
+	l.vActiveSegment.Store(l.segments[len(l.segments)-1])
 	return nil
 }
 
@@ -130,7 +143,7 @@ func (l *CommitLog) checkSplit() bool {
 }
 
 func (l *CommitLog) split() error {
-	seg, err := NewSegment(l.Path, l.NewestOffset(), l.SegmentBytes)
+	seg, err := NewSegment(l.Path, l.NewestOffset(), l.MaxSegmentBytes)
 	if err != nil {
 		return err
 	}

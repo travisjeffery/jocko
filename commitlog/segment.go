@@ -1,6 +1,7 @@
 package commitlog
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 const (
@@ -41,18 +43,8 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 		return nil, errors.Wrap(err, "file stat failed")
 	}
 
-	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, baseOffset))
-	index, err := newIndex(options{
-		path:       indexPath,
-		baseOffset: baseOffset,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	s := &Segment{
 		log:        log,
-		Index:      index,
 		writer:     log,
 		reader:     log,
 		Position:   fi.Size(),
@@ -60,8 +52,65 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 		BaseOffset: baseOffset,
 		NextOffset: baseOffset,
 	}
+	err = s.SetupIndex(path)
+	if err == io.EOF {
+		return s, nil
+	}
 
-	return s, nil
+	return s, err
+}
+
+func (s *Segment) SetupIndex(path string) (err error) {
+	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, s.BaseOffset))
+	s.Index, err = newIndex(options{
+		path:       indexPath,
+		baseOffset: s.BaseOffset,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = s.log.Seek(0, 0)
+	if err != nil {
+		return err
+	}
+
+	b := new(bytes.Buffer)
+	for {
+		// get offset and size
+		_, err := io.CopyN(b, s.log, 8)
+		if err != nil {
+			return err
+		}
+		s.NextOffset = int64(protocol.Encoding.Uint64(b.Bytes()[0:8]))
+
+		_, err = io.CopyN(b, s.log, 4)
+		if err != nil {
+			return err
+		}
+		size := int64(protocol.Encoding.Uint32(b.Bytes()[8:12]))
+
+		_, err = io.CopyN(b, s.log, size)
+		if err != nil {
+			return err
+		}
+
+		err = s.Index.WriteEntry(Entry{
+			Offset:   s.NextOffset,
+			Position: s.Position,
+		})
+		if err != nil {
+			return err
+		}
+
+		s.Position += size + msgSetHeaderLen
+		s.NextOffset++
+
+		_, err = s.log.Seek(size, 1)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (s *Segment) IsFull() bool {

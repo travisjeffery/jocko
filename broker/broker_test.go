@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko/cluster"
+	"github.com/travisjeffery/simplelog"
 )
 
 func TestStoreOpen(t *testing.T) {
@@ -19,9 +20,12 @@ func TestStoreOpen(t *testing.T) {
 	bind1 := "127.0.0.1:4001"
 	bind2 := "127.0.0.1:4002"
 
+	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/brokertest")
 	s0 := New(Options{
 		DataDir:              filepath.Join(DataDir, "0"),
 		RaftAddr:             bind0,
+		Logger:               logger,
+		TCPAddr:              bind0,
 		ID:                   0,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{
@@ -43,6 +47,8 @@ func TestStoreOpen(t *testing.T) {
 	s1 := New(Options{
 		DataDir:              filepath.Join(DataDir, "1"),
 		RaftAddr:             bind1,
+		Logger:               logger,
+		TCPAddr:              bind1,
 		ID:                   1,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{
@@ -62,6 +68,8 @@ func TestStoreOpen(t *testing.T) {
 	s2 := New(Options{
 		DataDir:              filepath.Join(DataDir, "2"),
 		RaftAddr:             bind2,
+		TCPAddr:              bind2,
+		Logger:               logger,
 		ID:                   2,
 		DefaultNumPartitions: 2,
 		Brokers: []*cluster.Broker{{

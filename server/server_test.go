@@ -31,9 +31,12 @@ func TestNewServer(t *testing.T) {
 	data := filepath.Join(dir, "data")
 	assert.NoError(t, os.MkdirAll(data, 0755))
 
+	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	store := broker.New(broker.Options{
 		DataDir:  data,
 		RaftAddr: "localhost:4000",
+		TCPAddr:  "localhost:8000",
+		Logger:   logger,
 		LogDir:   logs,
 		ID:       0,
 	})
@@ -42,8 +45,6 @@ func TestNewServer(t *testing.T) {
 
 	_, err := store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
-
-	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko")
 
 	s := New(":8000", store, logger)
 	assert.NotNil(t, s)
@@ -201,6 +202,5 @@ func TestNewServer(t *testing.T) {
 
 	recordSet := commitlog.MessageSet(fetchResponse.Responses[0].PartitionResponses[0].RecordSet)
 	assert.Equal(t, int64(0), recordSet.Offset())
-	msg := recordSet.Messages()[0]
-	assert.Equal(t, []byte("Hello world!"), msg.Payload())
+	assert.Equal(t, []byte(m0), recordSet.Payload())
 }
