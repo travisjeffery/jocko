@@ -61,6 +61,7 @@ func main() {
 		panic(err)
 	}
 
+	// creating/deleting topic directly since Sarama doesn't support it
 	if err := store.CreateTopic(topic, numPartitions); err != nil {
 		panic(err)
 	}
