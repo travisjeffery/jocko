@@ -62,10 +62,9 @@ func main() {
 	}
 
 	// creating/deleting topic directly since Sarama doesn't support it
-	if err := store.CreateTopic(topic, numPartitions); err != nil {
+	if err := store.CreateTopic(topic, numPartitions); err != nil && err != broker.ErrTopicExists {
 		panic(err)
 	}
-	defer store.DeleteTopic(topic)
 
 	config := sarama.NewConfig()
 	config.ChannelBufferSize = 1

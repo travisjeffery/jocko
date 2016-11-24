@@ -28,6 +28,10 @@ const (
 	deleteTopic
 )
 
+var (
+	ErrTopicExists = errors.New("topic exists already")
+)
+
 type CmdType int
 
 type command struct {
@@ -301,7 +305,7 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 func (s *Broker) CreateTopic(topic string, partitions int32) error {
 	for _, t := range s.Topics() {
 		if t == topic {
-			return errors.New("topic exists already")
+			return ErrTopicExists
 		}
 	}
 	brokers := s.Brokers
