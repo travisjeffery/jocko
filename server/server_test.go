@@ -34,7 +34,7 @@ func TestNewServer(t *testing.T) {
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	store := broker.New(broker.Options{
 		DataDir:  data,
-		RaftAddr: "localhost:4000",
+		RaftAddr: "localhost:5000",
 		TCPAddr:  "localhost:8000",
 		Logger:   logger,
 		LogDir:   logs,
