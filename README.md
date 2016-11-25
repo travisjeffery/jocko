@@ -1,3 +1,5 @@
+![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master)
+
 # JOCKO
 
 Kafka/distributed commit log service in Go.
