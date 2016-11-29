@@ -18,17 +18,17 @@ Kafka/distributed commit log service in Go.
 
 ## TODO
 
-- [x] Write and read segments of a commit log
-- [x] Segment indexes
-- [x] Writing over network
-- [x] Reading over network
+- [x] Producing
+- [x] Fetching
+- [x] Partition consensus and distribution
 - [ ] Protocol
     - [x] Produce
     - [x] Fetch
     - [x] Metadata
     - [x] Create Topics    
     - [x] Delete Topics    
-- [ ] Distributed replication
+    - [ ] Consumer group
+- [ ] Replication
 
 ## License
 
