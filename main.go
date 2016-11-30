@@ -51,6 +51,8 @@ func main() {
 	gracefully.Timeout = 10 * time.Second
 	gracefully.Shutdown()
 
-	store.Close()
+	if err := store.Close(); err != nil {
+		panic(err)
+	}
 	server.Close()
 }
