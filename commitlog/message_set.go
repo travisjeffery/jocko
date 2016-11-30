@@ -11,7 +11,7 @@ type MessageSet []byte
 func NewMessageSet(offset uint64, msgs ...Message) MessageSet {
 	ms := make([]byte, msgSetHeaderLen)
 	var n uint32
-	big.PutUint64(ms[offsetPos:offsetOffset+8], offset)
+	big.PutUint64(ms[offsetPos:offsetPos+8], offset)
 	for _, m := range msgs {
 		ms = append(ms, m...)
 		n += uint32(len(m))
