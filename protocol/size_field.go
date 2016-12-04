@@ -14,7 +14,7 @@ func (s *SizeField) ReserveSize() int {
 	return 4
 }
 
-func (s *SizeField) PutSize(curOffset int, buf []byte) error {
+func (s *SizeField) Fill(curOffset int, buf []byte) error {
 	Encoding.PutUint32(buf[s.StartOffset:], uint32(curOffset-s.StartOffset-4))
 	return nil
 }

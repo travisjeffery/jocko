@@ -11,6 +11,7 @@ var ErrInvalidArrayLength = errors.New("kafka: invalid array length")
 var ErrInvalidByteSliceLength = errors.New("invalid byteslice length")
 
 type PacketDecoder interface {
+	Int8() (int8, error)
 	Int16() (int16, error)
 	Int32() (int32, error)
 	Int64() (int64, error)
@@ -20,11 +21,19 @@ type PacketDecoder interface {
 	Int32Array() ([]int32, error)
 	Int64Array() ([]int64, error)
 	StringArray() ([]string, error)
+	Push(pd PushDecoder) error
+	Pop() error
 	remaining() int
 }
 
 type Decoder interface {
 	Decode(d PacketDecoder) error
+}
+
+type PushDecoder interface {
+	SaveOffset(in int)
+	ReserveSize() int
+	Fill(curOffset int, buf []byte) error
 }
 
 func Decode(b []byte, in Decoder) error {
@@ -33,8 +42,9 @@ func Decode(b []byte, in Decoder) error {
 }
 
 type ByteDecoder struct {
-	b   []byte
-	off int
+	b     []byte
+	off   int
+	stack []PushDecoder
 }
 
 func (d *ByteDecoder) Offset() int {
@@ -45,6 +55,12 @@ func NewDecoder(b []byte) *ByteDecoder {
 	return &ByteDecoder{
 		b: b,
 	}
+}
+
+func (d *ByteDecoder) Int8() (int8, error) {
+	tmp := int8(d.b[d.off])
+	d.off++
+	return tmp, nil
 }
 
 func (d *ByteDecoder) Int16() (int16, error) {
@@ -226,6 +242,24 @@ func (d *ByteDecoder) StringArray() ([]string, error) {
 		}
 	}
 	return ret, nil
+}
+
+func (d *ByteDecoder) Push(pd PushDecoder) error {
+	pd.SaveOffset(d.off)
+	reserved := pd.ReserveSize()
+	if d.remaining() < reserved {
+		d.off = len(d.b)
+		return ErrInsufficientData
+	}
+	d.stack = append(d.stack, pd)
+	d.off += reserved
+	return nil
+}
+
+func (d *ByteDecoder) Pop() error {
+	pd := d.stack[len(d.stack)-1]
+	d.stack = d.stack[:len(d.stack)-1]
+	return pd.Fill(d.off, d.b)
 }
 
 func (d *ByteDecoder) remaining() int {

@@ -21,7 +21,7 @@ type PacketEncoder interface {
 type PushEncoder interface {
 	SaveOffset(in int)
 	ReserveSize() int
-	PutSize(curOffset int, buf []byte) error
+	Fill(curOffset int, buf []byte) error
 }
 
 type Encoder interface {
@@ -254,5 +254,5 @@ func (e *ByteEncoder) Pop() {
 	// this is go's ugly pop pattern (the inverse of append)
 	pe := e.stack[len(e.stack)-1]
 	e.stack = e.stack[:len(e.stack)-1]
-	pe.PutSize(e.off, e.b)
+	pe.Fill(e.off, e.b)
 }
