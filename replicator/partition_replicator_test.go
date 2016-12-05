@@ -46,6 +46,7 @@ func TestFetchMessages(t *testing.T) {
 	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko/replicator_test")
 	s0 := broker.New(broker.Options{
 		DataDir:              filepath.Join(dataDir, "0"),
+		LogDir:               filepath.Join(dataDir, "0"),
 		RaftAddr:             raft0,
 		Logger:               logger,
 		TCPAddr:              "127.0.0.1:3000",
@@ -61,6 +62,7 @@ func TestFetchMessages(t *testing.T) {
 
 	s1 := broker.New(broker.Options{
 		DataDir:              filepath.Join(dataDir, "1"),
+		LogDir:               filepath.Join(dataDir, "1"),
 		RaftAddr:             raft1,
 		Logger:               logger,
 		TCPAddr:              raft1,
@@ -74,6 +76,7 @@ func TestFetchMessages(t *testing.T) {
 
 	s2 := broker.New(broker.Options{
 		DataDir:              filepath.Join(dataDir, "2"),
+		LogDir:               filepath.Join(dataDir, "2"),
 		RaftAddr:             raft2,
 		TCPAddr:              raft2,
 		Logger:               logger,
