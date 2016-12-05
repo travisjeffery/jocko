@@ -13,35 +13,38 @@ import (
 )
 
 func TestStoreOpen(t *testing.T) {
-	DataDir, _ := ioutil.TempDir("", "storetest")
-	defer os.RemoveAll(DataDir)
+	dataDir, _ := ioutil.TempDir("", "broker_test")
+	defer os.RemoveAll(dataDir)
 
-	bind0 := "127.0.0.1:4000"
-	bind1 := "127.0.0.1:4001"
-	bind2 := "127.0.0.1:4002"
+	raft0 := "127.0.0.1:5000"
+	raft1 := "127.0.0.1:5001"
+	raft2 := "127.0.0.1:5002"
 
 	b0 := &cluster.Broker{
-		Host: "127.0.0.1",
-		Port: "4000",
-		ID:   0,
+		Host:     "127.0.0.1",
+		Port:     "3001",
+		RaftAddr: raft0,
+		ID:       0,
 	}
 	b1 := &cluster.Broker{
-		Host: "127.0.0.1",
-		Port: "4001",
-		ID:   1,
+		Host:     "127.0.0.1",
+		Port:     "5001",
+		RaftAddr: raft1,
+		ID:       1,
 	}
 	b2 := &cluster.Broker{
-		Host: "127.0.0.1",
-		Port: "4002",
-		ID:   2,
+		Host:     "127.0.0.1",
+		Port:     "5002",
+		RaftAddr: raft2,
+		ID:       2,
 	}
 
-	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/brokertest")
+	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko/broker_test")
 	s0 := New(Options{
-		DataDir:              filepath.Join(DataDir, "0"),
-		RaftAddr:             bind0,
+		DataDir:              filepath.Join(dataDir, "0"),
+		RaftAddr:             raft0,
 		Logger:               logger,
-		TCPAddr:              bind0,
+		TCPAddr:              "127.0.0.1:3001",
 		ID:                   0,
 		DefaultNumPartitions: 2,
 		Brokers:              []*cluster.Broker{b1, b2},
@@ -53,10 +56,10 @@ func TestStoreOpen(t *testing.T) {
 	defer s0.Close()
 
 	s1 := New(Options{
-		DataDir:              filepath.Join(DataDir, "1"),
-		RaftAddr:             bind1,
+		DataDir:              filepath.Join(dataDir, "1"),
+		RaftAddr:             raft1,
 		Logger:               logger,
-		TCPAddr:              bind1,
+		TCPAddr:              raft1,
 		ID:                   1,
 		DefaultNumPartitions: 2,
 		Brokers:              []*cluster.Broker{b0, b2},
@@ -66,9 +69,9 @@ func TestStoreOpen(t *testing.T) {
 	defer s1.Close()
 
 	s2 := New(Options{
-		DataDir:              filepath.Join(DataDir, "2"),
-		RaftAddr:             bind2,
-		TCPAddr:              bind2,
+		DataDir:              filepath.Join(dataDir, "2"),
+		RaftAddr:             raft2,
+		TCPAddr:              raft2,
 		Logger:               logger,
 		ID:                   2,
 		DefaultNumPartitions: 2,
