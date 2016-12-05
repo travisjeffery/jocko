@@ -82,7 +82,7 @@ func (s *Server) Start() error {
 	go func() {
 		err := server.Serve(s.ln)
 		if err != nil {
-			panic(errors.Wrap(err, "HTTP serve"))
+			s.logger.Info("serve failed: %v", err)
 		}
 	}()
 
