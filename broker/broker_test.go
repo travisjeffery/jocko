@@ -20,6 +20,22 @@ func TestStoreOpen(t *testing.T) {
 	bind1 := "127.0.0.1:4001"
 	bind2 := "127.0.0.1:4002"
 
+	b0 := &cluster.Broker{
+		Host: "127.0.0.1",
+		Port: "4000",
+		ID:   0,
+	}
+	b1 := &cluster.Broker{
+		Host: "127.0.0.1",
+		Port: "4001",
+		ID:   1,
+	}
+	b2 := &cluster.Broker{
+		Host: "127.0.0.1",
+		Port: "4002",
+		ID:   2,
+	}
+
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/brokertest")
 	s0 := New(Options{
 		DataDir:              filepath.Join(DataDir, "0"),
@@ -28,15 +44,7 @@ func TestStoreOpen(t *testing.T) {
 		TCPAddr:              bind0,
 		ID:                   0,
 		DefaultNumPartitions: 2,
-		Brokers: []*cluster.Broker{{
-			Host: "127.0.0.1",
-			Port: "4001",
-			ID:   1,
-		}, {
-			Host: "127.0.0.1",
-			Port: "4002",
-			ID:   2,
-		}},
+		Brokers:              []*cluster.Broker{b1, b2},
 	})
 	assert.NotNil(t, s0)
 
@@ -51,15 +59,7 @@ func TestStoreOpen(t *testing.T) {
 		TCPAddr:              bind1,
 		ID:                   1,
 		DefaultNumPartitions: 2,
-		Brokers: []*cluster.Broker{{
-			Host: "127.0.0.1",
-			Port: "4000",
-			ID:   0,
-		}, {
-			Host: "127.0.0.1",
-			Port: "4002",
-			ID:   2,
-		}},
+		Brokers:              []*cluster.Broker{b0, b2},
 	})
 	err = s1.Open()
 	assert.NoError(t, err)
@@ -72,15 +72,7 @@ func TestStoreOpen(t *testing.T) {
 		Logger:               logger,
 		ID:                   2,
 		DefaultNumPartitions: 2,
-		Brokers: []*cluster.Broker{{
-			Host: "127.0.0.1",
-			Port: "4000",
-			ID:   0,
-		}, {
-			Host: "127.0.0.1",
-			Port: "4001",
-			ID:   1,
-		}},
+		Brokers:              []*cluster.Broker{b0, b1},
 	})
 	err = s2.Open()
 	assert.NoError(t, err)
@@ -92,9 +84,9 @@ func TestStoreOpen(t *testing.T) {
 	tp := cluster.TopicPartition{
 		Topic:           "test",
 		Partition:       0,
-		Leader:          s0.ID,
-		PreferredLeader: s0.ID,
-		Replicas:        []int{s0.ID},
+		Leader:          b0,
+		PreferredLeader: b0,
+		Replicas:        nil,
 	}
 
 	var peer, leader *Broker

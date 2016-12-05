@@ -1,11 +1,16 @@
 package cluster
 
-import "fmt"
+import (
+	"fmt"
+	"net"
+)
 
 type Broker struct {
-	ID   int    `json:"id"`
-	Host string `json:"host"`
-	Port string `json:"port"`
+	ID       int    `json:"id"`
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	RaftAddr string `json:"raft_addr"`
+
 }
 
 func (b *Broker) Addr() string {

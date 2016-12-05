@@ -105,9 +105,10 @@ func (s *Broker) Open() error {
 		return err
 	}
 	s.Brokers = append(s.Brokers, &cluster.Broker{
-		Host: host,
-		Port: port,
-		ID:   s.ID,
+		Host:     host,
+		Port:     port,
+		RaftAddr: s.RaftAddr,
+		ID:       s.ID,
 	})
 
 	conf := raft.DefaultConfig()
@@ -132,7 +133,7 @@ func (s *Broker) Open() error {
 	} else {
 		var peers []string
 		for _, b := range s.Brokers {
-			peers = append(peers, b.Addr())
+			peers = append(peers, b.RaftAddr)
 		}
 		err = s.peerStore.SetPeers(peers)
 		if err != nil {
@@ -238,7 +239,7 @@ func (s *Broker) IsLeaderOfPartition(partition *cluster.TopicPartition) bool {
 	defer s.mu.RUnlock()
 	for _, p := range s.topics[partition.Topic] {
 		if p.Partition == partition.Partition {
-			if partition.Leader == s.ID {
+			if partition.Leader.ID == s.ID {
 				return true
 			}
 			break
@@ -314,9 +315,9 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 		partition := cluster.TopicPartition{
 			Partition:       int32(i),
 			Topic:           topic,
-			Leader:          broker.ID,
-			PreferredLeader: broker.ID,
-			Replicas:        []int{broker.ID},
+			Leader:          broker,
+			PreferredLeader: broker,
+			Replicas:        []*cluster.Broker{broker},
 		}
 		if err := s.AddPartition(partition); err != nil {
 			return err
