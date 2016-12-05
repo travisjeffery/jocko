@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	gracefully "github.com/tj/go-gracefully"
+	"github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
