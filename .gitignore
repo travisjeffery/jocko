@@ -1,2 +1,4 @@
 peers.json
 store.db
+vendor/*
+!vendor/vendor.json
