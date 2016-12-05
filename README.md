@@ -28,7 +28,7 @@ Kafka/distributed commit log service in Go.
     - [x] Create Topics    
     - [x] Delete Topics    
     - [ ] Consumer group
-- [ ] Replication
+- [ ] Replication [current task]
 
 ## License
 
