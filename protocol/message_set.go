@@ -1,9 +1,10 @@
 package protocol
 
 type MessageSet struct {
-	Offset   int64
-	Size     int32
-	Messages []*Message
+	Offset                  int64
+	Size                    int32
+	Messages                []*Message
+	PartialTrailingMessages bool
 }
 
 func (ms *MessageSet) Encode(e PacketEncoder) error {
@@ -28,10 +29,16 @@ func (ms *MessageSet) Decode(d PacketDecoder) error {
 	}
 	for d.remaining() > 0 {
 		m := new(Message)
-		if err = m.Decode(d); err != nil {
+		err = m.Decode(d)
+		switch err {
+		case nil:
+			ms.Messages = append(ms.Messages, m)
+		case ErrInsufficientData:
+			ms.PartialTrailingMessages = true
+			return nil
+		default:
 			return err
 		}
-		ms.Messages = append(ms.Messages, m)
 	}
 	return nil
 }

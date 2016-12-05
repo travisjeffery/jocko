@@ -397,14 +397,17 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 }
 
 func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *protocol.FetchRequest) error {
-	fresp := &protocol.FetchResponses{}
-	fresp.Responses = make([]*protocol.FetchResponse, len(r.Topics))
+	fresp := &protocol.FetchResponses{
+		Responses: make([]*protocol.FetchResponse, len(r.Topics)),
+	}
 	received := time.Now()
+
 	for i, topic := range r.Topics {
-		fr := &protocol.FetchResponse{}
-		fresp.Responses[i] = fr
-		fr.Topic = topic.Topic
-		fr.PartitionResponses = make([]*protocol.FetchPartitionResponse, len(topic.Partitions))
+		fr := &protocol.FetchResponse{
+			Topic:              topic.Topic,
+			PartitionResponses: make([]*protocol.FetchPartitionResponse, len(topic.Partitions)),
+		}
+
 		for j, p := range topic.Partitions {
 			partition, err := s.broker.Partition(topic.Topic, p.Partition)
 			if err != nil {
@@ -444,6 +447,7 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 					break
 				}
 			}
+
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone,
@@ -451,11 +455,15 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 				RecordSet:     b.Bytes(),
 			}
 		}
+
+		fresp.Responses[i] = fr
 	}
+
 	resp := &protocol.Response{
 		CorrelationID: header.CorrelationID,
 		Body:          fresp,
 	}
+
 	return s.write(conn, header, resp)
 }
 
