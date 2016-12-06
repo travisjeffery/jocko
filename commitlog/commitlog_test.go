@@ -89,7 +89,7 @@ func TestNewCommitLogExisting(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	for i, _ := range msgSets {
+	for i := range msgSets {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
 		assert.NoError(t, err)

@@ -38,16 +38,10 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 		return nil, errors.Wrap(err, "open file failed")
 	}
 
-	fi, err := log.Stat()
-	if err != nil {
-		return nil, errors.Wrap(err, "file stat failed")
-	}
-
 	s := &Segment{
 		log:        log,
 		writer:     log,
 		reader:     log,
-		Position:   fi.Size(),
 		maxBytes:   maxBytes,
 		BaseOffset: baseOffset,
 		NextOffset: baseOffset,
