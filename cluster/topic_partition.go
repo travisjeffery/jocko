@@ -19,8 +19,9 @@ type TopicPartition struct {
 	CommitLog *commitlog.CommitLog `json:"-"`
 }
 
+// Strings returns the topic/partition as a string.
 func (p TopicPartition) String() string {
-	return fmt.Sprintf("%s-%d", p.Topic, p.Partition)
+	return fmt.Sprintf("%s/%d", p.Topic, p.Partition)
 }
 
 // OpenCommitLog opens a commit log for the partition at the path.
