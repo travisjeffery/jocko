@@ -100,7 +100,7 @@ func (idx *index) ReadEntry(e *Entry, offset int64) error {
 	rel := &relEntry{}
 	err := binary.Read(b, binary.BigEndian, rel)
 	if err != nil {
-		return errors.Wrap(err, "binar read failed")
+		return errors.Wrap(err, "binary read failed")
 	}
 	idx.mu.RLock()
 	rel.fill(e, idx.baseOffset)
@@ -138,4 +138,8 @@ func (idx *index) Sync() error {
 
 func (idx *index) Close() (err error) {
 	return idx.file.Close()
+}
+
+func (idx *index) Name() string {
+	return idx.file.Name()
 }

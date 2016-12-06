@@ -165,3 +165,18 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	}
 	return e, nil
 }
+
+func (s *Segment) Delete() error {
+	if err := s.Close(); err != nil {
+		return err
+	}
+	s.Lock()
+	defer s.Unlock()
+	if err := os.Remove(s.log.Name()); err != nil {
+		return err
+	}
+	if err := os.Remove(s.Index.Name()); err != nil {
+		return err
+	}
+	return nil
+}

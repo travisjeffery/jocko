@@ -106,6 +106,52 @@ func TestNewCommitLogExisting(t *testing.T) {
 	}
 }
 
+func TestTruncateTo(t *testing.T) {
+	var err error
+	l0 := setup(t)
+	defer cleanup(t)
+
+	for _, msgSet := range msgSets {
+		_, err = l0.Append(msgSet)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, int64(2), l0.NewestOffset())
+	assert.Equal(t, 2, len(l0.Segments()))
+
+	err = l0.TruncateTo(int64(1))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(l0.Segments()))
+
+	maxBytes := msgSets[0].Size()
+	_, err = l0.NewReader(ReaderOptions{
+		Offset:   0,
+		MaxBytes: maxBytes,
+	})
+	assert.Error(t, err)
+
+	r, err := l0.NewReader(ReaderOptions{
+		Offset:   1,
+		MaxBytes: maxBytes,
+	})
+	assert.NoError(t, err)
+
+	for i, _ := range msgSets[1:] {
+		p := make([]byte, maxBytes)
+		_, err = r.Read(p)
+		assert.NoError(t, err)
+
+		ms := MessageSet(p)
+		assert.Equal(t, int64(i+1), ms.Offset())
+
+		payload := ms.Payload()
+		var offset int
+		for _, msg := range msgs {
+			assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+			offset += len(msg)
+		}
+	}
+}
+
 func check(t *testing.T, got, want []byte) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("got = %s, want %s", string(got), string(want))

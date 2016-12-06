@@ -12,6 +12,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	ErrSegmentNotFound = errors.New("segment not found")
+)
+
 type CommitLog struct {
 	Options
 	name           string
@@ -136,6 +140,29 @@ func (l *CommitLog) DeleteAll() error {
 		return err
 	}
 	return os.RemoveAll(l.Path)
+}
+
+func (l *CommitLog) TruncateTo(offset int64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var segments []*Segment
+	for _, segment := range l.segments {
+		if segment.BaseOffset < offset {
+			if err := segment.Delete(); err != nil {
+				return err
+			}
+		} else {
+			segments = append(segments, segment)
+		}
+	}
+	l.segments = segments
+	return nil
+}
+
+func (l *CommitLog) Segments() []*Segment {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.segments
 }
 
 func (l *CommitLog) checkSplit() bool {
