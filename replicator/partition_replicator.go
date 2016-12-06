@@ -31,7 +31,10 @@ type PartitionReplicator struct {
 }
 
 func NewPartitionReplicator(options *Options) (*PartitionReplicator, error) {
-	clientID := fmt.Sprintf("Partition Replicator for Broker/Topic/Partition: [%d/%s/%d]", options.Partition.Leader.ID, options.Partition.Topic, options.Partition.Partition)
+	clientID := fmt.Sprintf("Partition Replicator for Broker/Topic/Partition: [%d/%s/%d]",
+		options.Partition.Leader.ID,
+		options.Partition.Topic,
+		options.Partition.Partition)
 	return &PartitionReplicator{
 		Options:  options,
 		clientID: clientID,
