@@ -297,7 +297,9 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 		if err := json.Unmarshal(b, p); err != nil {
 			panic(errors.Wrap(err, "json unmarshal failed"))
 		}
-		s.deleteTopic(p)
+		if err := s.deleteTopic(p); err != nil {
+			panic(errors.Wrap(err, "topic delete failed"))
+		}
 	}
 	return nil
 }
