@@ -125,8 +125,10 @@ func (s *Broker) Open() error {
 		}
 	}
 
+	if err = os.MkdirAll(s.DataDir, 0755); err != nil {
+		return errors.Wrap(err, "data directory mkdir failed")
+	}
 	s.peerStore = raft.NewJSONPeers(s.DataDir, s.transport)
-	os.MkdirAll(s.DataDir, 0755)
 
 	if len(s.Brokers) == 1 {
 		conf.EnableSingleNode = true
