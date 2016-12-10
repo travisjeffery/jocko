@@ -18,6 +18,7 @@ var (
 
 type CommitLog struct {
 	Options
+	cleaner        Cleaner
 	name           string
 	mu             sync.RWMutex
 	segments       []*Segment
@@ -27,6 +28,7 @@ type CommitLog struct {
 type Options struct {
 	Path            string
 	MaxSegmentBytes int64
+	MaxLogBytes     int64
 }
 
 func New(opts Options) (*CommitLog, error) {
@@ -42,6 +44,7 @@ func New(opts Options) (*CommitLog, error) {
 	l := &CommitLog{
 		Options: opts,
 		name:    filepath.Base(path),
+		cleaner: NewDeleteCleaner(opts.MaxLogBytes),
 	}
 
 	return l, nil
@@ -176,6 +179,11 @@ func (l *CommitLog) split() error {
 	}
 	l.mu.Lock()
 	l.segments = append(l.segments, seg)
+	segments, err := l.cleaner.Clean(l.segments)
+	if err != nil {
+		return err
+	}
+	l.segments = segments
 	l.mu.Unlock()
 	l.vActiveSegment.Store(seg)
 	return nil
