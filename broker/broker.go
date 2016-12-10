@@ -126,7 +126,7 @@ func (s *Broker) Open() error {
 	}
 
 	if err = os.MkdirAll(s.DataDir, 0755); err != nil {
-		return errors.Wrap(err, "create data diretory failed")
+		return errors.Wrap(err, "data directory mkdir failed")
 	}
 	s.peerStore = raft.NewJSONPeers(s.DataDir, s.transport)
 
