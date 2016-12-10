@@ -16,6 +16,7 @@ import (
 
 type Options struct {
 	Partition   *cluster.TopicPartition
+	ReplicaID   int32 // broker id of the follower
 	FetchSize   int32
 	MinBytes    int32
 	MaxWaitTime int32
@@ -55,6 +56,7 @@ func (r *PartitionReplicator) fetchMessages() {
 			return
 		default:
 			fetchBody := &protocol.FetchRequest{
+				ReplicaID:   r.ReplicaID,
 				MaxWaitTime: r.MaxWaitTime,
 				MinBytes:    r.MinBytes,
 				Topics: []*protocol.FetchTopic{{
