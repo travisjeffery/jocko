@@ -13,3 +13,7 @@ func findSegment(segments []*Segment, offset int64) (*Segment, int) {
 
 	return segments[idx], idx
 }
+
+func roundDown(total, factor int64) int64 {
+	return factor * (total / factor)
+}
