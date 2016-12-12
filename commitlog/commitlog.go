@@ -173,18 +173,18 @@ func (l *CommitLog) checkSplit() bool {
 }
 
 func (l *CommitLog) split() error {
-	seg, err := NewSegment(l.Path, l.NewestOffset(), l.MaxSegmentBytes)
+	segment, err := NewSegment(l.Path, l.NewestOffset(), l.MaxSegmentBytes)
 	if err != nil {
 		return err
 	}
 	l.mu.Lock()
-	l.segments = append(l.segments, seg)
-	segments, err := l.cleaner.Clean(l.segments)
+	segments := append(l.segments, segment)
+	segments, err = l.cleaner.Clean(segments)
 	if err != nil {
 		return err
 	}
 	l.segments = segments
 	l.mu.Unlock()
-	l.vActiveSegment.Store(seg)
+	l.vActiveSegment.Store(segment)
 	return nil
 }
