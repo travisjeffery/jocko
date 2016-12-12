@@ -2,7 +2,7 @@
 
 Thank you for contributing to Jocko!
 
-Here's the [ROADMAP](https://github.com/travisjeffery/jocko/issues/1) where you'll find what could be worked on. The current goal is get feature parity with Kafka 0.10.x.
+Here's the [ROADMAP](https://github.com/travisjeffery/jocko/issues/1) where you'll find what could be worked on. The current goal is feature parity with Kafka 0.10.x.
 
 Here's the steps to contribute:
 
