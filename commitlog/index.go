@@ -143,6 +143,12 @@ func (idx *index) Sync() error {
 }
 
 func (idx *index) Close() (err error) {
+	if err = idx.Sync(); err != nil {
+		return
+	}
+	if err = idx.file.Truncate(idx.offset); err != nil {
+		return
+	}
 	return idx.file.Close()
 }
 
