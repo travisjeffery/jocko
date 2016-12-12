@@ -170,7 +170,7 @@ func (idx *index) validate() error {
 	} else {
 		//read last entry
 		entry := new(Entry)
-		if err := idx.ReadEntry(e, idx.offset-entryWidth); err != nil {
+		if err := idx.ReadEntry(entry, idx.offset-entryWidth); err != nil {
 			return err
 		}
 		if entry.Offset < idx.baseOffset {
