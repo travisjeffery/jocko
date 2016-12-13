@@ -23,10 +23,10 @@ const (
 
 type index struct {
 	options
-	mmap   gommap.MMap
-	file   *os.File
-	mu     sync.RWMutex
-	offset int64
+	mmap     gommap.MMap
+	file     *os.File
+	mu       sync.RWMutex
+	position int64
 }
 
 type Entry struct {
@@ -92,9 +92,9 @@ func (idx *index) WriteEntry(entry Entry) (err error) {
 	if err = binary.Write(b, binary.BigEndian, relEntry); err != nil {
 		return errors.Wrap(err, "binary write failed")
 	}
-	idx.WriteAt(b.Bytes(), idx.offset)
+	idx.WriteAt(b.Bytes(), idx.position)
 	idx.mu.Lock()
-	idx.offset += entryWidth
+	idx.position += entryWidth
 	idx.mu.Unlock()
 	return nil
 }
@@ -121,7 +121,7 @@ func (idx *index) ReadAt(p []byte, offset int64) (n int) {
 }
 
 func (idx *index) Write(p []byte) (n int, err error) {
-	return idx.WriteAt(p, idx.offset), nil
+	return idx.WriteAt(p, idx.position), nil
 }
 
 func (idx *index) WriteAt(p []byte, offset int64) (n int) {
