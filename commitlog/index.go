@@ -68,11 +68,17 @@ func newIndex(opts options) (idx *index, err error) {
 	idx = &index{
 		options: opts,
 	}
-	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return nil, errors.Wrap(err, "open file failed")
 	}
-	idx.file.Truncate(opts.bytes)
+	fStat, err := idx.file.Stat()
+	if err != nil {
+		return nil, errors.Wrap(err, "stat file failed")
+	} else if fStat.Size() > 0 {
+		idx.position = fStat.Size()
+	}
+	idx.file.Truncate(roundDown(opts.bytes, entryWidth))
 	idx.mmap, err = gommap.Map(idx.file.Fd(), gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 	if err != nil {
 		return nil, errors.Wrap(err, "mmap file failed")
@@ -137,9 +143,45 @@ func (idx *index) Sync() error {
 }
 
 func (idx *index) Close() (err error) {
+	if err = idx.Sync(); err != nil {
+		return
+	}
+	if err = idx.file.Truncate(idx.position); err != nil {
+		return
+	}
 	return idx.file.Close()
 }
 
 func (idx *index) Name() string {
 	return idx.file.Name()
+}
+
+func (idx *index) TruncateEntries(number int) error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if int64(number*entryWidth) > idx.position {
+		return errors.New("bad truncate number")
+	}
+	idx.position = int64(number * entryWidth)
+	return nil
+}
+
+func (idx *index) SanityCheck() error {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if idx.position == 0 {
+		return nil
+	} else if idx.position%entryWidth != 0 {
+		return errors.New("corrupt index file")
+	} else {
+		//read last entry
+		entry := new(Entry)
+		if err := idx.ReadEntry(entry, idx.position-entryWidth); err != nil {
+			return err
+		}
+		if entry.Offset < idx.baseOffset {
+			return errors.New("corrupt index file")
+		}
+		return nil
+	}
 }
