@@ -63,10 +63,10 @@ func (s *Segment) SetupIndex(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = s.Index.validate(); err == nil {
+	if err = s.Index.SanityCheck(); err == nil {
 		return err
 	}
-	s.Index.truncateEntries(0)
+	s.Index.TruncateEntries(0)
 
 	_, err = s.log.Seek(0, 0)
 	if err != nil {
