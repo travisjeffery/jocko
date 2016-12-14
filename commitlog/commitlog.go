@@ -69,7 +69,7 @@ func (l *CommitLog) Open() error {
 		return errors.Wrap(err, "read dir failed")
 	}
 	for _, file := range files {
-		//if this file is an index file, make sure it has a corresponding .log file
+		// if this file is an index file, make sure it has a corresponding .log file
 		if strings.HasSuffix(file.Name(), IndexFileSuffix) {
 			_, err := os.Stat(filepath.Join(l.Path, strings.Replace(file.Name(), IndexFileSuffix, LogFileSuffix, 1)))
 			if os.IsNotExist(err) {
