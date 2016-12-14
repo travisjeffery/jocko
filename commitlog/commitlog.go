@@ -16,6 +16,11 @@ var (
 	ErrSegmentNotFound = errors.New("segment not found")
 )
 
+const (
+	LogFileSuffix   = ".log"
+	IndexFileSuffix = ".index"
+)
+
 type CommitLog struct {
 	Options
 	cleaner        Cleaner
@@ -64,16 +69,25 @@ func (l *CommitLog) Open() error {
 		return errors.Wrap(err, "read dir failed")
 	}
 	for _, file := range files {
-		if !strings.HasSuffix(file.Name(), ".log") {
-			continue
+		// if this file is an index file, make sure it has a corresponding .log file
+		if strings.HasSuffix(file.Name(), IndexFileSuffix) {
+			_, err := os.Stat(filepath.Join(l.Path, strings.Replace(file.Name(), IndexFileSuffix, LogFileSuffix, 1)))
+			if os.IsNotExist(err) {
+				if err := os.Remove(file.Name()); err != nil {
+					return err
+				}
+			} else if err != nil {
+				return errors.Wrap(err, "stat file failed")
+			}
+		} else if strings.HasSuffix(file.Name(), LogFileSuffix) {
+			offsetStr := strings.TrimSuffix(file.Name(), LogFileSuffix)
+			baseOffset, err := strconv.Atoi(offsetStr)
+			segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes)
+			if err != nil {
+				return err
+			}
+			l.segments = append(l.segments, segment)
 		}
-		offsetStr := strings.TrimSuffix(file.Name(), ".log")
-		baseOffset, err := strconv.Atoi(offsetStr)
-		segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes)
-		if err != nil {
-			return err
-		}
-		l.segments = append(l.segments, segment)
 	}
 	if len(l.segments) == 0 {
 		segment, err := NewSegment(l.Path, 0, l.MaxSegmentBytes)

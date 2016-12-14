@@ -63,6 +63,12 @@ func (s *Segment) SetupIndex(path string) (err error) {
 	if err != nil {
 		return err
 	}
+	if err = s.Index.SanityCheck(); err == nil {
+		return err
+	}
+	if err := s.Index.TruncateEntries(0); err != nil {
+		return err
+	}
 
 	_, err = s.log.Seek(0, 0)
 	if err != nil {
