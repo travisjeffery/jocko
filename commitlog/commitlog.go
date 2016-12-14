@@ -73,7 +73,9 @@ func (l *CommitLog) Open() error {
 		if strings.HasSuffix(file.Name(), IndexFileSuffix) {
 			_, err := os.Stat(filepath.Join(l.Path, strings.Replace(file.Name(), IndexFileSuffix, LogFileSuffix, 1)))
 			if os.IsNotExist(err) {
-				os.Remove(file.Name())
+				if err := os.Remove(file.Name()); err != nil {
+					return err
+				}
 			} else if err != nil {
 				return errors.Wrap(err, "stat file failed")
 			}

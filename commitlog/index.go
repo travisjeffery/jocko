@@ -72,13 +72,16 @@ func newIndex(opts options) (idx *index, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "open file failed")
 	}
-	fStat, err := idx.file.Stat()
+	fi, err := idx.file.Stat()
 	if err != nil {
 		return nil, errors.Wrap(err, "stat file failed")
-	} else if fStat.Size() > 0 {
-		idx.position = fStat.Size()
+	} else if fi.Size() > 0 {
+		idx.position = fi.Size()
 	}
-	idx.file.Truncate(roundDown(opts.bytes, entryWidth))
+	if err := idx.file.Truncate(roundDown(opts.bytes, entryWidth)); err != nil {
+		return nil, err
+	}
+
 	idx.mmap, err = gommap.Map(idx.file.Fd(), gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 	if err != nil {
 		return nil, errors.Wrap(err, "mmap file failed")
