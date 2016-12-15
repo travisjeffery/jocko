@@ -11,6 +11,10 @@ import (
 	"launchpad.net/gommap"
 )
 
+var (
+	ErrIndexCorrupt = errors.New("corrupt index file")
+)
+
 const (
 	offsetWidth  = 4
 	offsetOffset = 0
@@ -175,7 +179,7 @@ func (idx *index) SanityCheck() error {
 	if idx.position == 0 {
 		return nil
 	} else if idx.position%entryWidth != 0 {
-		return errors.New("corrupt index file")
+		return ErrIndexCorrupt
 	} else {
 		//read last entry
 		entry := new(Entry)
@@ -183,7 +187,7 @@ func (idx *index) SanityCheck() error {
 			return err
 		}
 		if entry.Offset < idx.baseOffset {
-			return errors.New("corrupt index file")
+			return ErrIndexCorrupt
 		}
 		return nil
 	}
