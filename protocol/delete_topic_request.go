@@ -23,7 +23,7 @@ func (c *DeleteTopicsRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (c *DeleteTopicsRequest) Key() int16 {
-	return 20
+	return DeleteTopicsKey
 }
 
 func (c *DeleteTopicsRequest) Version() int16 {

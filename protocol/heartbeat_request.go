@@ -31,7 +31,7 @@ func (r *HeartbeatRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *HeartbeatRequest) Key() int16 {
-	return 12
+	return HeartbeatKey
 }
 
 func (r *HeartbeatRequest) Version() int16 {

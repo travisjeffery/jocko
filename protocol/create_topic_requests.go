@@ -105,7 +105,7 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 }
 
 func (c *CreateTopicRequests) Key() int16 {
-	return 19
+	return CreateTopicsKey
 }
 
 func (c *CreateTopicRequests) Version() int16 {

@@ -59,7 +59,7 @@ func (r *SyncGroupRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *SyncGroupRequest) Key() int16 {
-	return 14
+	return SyncGroupKey
 }
 
 func (r *SyncGroupRequest) Version() int16 {

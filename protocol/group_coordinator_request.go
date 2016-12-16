@@ -18,5 +18,5 @@ func (r *GroupCoordinatorRequest) Version() int16 {
 }
 
 func (r *GroupCoordinatorRequest) Key() int16 {
-	return 10
+	return GroupCoordinatorKey
 }

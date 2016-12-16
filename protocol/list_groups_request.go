@@ -12,7 +12,7 @@ func (r *ListGroupsRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *ListGroupsRequest) Key() int16 {
-	return 16
+	return ListGroupsKey
 }
 
 func (r *ListGroupsRequest) Version() int16 {

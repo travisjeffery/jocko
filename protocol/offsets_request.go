@@ -80,3 +80,11 @@ func (r *OffsetsRequest) Decode(d PacketDecoder) error {
 	r.MaxNumOffsets, err = d.Int32()
 	return err
 }
+
+func (r *OffsetsRequest) Key() int16 {
+	return OffsetsKey
+}
+
+func (r *OffsetsRequest) Version() int16 {
+	return 0
+}
