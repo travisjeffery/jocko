@@ -99,7 +99,7 @@ func (r *FetchRequest) Decode(d PacketDecoder) error {
 }
 
 func (r *FetchRequest) Key() int16 {
-	return 1
+	return FetchKey
 }
 
 func (r *FetchRequest) Version() int16 {

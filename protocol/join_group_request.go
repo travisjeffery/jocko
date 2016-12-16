@@ -68,7 +68,7 @@ func (r *JoinGroupRequest) Decode(d PacketDecoder) error {
 }
 
 func (r *JoinGroupRequest) Key() int16 {
-	return 11
+	return JoinGroupKey
 }
 
 func (r *JoinGroupRequest) Version() int16 {

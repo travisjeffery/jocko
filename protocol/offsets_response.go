@@ -81,11 +81,3 @@ func (r *OffsetsResponse) Decode(d PacketDecoder) error {
 	}
 	return nil
 }
-
-func (r *OffsetsResponse) Version() int16 {
-	return 0
-}
-
-func (r *OffsetResponse) Key() int16 {
-	return 2
-}

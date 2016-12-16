@@ -20,10 +20,10 @@ func (r *LeaveGroupRequest) Decode(d PacketDecoder) (err error) {
 	return err
 }
 
-func (r *LeaveGroupRequest) key() int16 {
-	return 13
+func (r *LeaveGroupRequest) Key() int16 {
+	return LeaveGroupKey
 }
 
-func (r *LeaveGroupRequest) version() int16 {
+func (r *LeaveGroupRequest) Version() int16 {
 	return 0
 }

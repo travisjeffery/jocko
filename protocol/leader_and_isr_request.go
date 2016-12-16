@@ -100,7 +100,7 @@ func (r *LeaderAndISRRequest) Decode(d PacketDecoder) error {
 }
 
 func (r *LeaderAndISRRequest) Key() int16 {
-	return 4
+	return LeaderAndISRKey
 }
 
 func (r *LeaderAndISRRequest) Version() int16 {

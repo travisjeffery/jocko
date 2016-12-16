@@ -138,37 +138,37 @@ func (s *Server) handleRequest(conn net.Conn) {
 		s.logger.Debug("correlation id [%d], request size [%d], key [%d]", header.CorrelationID, size, header.APIKey)
 
 		switch header.APIKey {
-		case 0:
+		case protocol.ProduceKey:
 			req := &protocol.ProduceRequest{}
 			s.decode(header, req, d)
 			if err = s.handleProduce(conn, header, req); err != nil {
 				s.logger.Info("Produce failed: %s", err)
 			}
-		case 1:
+		case protocol.FetchKey:
 			req := &protocol.FetchRequest{}
 			s.decode(header, req, d)
 			if err = s.handleFetch(conn, header, req); err != nil {
 				s.logger.Info("Fetch failed: %s", err)
 			}
-		case 2:
+		case protocol.OffsetsKey:
 			req := &protocol.OffsetsRequest{}
 			s.decode(header, req, d)
 			if err = s.handleOffsets(conn, header, req); err != nil {
 				s.logger.Info("Offsets failed: %s", err)
 			}
-		case 3:
+		case protocol.MetadataKey:
 			req := &protocol.MetadataRequest{}
 			s.decode(header, req, d)
 			if err = s.handleMetadata(conn, header, req); err != nil {
 				s.logger.Info("Metadata request failed: %s", err)
 			}
-		case 19:
+		case protocol.CreateTopicsKey:
 			req := &protocol.CreateTopicRequests{}
 			s.decode(header, req, d)
 			if err = s.handleCreateTopic(conn, header, req); err != nil {
 				s.logger.Info("Create topic failed: %s", err)
 			}
-		case 20:
+		case protocol.DeleteTopicsKey:
 			req := &protocol.DeleteTopicsRequest{}
 			s.decode(header, req, d)
 			if err = s.handleDeleteTopics(conn, header, req); err != nil {
