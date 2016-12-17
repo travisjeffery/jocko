@@ -1,49 +1,50 @@
 package protocol
 
-type StopReplicaPartitionAndErrorCode struct {
-	StopReplicaPartition
+type StopReplicaResponsePartition struct {
+	Topic     string
+	Partition int32
 	ErrorCode int16
 }
 
 type StopReplicaResponse struct {
 	ErrorCode  int16
-	Partitions []*StopReplicaPartitionAndErrorCode
+	Partitions []*StopReplicaResponsePartition
 }
 
 func (r *StopReplicaResponse) Encode(e PacketEncoder) (err error) {
 	e.PutInt16(r.ErrorCode)
 	if err = e.PutArrayLength(len(r.Partitions)); err != nil {
-		return
+		return err
 	}
 	for _, partition := range r.Partitions {
 		if err = e.PutString(partition.Topic); err != nil {
-			return
+			return err
 		}
 		e.PutInt32(partition.Partition)
 		e.PutInt16(partition.ErrorCode)
 	}
-	return
+	return nil
 }
 
 func (r *StopReplicaResponse) Decode(d PacketDecoder) (err error) {
 	if r.ErrorCode, err = d.Int16(); err != nil {
-		return
+		return err
 	}
-	length, err := d.ArrayLength()
+	partitionCount, err := d.ArrayLength()
 	if err != nil {
-		return
+		return err
 	}
-	r.Partitions = make([]*StopReplicaPartitionAndErrorCode, length)
-	for index := range r.Partitions {
-		if r.Partitions[index].Topic, err = d.String(); err != nil {
-			return
+	r.Partitions = make([]*StopReplicaResponsePartition, partitionCount)
+	for i := range r.Partitions {
+		if r.Partitions[i].Topic, err = d.String(); err != nil {
+			return err
 		}
-		if r.Partitions[index].Partition, err = d.Int32(); err != nil {
-			return
+		if r.Partitions[i].Partition, err = d.Int32(); err != nil {
+			return err
 		}
-		if r.Partitions[index].ErrorCode, err = d.Int16(); err != nil {
-			return
+		if r.Partitions[i].ErrorCode, err = d.Int16(); err != nil {
+			return err
 		}
 	}
-	return
+	return err
 }

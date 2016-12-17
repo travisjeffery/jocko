@@ -21,38 +21,39 @@ func (r *StopReplicaRequest) Encode(e PacketEncoder) (err error) {
 		e.PutInt8(0)
 	}
 	if err = e.PutArrayLength(len(r.Partitions)); err != nil {
-		return
+		return err
 	}
 	for _, partition := range r.Partitions {
 		if err = e.PutString(partition.Topic); err != nil {
-			return
+			return err
 		}
 		e.PutInt32(partition.Partition)
 	}
-	return
+	return nil
 }
 
 func (r *StopReplicaRequest) Decode(d PacketDecoder) (err error) {
 	if r.ControllerID, err = d.Int32(); err != nil {
-		return
+		return err
 	}
 	if r.ControllerEpoch, err = d.Int32(); err != nil {
-		return
+		return err
+	}
 	if r.DeletePartitions, err = d.Bool(); err != nil {
 		return err
 	}
-	length, err := d.ArrayLength()
+	partitionCount, err := d.ArrayLength()
 	if err != nil {
 		return
 	}
-	r.Partitions = make([]*StopReplicaPartition, length)
+	r.Partitions = make([]*StopReplicaPartition, partitionCount)
 	for index := range r.Partitions {
 		r.Partitions[index] = new(StopReplicaPartition)
 		if r.Partitions[index].Topic, err = d.String(); err != nil {
-			return
+			return err
 		}
 		if r.Partitions[index].Partition, err = d.Int32(); err != nil {
-			return
+			return err
 		}
 	}
 	return nil
