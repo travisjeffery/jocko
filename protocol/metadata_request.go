@@ -15,7 +15,7 @@ func (r *MetadataRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *MetadataRequest) Key() int16 {
-	return 3
+	return MetadataKey
 }
 
 func (r *MetadataRequest) Version() int16 {

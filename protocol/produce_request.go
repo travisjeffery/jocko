@@ -79,7 +79,7 @@ func (r *ProduceRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *ProduceRequest) Key() int16 {
-	return 0
+	return ProduceKey
 }
 
 func (r *ProduceRequest) Version() int16 {

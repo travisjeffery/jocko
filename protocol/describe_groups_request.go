@@ -14,7 +14,7 @@ func (r *DescribeGroupsRequest) Decode(d PacketDecoder) (err error) {
 }
 
 func (r *DescribeGroupsRequest) Key() int16 {
-	return 15
+	return DescribeGroupsKey
 }
 
 func (r *DescribeGroupsRequest) Version() int16 {
