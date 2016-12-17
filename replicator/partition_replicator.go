@@ -22,6 +22,13 @@ type Options struct {
 	MaxWaitTime int32
 }
 
+func (o *Options) clientID() string {
+	return fmt.Sprintf("Partition Replicator for Broker/Topic/Partition: [%d/%s/%d]",
+		o.Partition.Leader.ID,
+		o.Partition.Topic,
+		o.Partition.Partition)
+}
+
 type PartitionReplicator struct {
 	*Options
 	highwaterMarkOffset int64
@@ -32,21 +39,23 @@ type PartitionReplicator struct {
 }
 
 func NewPartitionReplicator(options *Options) (*PartitionReplicator, error) {
-	clientID := fmt.Sprintf("Partition Replicator for Broker/Topic/Partition: [%d/%s/%d]",
-		options.Partition.Leader.ID,
-		options.Partition.Topic,
-		options.Partition.Partition)
 	return &PartitionReplicator{
 		Options:  options,
-		clientID: clientID,
+		clientID: options.clientID(),
 		done:     make(chan struct{}, 2),
 		msgs:     make(chan []byte, 2),
 	}, nil
 }
 
-func (r *PartitionReplicator) Replicate() {
+func (r *PartitionReplicator) Replicate() error {
+	hw := r.Partition.CommitLog.NewestOffset()
+	err := r.Partition.CommitLog.TruncateTo(hw)
+	if err != nil {
+		return err
+	}
 	go r.fetchMessages()
 	go r.writeMessages()
+	return nil
 }
 
 func (r *PartitionReplicator) fetchMessages() {
