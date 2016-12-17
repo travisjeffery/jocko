@@ -11,6 +11,7 @@ var ErrInvalidArrayLength = errors.New("kafka: invalid array length")
 var ErrInvalidByteSliceLength = errors.New("invalid byteslice length")
 
 type PacketDecoder interface {
+	Bool() (bool, error)
 	Int8() (int8, error)
 	Int16() (int16, error)
 	Int32() (int32, error)
@@ -55,6 +56,14 @@ func NewDecoder(b []byte) *ByteDecoder {
 	return &ByteDecoder{
 		b: b,
 	}
+}
+
+func (d *ByteDecoder) Bool() (bool, error) {
+	i, err := d.Int8()
+	if err != nil {
+		return false, err
+	}
+	return i == 1, nil
 }
 
 func (d *ByteDecoder) Int8() (int8, error) {

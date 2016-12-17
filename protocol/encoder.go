@@ -3,6 +3,7 @@ package protocol
 import "math"
 
 type PacketEncoder interface {
+	PutBool(in bool)
 	PutInt8(in int8)
 	PutInt16(in int16)
 	PutInt32(in int32)
@@ -48,6 +49,10 @@ func Encode(e Encoder) ([]byte, error) {
 type LenEncoder struct {
 	Length int
 	stack  []int
+}
+
+func (e *LenEncoder) PutBool(in bool) {
+	e.Length++
 }
 
 func (e *LenEncoder) PutInt8(in int8) {
@@ -156,6 +161,13 @@ func (b *ByteEncoder) Bytes() []byte {
 
 func NewByteEncoder(b []byte) *ByteEncoder {
 	return &ByteEncoder{b: b}
+}
+
+func (e *ByteEncoder) PutBool(in bool) {
+	if in {
+		e.b[e.off] = byte(int8(1))
+	}
+	e.off++
 }
 
 func (e *ByteEncoder) PutInt8(in int8) {

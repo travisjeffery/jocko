@@ -38,14 +38,8 @@ func (r *StopReplicaRequest) Decode(d PacketDecoder) (err error) {
 	}
 	if r.ControllerEpoch, err = d.Int32(); err != nil {
 		return
-	}
-	dp, err := d.Int8()
-	if err != nil {
-		return
-	} else if dp == 1 {
-		r.DeletePartitions = true
-	} else {
-		r.DeletePartitions = false
+	if r.DeletePartitions, err = d.Bool(); err != nil {
+		return err
 	}
 	length, err := d.ArrayLength()
 	if err != nil {
