@@ -8,7 +8,7 @@ type PartitionState struct {
 	LeaderEpoch     int32
 	ISR             int32
 	ZKVersion       int32
-	Replicas        int32
+	Replicas        []int32
 }
 
 type LiveLeader struct {
@@ -38,7 +38,7 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 		e.PutInt32(p.LeaderEpoch)
 		e.PutInt32(p.ISR)
 		e.PutInt32(p.ZKVersion) // TODO: hardcode this?
-		e.PutInt32(p.Replicas)
+		e.PutInt32Array(p.Replicas)
 	}
 	return nil
 }
@@ -76,7 +76,7 @@ func (r *LeaderAndISRRequest) Decode(d PacketDecoder) error {
 		if ps.ZKVersion, err = d.Int32(); err != nil {
 			return err
 		}
-		if ps.Replicas, err = d.Int32(); err != nil {
+		if ps.Replicas, err = d.Int32Array(); err != nil {
 			return err
 		}
 		r.PartitionStates[i] = ps
