@@ -75,22 +75,15 @@ type Broker struct {
 	store     *raftboltdb.BoltStore
 }
 
-func New(id int32,
-	dataDir string,
-	logDir string,
-	raftAddr string,
-	tcpAddr string,
-	brokers []*jocko.BrokerConn, logger *simplelog.Logger) *Broker {
-	return &Broker{
-		id:       id,
-		dataDir:  dataDir,
-		logDir:   logDir,
-		raftAddr: raftAddr,
-		tcpAddr:  tcpAddr,
-		topics:   make(map[string][]*jocko.Partition),
-		brokers:  brokers,
-		logger:   logger,
+func New(id int32, opts ...Option) *Broker {
+	b := &Broker{
+		id:     id,
+		topics: make(map[string][]*jocko.Partition),
 	}
+	for _, o := range opts {
+		o.modifyBroker(b)
+	}
+	return b
 }
 
 func (b *Broker) ID() int32 {

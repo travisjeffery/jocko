@@ -42,12 +42,13 @@ func TestStoreOpen(t *testing.T) {
 	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko/broker_test")
 	s0 := New(
 		0,
-		filepath.Join(dataDir, "0"),
-		filepath.Join(dataDir, "0"),
-		raft0,
-		"127.0.0.1:3001",
-		[]*jocko.BrokerConn{b1, b2},
-		logger)
+		OptionDataDir(filepath.Join(dataDir, "0")),
+		OptionLogDir(filepath.Join(dataDir, "0")),
+		OptionRaftAddr(raft0),
+		OptionTCPAddr("127.0.0.1:3001"),
+		OptionBrokers([]*jocko.BrokerConn{b1, b2}),
+		OptionLogger(logger),
+	)
 	assert.NotNil(t, s0)
 
 	err := s0.Open()
@@ -56,12 +57,12 @@ func TestStoreOpen(t *testing.T) {
 
 	s1 := New(
 		1,
-		filepath.Join(dataDir, "1"),
-		filepath.Join(dataDir, "1"),
-		raft1,
-		raft1,
-		[]*jocko.BrokerConn{b0, b2},
-		logger,
+		OptionDataDir(filepath.Join(dataDir, "1")),
+		OptionLogDir(filepath.Join(dataDir, "1")),
+		OptionRaftAddr(raft1),
+		OptionTCPAddr(raft1),
+		OptionBrokers([]*jocko.BrokerConn{b0, b2}),
+		OptionLogger(logger),
 	)
 	err = s1.Open()
 	assert.NoError(t, err)
@@ -69,12 +70,12 @@ func TestStoreOpen(t *testing.T) {
 
 	s2 := New(
 		2,
-		filepath.Join(dataDir, "2"),
-		filepath.Join(dataDir, "2"),
-		raft2,
-		raft2,
-		[]*jocko.BrokerConn{b0, b1},
-		logger,
+		OptionDataDir(filepath.Join(dataDir, "2")),
+		OptionLogDir(filepath.Join(dataDir, "2")),
+		OptionRaftAddr(raft2),
+		OptionTCPAddr(raft2),
+		OptionBrokers([]*jocko.BrokerConn{b0, b1}),
+		OptionLogger(logger),
 	)
 	err = s2.Open()
 	assert.NoError(t, err)
