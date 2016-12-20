@@ -2,35 +2,28 @@
 // from the partition's leader and produces to a follower thereby
 // replicating the partition.
 
-package replicator
+package broker
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"math/rand"
 
-	"github.com/travisjeffery/jocko/cluster"
+	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type Options struct {
-	Partition   *cluster.TopicPartition
+type ReplicatorOptions struct {
+	Partition   *jocko.Partition
+	ClientID    string
 	ReplicaID   int32 // broker id of the follower
 	FetchSize   int32
 	MinBytes    int32
 	MaxWaitTime int32
 }
 
-func (o *Options) clientID() string {
-	return fmt.Sprintf("Partition Replicator for Broker/Topic/Partition: [%d/%s/%d]",
-		o.Partition.Leader.ID,
-		o.Partition.Topic,
-		o.Partition.Partition)
-}
-
 type PartitionReplicator struct {
-	*Options
+	*ReplicatorOptions
 	highwaterMarkOffset int64
 	clientID            string
 	offset              int64
@@ -38,18 +31,17 @@ type PartitionReplicator struct {
 	done                chan struct{}
 }
 
-func NewPartitionReplicator(options *Options) (*PartitionReplicator, error) {
+func NewPartitionReplicator(options *ReplicatorOptions) (*PartitionReplicator, error) {
 	return &PartitionReplicator{
-		Options:  options,
-		clientID: options.clientID(),
-		done:     make(chan struct{}, 2),
-		msgs:     make(chan []byte, 2),
+		ReplicatorOptions: options,
+		done:              make(chan struct{}, 2),
+		msgs:              make(chan []byte, 2),
 	}, nil
 }
 
 func (r *PartitionReplicator) Replicate() error {
-	hw := r.Partition.CommitLog.NewestOffset()
-	err := r.Partition.CommitLog.TruncateTo(hw)
+	hw := r.Partition.HighWatermark()
+	err := r.Partition.TruncateTo(hw)
 	if err != nil {
 		return err
 	}
@@ -71,7 +63,7 @@ func (r *PartitionReplicator) fetchMessages() {
 				Topics: []*protocol.FetchTopic{{
 					Topic: r.Partition.Topic,
 					Partitions: []*protocol.FetchPartition{{
-						Partition:   r.Partition.Partition,
+						Partition:   r.Partition.ID,
 						FetchOffset: r.offset,
 					}},
 				}},
@@ -85,13 +77,13 @@ func (r *PartitionReplicator) fetchMessages() {
 			if err != nil {
 				panic(err)
 			}
-			_, err = r.Partition.Leader.Write(b)
+			_, err = r.Partition.Write(b)
 			if err != nil {
 				panic(err)
 			}
 			var header protocol.Response
 			br := bytes.NewBuffer(make([]byte, 0, 8))
-			if _, err = io.CopyN(br, r.Partition.Leader, 8); err != nil {
+			if _, err = io.CopyN(br, r.Partition, 8); err != nil {
 				panic(err)
 			}
 			if err = protocol.Decode(br.Bytes(), &header); err != nil {
@@ -99,7 +91,7 @@ func (r *PartitionReplicator) fetchMessages() {
 			}
 			c := make([]byte, 0, header.Size-4)
 			cr := bytes.NewBuffer(c)
-			_, err = io.CopyN(cr, r.Partition.Leader, int64(header.Size-4))
+			_, err = io.CopyN(cr, r.Partition, int64(header.Size-4))
 			if err != nil {
 				panic(err)
 			}
@@ -128,7 +120,7 @@ func (r *PartitionReplicator) writeMessages() {
 		case <-r.done:
 			return
 		case msg := <-r.msgs:
-			_, err := r.Partition.CommitLog.Append(msg)
+			_, err := r.Partition.Append(msg)
 			if err != nil {
 				panic(err)
 			}

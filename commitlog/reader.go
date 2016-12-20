@@ -6,7 +6,6 @@ import (
 )
 
 type Reader struct {
-	ReaderOptions
 	commitlog *CommitLog
 	idx       int
 	mu        sync.Mutex
@@ -43,24 +42,17 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-type ReaderOptions struct {
-	Offset   int64
-	MaxBytes int32
-	P        []byte
-}
-
-func (l *CommitLog) NewReader(options ReaderOptions) (r *Reader, err error) {
-	segment, idx := findSegment(l.Segments(), options.Offset)
+func (l *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
+	segment, idx := findSegment(l.Segments(), offset)
 	if segment == nil {
 		return nil, ErrSegmentNotFound
 	}
-	entry, _ := segment.findEntry(options.Offset)
+	entry, _ := segment.findEntry(offset)
 	position := entry.Position
 
 	return &Reader{
-		ReaderOptions: options,
-		commitlog:     l,
-		idx:           idx,
-		position:      position,
+		commitlog: l,
+		idx:       idx,
+		position:  position,
 	}, nil
 }

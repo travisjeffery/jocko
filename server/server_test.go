@@ -32,14 +32,14 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(data, 0755))
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
-	store := broker.New(broker.Options{
-		DataDir:  data,
-		RaftAddr: "localhost:6000",
-		TCPAddr:  "localhost:8000",
-		Logger:   logger,
-		LogDir:   logs,
-		ID:       0,
-	})
+	store := broker.New(
+		0,
+		data,
+		logs,
+		"localhost:6000",
+		"localhost:8000",
+		nil,
+		logger)
 	assert.NoError(t, store.Open())
 	defer store.Close()
 

@@ -1,6 +1,6 @@
 package protocol
 
-type ProducePartitionresponse struct {
+type ProducePartitionResponse struct {
 	Partition  int32
 	ErrorCode  int16
 	BaseOffset int64
@@ -9,7 +9,7 @@ type ProducePartitionresponse struct {
 
 type ProduceResponse struct {
 	Topic              string
-	PartitionResponses []*ProducePartitionresponse
+	PartitionResponses []*ProducePartitionResponse
 }
 
 type ProduceResponses struct {
@@ -52,9 +52,9 @@ func (r *ProduceResponses) Decode(d PacketDecoder) error {
 			return err
 		}
 
-		ps := make([]*ProducePartitionresponse, pl)
+		ps := make([]*ProducePartitionResponse, pl)
 		for j := range ps {
-			p := new(ProducePartitionresponse)
+			p := new(ProducePartitionResponse)
 			ps[j] = p
 			p.Partition, err = d.Int32()
 			if err != nil {

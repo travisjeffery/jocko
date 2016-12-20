@@ -36,13 +36,10 @@ func TestNewCommitLog(t *testing.T) {
 		assert.NoError(t, err)
 	}
 	maxBytes := msgSets[0].Size()
-	r, err := l.NewReader(ReaderOptions{
-		Offset:   0,
-		MaxBytes: maxBytes,
-	})
+	r, err := l.NewReader(0, maxBytes)
 	assert.NoError(t, err)
 
-	for i, _ := range msgSets {
+	for i := range msgSets {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
 		assert.NoError(t, err)
@@ -83,10 +80,7 @@ func TestNewCommitLogExisting(t *testing.T) {
 	assert.Equal(t, int64(3), l1.NewestOffset())
 
 	maxBytes := msgSets[0].Size()
-	r, err := l1.NewReader(ReaderOptions{
-		Offset:   0,
-		MaxBytes: maxBytes,
-	})
+	r, err := l1.NewReader(0, maxBytes)
 	assert.NoError(t, err)
 
 	for i := range msgSets {
@@ -123,19 +117,13 @@ func TestTruncateTo(t *testing.T) {
 	assert.Equal(t, 1, len(l.Segments()))
 
 	maxBytes := msgSets[0].Size()
-	_, err = l.NewReader(ReaderOptions{
-		Offset:   0,
-		MaxBytes: maxBytes,
-	})
+	_, err = l.NewReader(0, maxBytes)
 	assert.Error(t, err)
 
-	r, err := l.NewReader(ReaderOptions{
-		Offset:   1,
-		MaxBytes: maxBytes,
-	})
+	r, err := l.NewReader(1, maxBytes)
 	assert.NoError(t, err)
 
-	for i, _ := range msgSets[1:] {
+	for i := range msgSets[1:] {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
 		assert.NoError(t, err)

@@ -17,7 +17,7 @@ var (
 	tcpAddr   = kingpin.Flag("tcpaddr", "HTTP Address to listen on").String()
 	raftDir   = kingpin.Flag("raftdir", "Directory for raft to store data").String()
 	raftAddr  = kingpin.Flag("raftaddr", "Address for Raft to bind on").String()
-	brokerID  = kingpin.Flag("id", "Broker ID").Int()
+	brokerID  = kingpin.Flag("id", "Broker ID").Int32()
 	debugLogs = kingpin.Flag("debug", "Enable debug logs").Default("false").Bool()
 )
 
@@ -30,14 +30,13 @@ func main() {
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
-	store := broker.New(broker.Options{
-		DataDir:  *raftDir,
-		RaftAddr: *raftAddr,
-		TCPAddr:  *tcpAddr,
-		LogDir:   *logDir,
-		ID:       *brokerID,
-		Logger:   logger,
-	})
+	store := broker.New(*brokerID,
+		*raftDir,
+		*logDir,
+		*raftAddr,
+		*tcpAddr,
+		nil,
+		logger)
 	if err := store.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)

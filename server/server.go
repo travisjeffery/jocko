@@ -14,28 +14,20 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/cluster"
-	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
 )
-
-type Broker struct {
-	ID   string `json:"id"`
-	Host string `json:"host"`
-	Port string `json:"port"`
-}
 
 type Server struct {
 	addr   string
 	ln     *net.TCPListener
 	mu     sync.Mutex
 	logger *simplelog.Logger
-	broker *broker.Broker
+	broker jocko.Broker
 }
 
-func New(addr string, broker *broker.Broker, logger *simplelog.Logger) *Server {
+func New(addr string, broker jocko.Broker, logger *simplelog.Logger) *Server {
 	return &Server{
 		addr:   addr,
 		broker: broker,
@@ -174,6 +166,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 			if err = s.handleDeleteTopics(conn, header, req); err != nil {
 				s.logger.Info("Delete topic failed: %s", err)
 			}
+		case protocol.LeaderAndISRKey:
+			req := &protocol.LeaderAndISRRequest{}
+			s.decode(header, req, d)
+			if err = s.handleLeaderAndISR(conn, header, req); err != nil {
+				s.logger.Info("Handle leader and ISR failed: %s", err)
+			}
 		}
 	}
 }
@@ -249,6 +247,50 @@ func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeade
 	return s.write(conn, header, r)
 }
 
+func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) (err error) {
+	body := &protocol.LeaderAndISRResponse{}
+	for _, p := range req.PartitionStates {
+		partition, err := s.broker.Partition(p.Topic, p.Partition)
+		broker := s.broker.Broker(p.Leader)
+		if broker == nil {
+			// TODO: error cause we don't know who this broker is
+		}
+		if err != nil {
+			return err
+		}
+		if partition == nil {
+			// add it
+		}
+		// TODO: change broker.ID into a int32
+		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
+			// is command asking this broker to be the new leader for p and this broker is not already the leader for
+			if err := s.broker.BecomeLeader(partition.ID); err != nil {
+				return err
+			}
+		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {
+			// is command asking this broker to follow leader who it isn't a leader of already
+			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p.Leader); err != nil {
+				return err
+			}
+		}
+	}
+
+	r := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          body,
+	}
+	return s.write(conn, header, r)
+}
+
+func contains(rs []int32, r int32) bool {
+	for _, ri := range rs {
+		if ri == r {
+			return true
+		}
+	}
+	return false
+}
+
 func zero(p []byte) {
 	for i := range p {
 		p[i] = 0
@@ -256,7 +298,7 @@ func zero(p []byte) {
 }
 
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
-	b := new(cluster.Broker)
+	b := new(jocko.BrokerConn)
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -271,28 +313,28 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, req *protocol.MetadataRequest) error {
-	brokers := make([]*protocol.Broker, len(s.broker.Brokers))
+	brokers := make([]*protocol.Broker, len(s.broker.Cluster()))
 	topics := make([]*protocol.TopicMetadata, len(req.Topics))
-	for i, b := range s.broker.Brokers {
+	for i, b := range s.broker.Cluster() {
 		port, err := strconv.Atoi(b.Port)
 		if err != nil {
 			return err
 		}
 		brokers[i] = &protocol.Broker{
-			NodeID: int32(b.ID),
+			NodeID: b.ID,
 			Host:   b.Host,
 			Port:   int32(port),
 		}
 	}
 	for i, t := range req.Topics {
-		partitions, err := s.broker.PartitionsForTopic(t)
+		partitions, err := s.broker.TopicPartitions(t)
 		if err != nil {
 			return err
 		}
 		partitionMetadata := make([]*protocol.PartitionMetadata, len(partitions))
 		for i, p := range partitions {
 			partitionMetadata[i] = &protocol.PartitionMetadata{
-				ParititionID: p.Partition,
+				ParititionID: p.ID,
 			}
 		}
 		topics[i] = &protocol.TopicMetadata{
@@ -340,9 +382,9 @@ func (s *Server) handleOffsets(conn net.Conn, header *protocol.RequestHeader, re
 				continue
 			}
 			if p.Timestamp == -2 {
-				offset = partition.CommitLog.OldestOffset()
+				offset = partition.LowWatermark()
 			} else {
-				offset = partition.CommitLog.NewestOffset()
+				offset = partition.HighWatermark()
 			}
 			pResp.Offsets = []int64{offset}
 
@@ -360,21 +402,18 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 	resp := new(protocol.ProduceResponses)
 	resp.Responses = make([]*protocol.ProduceResponse, len(req.TopicData))
 	for i, td := range req.TopicData {
-		presps := make([]*protocol.ProducePartitionresponse, len(td.Data))
+		presps := make([]*protocol.ProducePartitionResponse, len(td.Data))
 		for j, p := range td.Data {
-			partition := &cluster.TopicPartition{
-				Topic:     td.Topic,
-				Partition: p.Partition,
-			}
-			presp := &protocol.ProducePartitionresponse{}
+			partition := jocko.NewPartition(td.Topic, p.Partition)
+			presp := &protocol.ProducePartitionResponse{}
 			partition, err := s.broker.Partition(td.Topic, p.Partition)
 			if err != nil {
 				presp.ErrorCode = protocol.ErrUnknownTopicOrPartition
 			}
-			if !s.broker.IsLeaderOfPartition(partition) {
+			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
 				presp.ErrorCode = protocol.ErrNotLeaderForPartition
 			}
-			offset, err := partition.CommitLog.Append(p.RecordSet)
+			offset, err := partition.Append(p.RecordSet)
 			if err != nil {
 				s.logger.Info("commitlog/append failed: %s", err)
 				presp.ErrorCode = protocol.ErrUnknown
@@ -415,15 +454,12 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 				s.logger.Info("Failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
 				break
 			}
-			if !s.broker.IsLeaderOfPartition(partition) {
+			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
 				s.logger.Info("Failed to produce: %v", errors.New("broker is not partition leader"))
 				// TODO set err code
 				break
 			}
-			rdr, err := partition.CommitLog.NewReader(commitlog.ReaderOptions{
-				Offset:   p.FetchOffset,
-				MaxBytes: p.MaxBytes,
-			})
+			rdr, err := partition.NewReader(p.FetchOffset, p.MaxBytes)
 			if err != nil {
 				s.logger.Info("Failed to read partition: %v", err)
 				// TODO set err code
@@ -451,7 +487,7 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone,
-				HighWatermark: partition.CommitLog.NewestOffset(),
+				HighWatermark: partition.HighWatermark(),
 				RecordSet:     b.Bytes(),
 			}
 		}

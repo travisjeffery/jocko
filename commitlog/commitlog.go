@@ -100,7 +100,8 @@ func (l *CommitLog) Open() error {
 	return nil
 }
 
-func (l *CommitLog) Append(ms MessageSet) (offset int64, err error) {
+func (l *CommitLog) Append(b []byte) (offset int64, err error) {
+	ms := MessageSet(b)
 	if l.checkSplit() {
 		if err := l.split(); err != nil {
 			return offset, err
