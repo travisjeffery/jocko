@@ -36,9 +36,13 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 		e.PutInt32(p.ControllerEpoch)
 		e.PutInt32(p.Leader)
 		e.PutInt32(p.LeaderEpoch)
-		e.PutInt32Array(p.ISR)
+		if err = e.PutInt32Array(p.ISR); err != nil {
+			return err
+		}
 		e.PutInt32(p.ZKVersion) // TODO: hardcode this?
-		e.PutInt32Array(p.Replicas)
+		if err = e.PutInt32Array(p.Replicas); err != nil {
+			return err
+		}
 	}
 	return nil
 }
