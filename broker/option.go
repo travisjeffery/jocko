@@ -72,3 +72,31 @@ type optionLogger struct {
 func (o optionLogger) modifyBroker(b *Broker) {
 	b.logger = o.logger
 }
+
+type ReplicatorOption interface {
+	modifyReplicator(*PartitionReplicator)
+}
+
+type ReplicatorOptionReplicaID int32
+
+func (o ReplicatorOptionReplicaID) modifyReplicator(r *PartitionReplicator) {
+	r.replicaID = int32(o)
+}
+
+type ReplicatorOptionFetchSize int32
+
+func (o ReplicatorOptionFetchSize) modifyReplicator(r *PartitionReplicator) {
+	r.fetchSize = int32(o)
+}
+
+type ReplicatorOptionMinBytes int32
+
+func (o ReplicatorOptionMinBytes) modifyReplicator(r *PartitionReplicator) {
+	r.minBytes = int32(o)
+}
+
+type ReplicatorOptionMaxWaitTime int32
+
+func (o ReplicatorOptionMaxWaitTime) modifyReplicator(r *PartitionReplicator) {
+	r.maxWaitTime = int32(o)
+}
