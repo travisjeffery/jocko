@@ -251,7 +251,7 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 	body := &protocol.LeaderAndISRResponse{}
 	for _, p := range req.PartitionStates {
 		partition, err := s.broker.Partition(p.Topic, p.Partition)
-		broker := s.broker.Broker(p.Leader)
+		broker := s.broker.BrokerConn(p.Leader)
 		if broker == nil {
 			// TODO: error cause we don't know who this broker is
 		}
@@ -264,7 +264,7 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 		// TODO: change broker.ID into a int32
 		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
-			if err := s.broker.BecomeLeader(partition.ID); err != nil {
+			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != nil {
 				return err
 			}
 		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {

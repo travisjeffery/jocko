@@ -118,7 +118,7 @@ func TestFetchMessages(t *testing.T) {
 	assert.NoError(t, err)
 	defer server.Close()
 
-	replicator, err := NewPartitionReplicator(tp, 0,
+	replicator := NewPartitionReplicator(tp, 0,
 		ReplicatorOptionMinBytes(5),
 		ReplicatorOptionMaxWaitTime(int32(time.Millisecond*250)))
 	assert.NoError(t, err)

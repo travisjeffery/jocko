@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 type CommitLog interface {
@@ -18,8 +20,8 @@ type CommitLog interface {
 }
 
 type Partition struct {
-	Topic string
-	ID    int32
+	Topic string `json:"topic"`
+	ID    int32  `json:"id"`
 
 	// Broker ids
 	Replicas        []*BrokerConn `json:"replicas"`
@@ -27,7 +29,8 @@ type Partition struct {
 	Leader          *BrokerConn   `json:"leader"`
 	PreferredLeader *BrokerConn   `json:"preferred_leader"`
 
-	CommitLog CommitLog `json:"-"`
+	LeaderandISRVersionInZK int32     `json:"-"`
+	CommitLog               CommitLog `json:"-"`
 }
 
 func NewPartition(topic string, id int32) *Partition {
@@ -111,8 +114,8 @@ type Broker interface {
 	CreateTopic(topic string, partitions int32) error
 	DeleteTopic(topic string) error
 	Partition(topic string, id int32) (*Partition, error)
-	Broker(brokerID int32) *BrokerConn
-	BecomeLeader(int32) error
+	BrokerConn(brokerID int32) *BrokerConn
+	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
 	BecomeFollower(topic string, id int32, leaderID int32) error
 	Join(brokerID int32, host string) error
 	Cluster() []*BrokerConn

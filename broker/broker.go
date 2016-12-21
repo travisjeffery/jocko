@@ -55,6 +55,7 @@ func newCommand(cmd CmdType, data interface{}) (c command, err error) {
 }
 
 type Broker struct {
+	*replicationManager
 	mu     sync.RWMutex
 	logger *simplelog.Logger
 
@@ -77,8 +78,9 @@ type Broker struct {
 
 func New(id int32, opts ...Option) *Broker {
 	b := &Broker{
-		id:     id,
-		topics: make(map[string][]*jocko.Partition),
+		replicationManager: newReplicationManager(),
+		id:                 id,
+		topics:             make(map[string][]*jocko.Partition),
 	}
 	for _, o := range opts {
 		o.modifyBroker(b)
@@ -222,15 +224,7 @@ func (s *Broker) apply(cmdType CmdType, data interface{}) error {
 	return f.Error()
 }
 
-func (s *Broker) BecomeLeader(pid int32) error {
-	return nil
-}
-
-func (s *Broker) BecomeFollower(topic string, pid int32, leader int32) error {
-	return nil
-}
-
-func (s *Broker) Broker(id int32) *jocko.BrokerConn {
+func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
 	for _, b := range s.brokers {
 		if b.ID == id {
 			return b

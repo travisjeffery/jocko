@@ -27,7 +27,7 @@ type PartitionReplicator struct {
 	done                chan struct{}
 }
 
-func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorOption) (*PartitionReplicator, error) {
+func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorOption) *PartitionReplicator {
 	r := &PartitionReplicator{
 		partition: partition,
 		replicaID: replicaID,
@@ -40,18 +40,12 @@ func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ..
 		o.modifyReplicator(r)
 	}
 
-	return r, nil
+	return r
 }
 
-func (r *PartitionReplicator) Replicate() error {
-	hw := r.partition.HighWatermark()
-	err := r.partition.TruncateTo(hw)
-	if err != nil {
-		return err
-	}
+func (r *PartitionReplicator) Replicate() {
 	go r.fetchMessages()
 	go r.writeMessages()
-	return nil
 }
 
 func (r *PartitionReplicator) fetchMessages() {
