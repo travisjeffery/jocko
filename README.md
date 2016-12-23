@@ -1,21 +1,19 @@
-![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master)
-
 # JOCKO
 
-[![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 Kafka/distributed commit log service in Go.
+
+![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## Goals of this project:
 
 - Implement Kafka in Go
-- Protocol compatible so Kafka clients and services work with Jocko
+- Protocol compatible with Kafka so Kafka clients and services work with Jocko
 - Make operating simpler
 - Distribute a single binary
-- Use Raft for consensus
+- Use Serf for discovery, Raft for consensus
 - Smarter configuration settings
-  - Able to use percentages of disk space for retention policies rather than only bytes and time kept
-  - Handling size configs when you change the number of partitions or add topics
+    - Able to use percentages of disk space for retention policies rather than only bytes and time kept
+    - Handling size configs when you change the number of partitions or add topics
 - Learn a lot and have fun
 
 ## TODO
