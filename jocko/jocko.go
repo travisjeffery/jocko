@@ -110,14 +110,14 @@ type Broker interface {
 	ID() int32
 	Port() string
 	Host() string
-	IsController() (bool, error)
+	IsController() bool
 	CreateTopic(topic string, partitions int32) error
 	DeleteTopic(topic string) error
 	Partition(topic string, id int32) (*Partition, error)
 	BrokerConn(brokerID int32) *BrokerConn
 	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
 	BecomeFollower(topic string, id int32, leaderID int32) error
-	Join(brokerID int32, host string) error
+	Join(brokerID int32, addr ...string) (int, error)
 	Cluster() []*BrokerConn
 	TopicPartitions(topic string) ([]*Partition, error)
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool

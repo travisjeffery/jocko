@@ -43,7 +43,7 @@ func TestFetchMessages(t *testing.T) {
 	}
 
 	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko/replicator_test")
-	s0 := New(0,
+	s0, err := New(0,
 		OptionDataDir(filepath.Join(dataDir, "0")),
 		OptionLogDir(filepath.Join(dataDir, "0")),
 		OptionRaftAddr(raft0),
@@ -51,13 +51,12 @@ func TestFetchMessages(t *testing.T) {
 		OptionBrokers([]*jocko.BrokerConn{b1, b2}),
 		OptionLogger(logger),
 	)
+	assert.NoError(t, err)
 	assert.NotNil(t, s0)
 
-	err := s0.Open()
-	assert.NoError(t, err)
 	defer s0.Close()
 
-	s1 := New(1,
+	s1, err := New(1,
 		OptionDataDir(filepath.Join(dataDir, "1")),
 		OptionLogDir(filepath.Join(dataDir, "1")),
 		OptionRaftAddr(raft1),
@@ -65,11 +64,11 @@ func TestFetchMessages(t *testing.T) {
 		OptionBrokers([]*jocko.BrokerConn{b0, b2}),
 		OptionLogger(logger),
 	)
-	err = s1.Open()
 	assert.NoError(t, err)
+
 	defer s1.Close()
 
-	s2 := New(2,
+	s2, err := New(2,
 		OptionDataDir(filepath.Join(dataDir, "2")),
 		OptionLogDir(filepath.Join(dataDir, "2")),
 		OptionRaftAddr(raft2),
@@ -77,8 +76,8 @@ func TestFetchMessages(t *testing.T) {
 		OptionBrokers([]*jocko.BrokerConn{b0, b1}),
 		OptionLogger(logger),
 	)
-	err = s2.Open()
 	assert.NoError(t, err)
+
 	defer s2.Close()
 
 	l, err := s0.WaitForLeader(10 * time.Second)

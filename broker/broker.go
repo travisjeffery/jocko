@@ -2,6 +2,7 @@ package broker
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko"
@@ -70,22 +72,141 @@ type Broker struct {
 	tcpAddr  string
 	logDir   string
 
-	peerStore raft.PeerStore
-	transport raft.Transport
-	raft      *raft.Raft
-	store     *raftboltdb.BoltStore
+	raft          *raft.Raft
+	raftPeers     raft.PeerStore
+	raftTransport *raft.NetworkTransport
+	raftStore     *raftboltdb.BoltStore
+	raftLeaderCh  chan bool
+
+	serf            *serf.Serf
+	serfReconcileCh chan serf.Member
+	serfEventCh     chan serf.Event
+
+	reconcileInterval time.Duration
+	reconcileCh       chan serf.Member
+
+	left         bool
+	shutdownCh   chan struct{}
+	shutdown     bool
+	shutdownLock sync.Mutex
 }
 
-func New(id int32, opts ...Option) *Broker {
+const (
+	raftState    = "raft/"
+	serfSnapshot = "serf/snapshot"
+)
+
+func New(id int32, opts ...Option) (*Broker, error) {
+	var err error
 	b := &Broker{
 		replicationManager: newReplicationManager(),
 		id:                 id,
 		topics:             make(map[string][]*jocko.Partition),
+		serfReconcileCh:    make(chan serf.Member, 32),
+		serfEventCh:        make(chan serf.Event, 256),
+		reconcileInterval:  time.Second * 60,
 	}
 	for _, o := range opts {
 		o.modifyBroker(b)
 	}
-	return b
+
+	serfConfig := serf.DefaultConfig()
+	b.serf, err = b.setupSerf(serfConfig, b.serfEventCh, serfSnapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	host, port, err := net.SplitHostPort(b.tcpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	b.host = host
+	b.port = port
+
+	b.brokers = append(b.brokers, &jocko.BrokerConn{
+		Host:     host,
+		Port:     port,
+		RaftAddr: b.raftAddr,
+		ID:       b.id,
+	})
+
+	if err = b.setupRaft(); err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func (b *Broker) setupRaft() error {
+	conf := raft.DefaultConfig()
+
+	addr, err := net.ResolveTCPAddr("tcp", b.raftAddr)
+	if err != nil {
+		return errors.Wrap(err, "resolve bind addr failed")
+	}
+
+	if b.raftTransport == nil {
+		b.raftTransport, err = raft.NewTCPTransport(b.raftAddr, addr, 3, timeout, os.Stderr)
+		if err != nil {
+			return errors.Wrap(err, "tcp transport failed")
+		}
+	}
+
+	path := filepath.Join(b.dataDir, raftState)
+	if err = os.MkdirAll(path, 0755); err != nil {
+		return errors.Wrap(err, "data directory mkdir failed")
+	}
+
+	b.raftPeers = raft.NewJSONPeers(path, b.raftTransport)
+
+	if len(b.brokers) == 1 {
+		conf.EnableSingleNode = true
+	} else {
+		var peers []string
+		for _, b := range b.brokers {
+			peers = append(peers, b.RaftAddr)
+		}
+		err = b.raftPeers.SetPeers(peers)
+		if err != nil {
+			return errors.Wrap(err, "set peers failed")
+		}
+	}
+
+	snapshots, err := raft.NewFileSnapshotStore(path, 2, os.Stderr)
+	if err != nil {
+		return err
+	}
+
+	boltStore, err := raftboltdb.NewBoltStore(filepath.Join(path, "raft.db"))
+	if err != nil {
+		return errors.Wrap(err, "bolt store failed")
+	}
+	b.raftStore = boltStore
+
+	leaderCh := make(chan bool, 1)
+	b.raftLeaderCh = leaderCh
+	conf.NotifyCh = leaderCh
+
+	raft, err := raft.NewRaft(conf, b, boltStore, boltStore, snapshots, b.raftPeers, b.raftTransport)
+	if err != nil {
+		if b.raftStore != nil {
+			b.raftStore.Close()
+		}
+		b.raftTransport.Close()
+		return errors.Wrap(err, "raft failed")
+	}
+	b.raft = raft
+
+	return nil
+}
+
+func (b *Broker) setupSerf(conf *serf.Config, eventCh chan serf.Event, serfSnapshot string) (*serf.Serf, error) {
+	conf.Init()
+	conf.NodeName = fmt.Sprintf("%d", b.id)
+	conf.EventCh = eventCh
+	conf.EnableNameConflictResolution = false
+	return serf.Create(conf)
 }
 
 func (b *Broker) ID() int32 {
@@ -104,80 +225,13 @@ func (b *Broker) Cluster() []*jocko.BrokerConn {
 	return b.brokers
 }
 
-func (s *Broker) Open() error {
-	host, port, err := net.SplitHostPort(s.tcpAddr)
-	if err != nil {
-		return err
-	}
-
-	s.host = host
-	s.port = port
-
-	s.brokers = append(s.brokers, &jocko.BrokerConn{
-		Host:     host,
-		Port:     port,
-		RaftAddr: s.raftAddr,
-		ID:       s.id,
-	})
-
-	conf := raft.DefaultConfig()
-
-	addr, err := net.ResolveTCPAddr("tcp", s.raftAddr)
-	if err != nil {
-		return errors.Wrap(err, "resolve bind addr failed")
-	}
-
-	if s.transport == nil {
-		s.transport, err = raft.NewTCPTransport(s.raftAddr, addr, 3, timeout, os.Stderr)
-		if err != nil {
-			return errors.Wrap(err, "tcp transport failed")
-		}
-	}
-
-	if err = os.MkdirAll(s.dataDir, 0755); err != nil {
-		return errors.Wrap(err, "data directory mkdir failed")
-	}
-	s.peerStore = raft.NewJSONPeers(s.dataDir, s.transport)
-
-	if len(s.brokers) == 1 {
-		conf.EnableSingleNode = true
-	} else {
-		var peers []string
-		for _, b := range s.brokers {
-			peers = append(peers, b.RaftAddr)
-		}
-		err = s.peerStore.SetPeers(peers)
-		if err != nil {
-			return errors.Wrap(err, "set peers failed")
-		}
-	}
-
-	snapshots, err := raft.NewFileSnapshotStore(s.dataDir, 2, os.Stderr)
-	if err != nil {
-		return err
-	}
-
-	boltStore, err := raftboltdb.NewBoltStore(filepath.Join(s.dataDir, "store.db"))
-	if err != nil {
-		return errors.Wrap(err, "bolt store failed")
-	}
-	s.store = boltStore
-
-	raft, err := raft.NewRaft(conf, s, boltStore, boltStore, snapshots, s.peerStore, s.transport)
-	if err != nil {
-		return errors.Wrap(err, "raft failed")
-	}
-	s.raft = raft
-
-	return nil
-}
-
 func (s *Broker) Close() error {
 	return s.raft.Shutdown().Error()
 }
 
-func (s *Broker) IsController() (bool, error) {
-	return s.raft.State() == raft.Leader, nil
+// IsController checks if this broker is the cluster controller
+func (s *Broker) IsController() bool {
+	return s.raft.State() == raft.Leader
 }
 
 func (s *Broker) ControllerID() string {
@@ -288,9 +342,10 @@ func (s *Broker) Topics() []string {
 	return topics
 }
 
-func (s *Broker) Join(id int32, addr string) error {
-	f := s.raft.AddPeer(addr)
-	return f.Error()
+// Join is used to have the broker join the gossip ring
+// The target address should be another broker listening on the Serf address
+func (s *Broker) Join(id int32, addrs ...string) (int, error) {
+	return s.serf.Join(addrs, true)
 }
 
 func (s *Broker) Apply(l *raft.Log) interface{} {

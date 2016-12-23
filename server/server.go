@@ -187,7 +187,7 @@ func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d 
 func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
-	isController, err := s.broker.IsController()
+	isController := s.broker.IsController()
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.DeleteTopicsRequest) (err error) {
 	resp := new(protocol.DeleteTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Topics))
-	isController, err := s.broker.IsController()
+	isController := s.broker.IsController()
 	if err != nil {
 		return err
 	}
@@ -306,7 +306,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// TODO: change join to take a broker
-	if err := s.broker.Join(b.ID, b.Host); err != nil {
+	if _, err := s.broker.Join(b.ID, b.Host); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

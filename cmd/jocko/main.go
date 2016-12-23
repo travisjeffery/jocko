@@ -30,12 +30,16 @@ func main() {
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
-	store := broker.New(*brokerID,
+	store, err := broker.New(*brokerID,
 		broker.OptionDataDir(*logDir),
 		broker.OptionLogDir(*logDir),
 		broker.OptionRaftAddr(*raftAddr),
 		broker.OptionTCPAddr(*tcpAddr),
 		broker.OptionLogger(logger))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
+		os.Exit(1)
+	}
 	if err := store.Open(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
