@@ -1,0 +1,79 @@
+package broker
+
+import "github.com/hashicorp/serf/serf"
+
+const (
+	// StatusReap is used to update the status of a node if we
+	// are handling a EventMemberReap
+	StatusReap = serf.MemberStatus(-1)
+)
+
+// serfEventHandler is used to handle events from the serf cluster
+func (b *Broker) serfEventHandler() {
+	for {
+		select {
+		case e := <-b.serfEventCh:
+			switch e.EventType() {
+			case serf.EventMemberJoin:
+				b.nodeJoin(e.(serf.MemberEvent))
+				b.localMemberEvent(e.(serf.MemberEvent))
+			case serf.EventMemberLeave, serf.EventMemberFailed:
+				b.nodeFailed(e.(serf.MemberEvent))
+				b.localMemberEvent(e.(serf.MemberEvent))
+			case serf.EventMemberUpdate, serf.EventMemberReap, serf.EventUser, serf.EventQuery:
+				// ignore
+			default:
+				b.logger.Info("unhandled serf event: %#v", e)
+			}
+		case <-b.shutdownCh:
+			return
+		}
+	}
+}
+
+// nodeJoin is used to handle join events on the serf cluster
+func (b *Broker) nodeJoin(me serf.MemberEvent) {
+	for _, m := range me.Members {
+		// TODO: need to change these parts
+		peer, err := brokerConn(m)
+		if err != nil {
+			b.logger.Info("failed to parse peer from serf member: %s", m.Name)
+			continue
+		}
+		b.logger.Info("adding peer: %s", b)
+		b.peerLock.Lock()
+		b.peers[peer.ID] = peer
+		b.peerLock.Unlock()
+	}
+}
+
+// localMemberEvent is used to reconcile Serf events with the store if we are the leader.
+func (b *Broker) localMemberEvent(me serf.MemberEvent) {
+	if !b.IsController() {
+		return
+	}
+	isReap := me.EventType() == serf.EventMemberReap
+	for _, m := range me.Members {
+		if isReap {
+			m.Status = StatusReap
+		}
+		select {
+		case b.reconcileCh <- m:
+		default:
+		}
+	}
+}
+
+// nodeFailed is used to handle fail events on the serf cluster.
+func (b *Broker) nodeFailed(me serf.MemberEvent) {
+	for _, m := range me.Members {
+		b.logger.Info("removing peer: %s", me)
+		b.peerLock.Lock()
+		peer, err := brokerConn(m)
+		if err != nil {
+			continue
+		}
+		delete(b.peers, peer.ID)
+		b.peerLock.Unlock()
+	}
+}

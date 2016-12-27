@@ -61,11 +61,13 @@ type Broker struct {
 	mu     sync.RWMutex
 	logger *simplelog.Logger
 
-	id      int32
-	host    string
-	port    string
-	topics  map[string][]*jocko.Partition
-	brokers []*jocko.BrokerConn
+	id     int32
+	host   string
+	port   string
+	topics map[string][]*jocko.Partition
+
+	peers    map[int32]*jocko.BrokerConn
+	peerLock sync.Mutex
 
 	dataDir  string
 	raftAddr string
@@ -100,20 +102,17 @@ func New(id int32, opts ...Option) (*Broker, error) {
 	var err error
 	b := &Broker{
 		replicationManager: newReplicationManager(),
+		peers:              make(map[int32]*jocko.BrokerConn),
 		id:                 id,
 		topics:             make(map[string][]*jocko.Partition),
 		serfReconcileCh:    make(chan serf.Member, 32),
 		serfEventCh:        make(chan serf.Event, 256),
 		reconcileInterval:  time.Second * 60,
-	}
-	for _, o := range opts {
-		o.modifyBroker(b)
+		shutdownCh:         make(chan struct{}),
 	}
 
-	serfConfig := serf.DefaultConfig()
-	b.serf, err = b.setupSerf(serfConfig, b.serfEventCh, serfSnapshot)
-	if err != nil {
-		return nil, err
+	for _, o := range opts {
+		o.modifyBroker(b)
 	}
 
 	host, port, err := net.SplitHostPort(b.tcpAddr)
@@ -124,12 +123,13 @@ func New(id int32, opts ...Option) (*Broker, error) {
 	b.host = host
 	b.port = port
 
-	b.brokers = append(b.brokers, &jocko.BrokerConn{
-		Host:     host,
-		Port:     port,
-		RaftAddr: b.raftAddr,
-		ID:       b.id,
-	})
+	serfConfig := serf.DefaultConfig()
+	b.serf, err = b.setupSerf(serfConfig, b.serfEventCh, serfSnapshot)
+	if err != nil {
+		// b.Shutdown()
+		b.logger.Info("failed to start serf: %s", err)
+		return nil, err
+	}
 
 	if err = b.setupRaft(); err != nil {
 		return nil, err
@@ -160,19 +160,6 @@ func (b *Broker) setupRaft() error {
 
 	b.raftPeers = raft.NewJSONPeers(path, b.raftTransport)
 
-	if len(b.brokers) == 1 {
-		conf.EnableSingleNode = true
-	} else {
-		var peers []string
-		for _, b := range b.brokers {
-			peers = append(peers, b.RaftAddr)
-		}
-		err = b.raftPeers.SetPeers(peers)
-		if err != nil {
-			return errors.Wrap(err, "set peers failed")
-		}
-	}
-
 	snapshots, err := raft.NewFileSnapshotStore(path, 2, os.Stderr)
 	if err != nil {
 		return err
@@ -198,12 +185,18 @@ func (b *Broker) setupRaft() error {
 	}
 	b.raft = raft
 
+	// monitor leadership changes
+	go b.monitorLeadership()
+
 	return nil
 }
 
 func (b *Broker) setupSerf(conf *serf.Config, eventCh chan serf.Event, serfSnapshot string) (*serf.Serf, error) {
 	conf.Init()
-	conf.NodeName = fmt.Sprintf("%d", b.id)
+	id := fmt.Sprintf("%d", b.id)
+	conf.NodeName = id
+	conf.Tags["id"] = id
+	conf.Tags["port"] = b.port
 	conf.EventCh = eventCh
 	conf.EnableNameConflictResolution = false
 	return serf.Create(conf)
@@ -222,11 +215,50 @@ func (b *Broker) Port() string {
 }
 
 func (b *Broker) Cluster() []*jocko.BrokerConn {
-	return b.brokers
+	cluster := make([]*jocko.BrokerConn, len(b.peers))
+	for i, v := range b.peers {
+		cluster[i] = v
+	}
+	return cluster
 }
 
-func (s *Broker) Close() error {
-	return s.raft.Shutdown().Error()
+func (b *Broker) Shutdown() error {
+	b.logger.Info("shutting down broker")
+	b.shutdownLock.Lock()
+	defer b.shutdownLock.Unlock()
+
+	if b.shutdown {
+		return nil
+	}
+
+	b.shutdown = true
+	close(b.shutdownCh)
+
+	if b.serf != nil {
+		b.serf.Shutdown()
+	}
+
+	if b.raft != nil {
+		b.raftTransport.Close()
+		future := b.raft.Shutdown()
+		if err := future.Error(); err != nil {
+			b.logger.Info("failed to shutdown raft: %s", err)
+		}
+		if b.raftStore != nil {
+			b.raftStore.Close()
+		}
+	}
+
+	return nil
+}
+
+func (b *Broker) IsShutdown() bool {
+	select {
+	case <-b.shutdownCh:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsController checks if this broker is the cluster controller
@@ -279,7 +311,7 @@ func (s *Broker) apply(cmdType CmdType, data interface{}) error {
 }
 
 func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
-	for _, b := range s.brokers {
+	for _, b := range s.Cluster() {
 		if b.ID == id {
 			return b
 		}
@@ -317,7 +349,8 @@ func (s *Broker) addPartition(partition *jocko.Partition) {
 func (s *Broker) addBroker(broker *jocko.BrokerConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.brokers = append(s.brokers, broker)
+	// TODO: remove this
+	s.peers = append(s.peers, broker)
 }
 
 func (s *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
@@ -398,12 +431,12 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 			return ErrTopicExists
 		}
 	}
-	brokers := s.brokers
-	for i := 0; i < int(partitions); i++ {
-		broker := brokers[i%len(brokers)]
+	brokers := s.peers
+	for i := int32(0); i < partitions; i++ {
+		broker := brokers[i%int32(len(brokers))]
 		partition := &jocko.Partition{
 			Topic:           topic,
-			ID:              int32(i),
+			ID:              i,
 			Leader:          broker,
 			PreferredLeader: broker,
 			Replicas:        []*jocko.BrokerConn{broker},
@@ -422,7 +455,6 @@ func (s *Broker) DeleteTopics(topics ...string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 

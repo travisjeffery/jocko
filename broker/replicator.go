@@ -35,11 +35,9 @@ func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ..
 		done:      make(chan struct{}, 2),
 		msgs:      make(chan []byte, 2),
 	}
-
 	for _, o := range opts {
 		o.modifyReplicator(r)
 	}
-
 	return r
 }
 

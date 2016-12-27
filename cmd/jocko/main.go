@@ -40,10 +40,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
 		os.Exit(1)
 	}
-	if err := store.Open(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
-		os.Exit(1)
-	}
 	server := server.New(*tcpAddr, store, logger)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
@@ -53,7 +49,7 @@ func main() {
 	gracefully.Timeout = 10 * time.Second
 	gracefully.Shutdown()
 
-	if err := store.Close(); err != nil {
+	if err := store.Shutdown(); err != nil {
 		panic(err)
 	}
 	server.Close()

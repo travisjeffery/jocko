@@ -39,8 +39,7 @@ func TestNewServer(t *testing.T) {
 		broker.OptionTCPAddr("localhost:8000"),
 		broker.OptionLogger(logger))
 	assert.NoError(t, err)
-	assert.NoError(t, store.Open())
-	defer store.Close()
+	defer store.Shutdown()
 
 	_, err = store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)

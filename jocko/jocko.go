@@ -124,16 +124,13 @@ type Broker interface {
 }
 
 type BrokerConn struct {
-	ID       int32  `json:"id"`
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-	RaftAddr string `json:"raft_addr"`
+	ID   int32  `json:"id"`
+	Host string `json:"host"`
+	Port string `json:"port"`
+
+	Addr *net.TCPAddr `json:"-"`
 
 	conn net.Conn
-}
-
-func (b *BrokerConn) Addr() string {
-	return fmt.Sprintf("%s:%s", b.Host, b.Port)
 }
 
 func (b *BrokerConn) Write(p []byte) (int, error) {
@@ -155,11 +152,7 @@ func (b *BrokerConn) Read(p []byte) (int, error) {
 }
 
 func (b *BrokerConn) connect() error {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", b.Addr())
-	if err != nil {
-		return err
-	}
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	conn, err := net.DialTCP("tcp", nil, b.Addr)
 	if err != nil {
 		return err
 	}

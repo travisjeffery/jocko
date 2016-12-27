@@ -52,7 +52,7 @@ func TestStoreOpen(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, s0)
 
-	defer s0.Close()
+	defer s0.Shutdown()
 
 	s1, err := New(
 		1,
@@ -65,7 +65,7 @@ func TestStoreOpen(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	defer s1.Close()
+	defer s1.Shutdown()
 
 	s2, err := New(
 		2,
@@ -78,7 +78,7 @@ func TestStoreOpen(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	defer s2.Close()
+	defer s2.Shutdown()
 
 	l, err := s0.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
