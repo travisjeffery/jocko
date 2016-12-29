@@ -40,7 +40,7 @@ func (b *Broker) nodeJoin(me serf.MemberEvent) {
 			b.logger.Info("failed to parse peer from serf member: %s", m.Name)
 			continue
 		}
-		b.logger.Info("adding peer: %s", b)
+		b.logger.Info("adding peer: %s", peer)
 		b.peerLock.Lock()
 		b.peers[peer.ID] = peer
 		b.peerLock.Unlock()
@@ -58,7 +58,7 @@ func (b *Broker) localMemberEvent(me serf.MemberEvent) {
 			m.Status = StatusReap
 		}
 		select {
-		case b.reconcileCh <- m:
+		case b.serfReconcileCh <- m:
 		default:
 		}
 	}
@@ -76,4 +76,8 @@ func (b *Broker) nodeFailed(me serf.MemberEvent) {
 		delete(b.peers, peer.ID)
 		b.peerLock.Unlock()
 	}
+}
+
+func (b *Broker) members() []serf.Member {
+	return b.serf.Members()
 }

@@ -28,7 +28,7 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, leader int
 		}
 	}
 	delete(rm.replicators, p)
-	p.Leader = rm.BrokerConn(leader)
+	p.Leader = leader
 	hw := p.HighWatermark()
 	if err := p.TruncateTo(hw); err != nil {
 		return err
@@ -49,12 +49,8 @@ func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *pro
 			return err
 		}
 	}
-	var conns []*jocko.BrokerConn
-	for _, isr := range command.ISR {
-		conns = append(conns, rm.BrokerConn(isr))
-	}
-	p.Leader = rm.BrokerConn(rm.ID())
-	p.ISR = conns
+	p.Leader = rm.ID()
+	p.ISR = command.ISR
 	p.LeaderandISRVersionInZK = command.ZKVersion
 	return nil
 }

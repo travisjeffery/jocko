@@ -3,8 +3,8 @@ package broker
 import (
 	"bytes"
 	"io/ioutil"
+	"net"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,112 +12,35 @@ import (
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/simplelog"
 )
 
-func TestFetchMessages(t *testing.T) {
-	dataDir, _ := ioutil.TempDir("", "storetest")
+func TestBroker_Replicate(t *testing.T) {
+	dataDir, _ := ioutil.TempDir("", "replicate_test")
 	defer os.RemoveAll(dataDir)
 
-	raft0 := "127.0.0.1:4000"
-	raft1 := "127.0.0.1:4001"
-	raft2 := "127.0.0.1:4002"
-
-	b0 := &jocko.BrokerConn{
-		Host:     "127.0.0.1",
-		Port:     "3000",
-		RaftAddr: raft0,
-		ID:       0,
-	}
-	b1 := &jocko.BrokerConn{
-		Host:     "127.0.0.1",
-		Port:     "4001",
-		RaftAddr: raft1,
-		ID:       1,
-	}
-	b2 := &jocko.BrokerConn{
-		Host:     "127.0.0.1",
-		Port:     "4002",
-		RaftAddr: raft2,
-		ID:       2,
-	}
-
-	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko/replicator_test")
-	s0, err := New(0,
-		OptionDataDir(filepath.Join(dataDir, "0")),
-		OptionLogDir(filepath.Join(dataDir, "0")),
-		OptionRaftAddr(raft0),
-		OptionTCPAddr("127.0.0.1:3000"),
-		OptionBrokers([]*jocko.BrokerConn{b1, b2}),
-		OptionLogger(logger),
-	)
-	assert.NoError(t, err)
-	assert.NotNil(t, s0)
-
+	s0 := testServer(t, 0)
 	defer s0.Shutdown()
 
-	s1, err := New(1,
-		OptionDataDir(filepath.Join(dataDir, "1")),
-		OptionLogDir(filepath.Join(dataDir, "1")),
-		OptionRaftAddr(raft1),
-		OptionTCPAddr(raft1),
-		OptionBrokers([]*jocko.BrokerConn{b0, b2}),
-		OptionLogger(logger),
-	)
-	assert.NoError(t, err)
-
-	defer s1.Shutdown()
-
-	s2, err := New(2,
-		OptionDataDir(filepath.Join(dataDir, "2")),
-		OptionLogDir(filepath.Join(dataDir, "2")),
-		OptionRaftAddr(raft2),
-		OptionTCPAddr(raft2),
-		OptionBrokers([]*jocko.BrokerConn{b0, b1}),
-		OptionLogger(logger),
-	)
-	assert.NoError(t, err)
-
-	defer s2.Shutdown()
-
-	l, err := s0.WaitForLeader(10 * time.Second)
+	addr := &net.TCPAddr{IP: net.ParseIP(s0.bindAddr), Port: s0.port}
+	srv := server.New(addr.String(), s0, logger)
+	err := srv.Start()
 	assert.NoError(t, err)
 
 	tp := &jocko.Partition{
 		Topic:           "test",
 		ID:              0,
-		Leader:          b0,
-		PreferredLeader: b0,
+		Leader:          0,
+		PreferredLeader: 0,
+		Replicas:        []int32{0},
 	}
 
-	var peer, leader *Broker
-	bs := []*Broker{s0, s1, s2}
-	for _, b := range bs {
-		if b.raftAddr == l {
-			leader = b
-		} else {
-			peer = b
-		}
-	}
-
-	err = leader.AddPartition(tp)
+	err = s0.AddPartition(tp)
 	assert.NoError(t, err)
 
-	err = s0.WaitForAppliedIndex(2, 10*time.Second)
+	p, err := s0.Partition("test", 0)
 	assert.NoError(t, err)
 
-	isLeader := s0.IsLeaderOfPartition(tp.Topic, tp.ID, tp.LeaderID())
-	assert.True(t, isLeader)
-
-	err = peer.WaitForAppliedIndex(2, 10*time.Second)
-	assert.NoError(t, err)
-
-	server := server.New(s0.tcpAddr, s0, logger)
-	err = server.Start()
-	assert.NoError(t, err)
-	defer server.Close()
-
-	replicator := NewPartitionReplicator(tp, 0,
+	replicator := NewPartitionReplicator(p, 0,
 		ReplicatorOptionMinBytes(5),
 		ReplicatorOptionMaxWaitTime(int32(time.Millisecond*250)))
 	assert.NoError(t, err)
@@ -134,9 +57,6 @@ func TestFetchMessages(t *testing.T) {
 		Offset:   1,
 		Messages: msgs,
 	}}
-
-	p, err := s0.Partition("test", 0)
-	assert.NoError(t, err)
 
 	for _, ms := range mss {
 		encMs, err := protocol.Encode(ms)

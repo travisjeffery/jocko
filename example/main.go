@@ -117,8 +117,6 @@ func setup() {
 	store, err := broker.New(*brokerID,
 		broker.OptionDataDir(*logDir),
 		broker.OptionLogDir(*logDir),
-		broker.OptionRaftAddr(*raftAddr),
-		broker.OptionTCPAddr(*tcpAddr),
 		broker.OptionLogger(logger))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)

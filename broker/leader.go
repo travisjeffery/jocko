@@ -2,6 +2,7 @@ package broker
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -44,7 +45,7 @@ func (b *Broker) leaderLoop(stopCh chan struct{}) {
 
 RECONCILE:
 	reconcileCh = nil
-	interval := time.After(b.reconcileInterval)
+	interval := time.After(b.serfReconcileInterval)
 
 	// start := time.Now()
 	barrier := b.raft.Barrier(0)
@@ -66,7 +67,7 @@ RECONCILE:
 		goto WAIT
 	}
 
-	reconcileCh = b.reconcileCh
+	reconcileCh = b.serfReconcileCh
 
 WAIT:
 	for {
@@ -105,7 +106,6 @@ func (b *Broker) reconcileMember(member serf.Member) error {
 	if member.Name == fmt.Sprintf("%d", b.id) {
 		return nil
 	}
-
 	var err error
 	switch member.Status {
 	case serf.StatusAlive:
@@ -121,7 +121,12 @@ func (b *Broker) reconcileMember(member serf.Member) error {
 }
 
 func (b *Broker) addRaftPeer(member serf.Member) error {
-	future := b.raft.AddPeer(member.Addr.String())
+	broker, err := brokerConn(member)
+	if err != nil {
+		return err
+	}
+	addr := &net.TCPAddr{IP: net.ParseIP(broker.IP), Port: broker.RaftPort}
+	future := b.raft.AddPeer(addr.String())
 	if err := future.Error(); err != nil && err != raft.ErrKnownPeer {
 		b.logger.Info("failed to add raft peer: %v", err)
 		return err

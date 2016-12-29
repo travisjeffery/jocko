@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -306,7 +305,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// TODO: change join to take a broker
-	if _, err := s.broker.Join(b.ID, b.Host); err != nil {
+	if _, err := s.broker.Join(b.IP); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -316,14 +315,10 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 	brokers := make([]*protocol.Broker, len(s.broker.Cluster()))
 	topics := make([]*protocol.TopicMetadata, len(req.Topics))
 	for i, b := range s.broker.Cluster() {
-		port, err := strconv.Atoi(b.Port)
-		if err != nil {
-			return err
-		}
 		brokers[i] = &protocol.Broker{
 			NodeID: b.ID,
-			Host:   b.Host,
-			Port:   int32(port),
+			Host:   b.IP,
+			Port:   int32(b.Port),
 		}
 	}
 	for i, t := range req.Topics {

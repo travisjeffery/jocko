@@ -3,10 +3,10 @@ package server
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,26 +17,31 @@ import (
 	"github.com/travisjeffery/simplelog"
 )
 
+var (
+	dataDir string
+)
+
+func init() {
+	dataDir, _ = ioutil.TempDir("", "server_test")
+}
+
 const (
 	clientID = "test_client"
 )
 
-func TestNewServer(t *testing.T) {
+func TestBroker_Server(t *testing.T) {
 	dir := os.TempDir()
 	defer os.RemoveAll(dir)
 
-	logs := filepath.Join(dir, "logs")
-	assert.NoError(t, os.MkdirAll(logs, 0755))
-
-	data := filepath.Join(dir, "data")
-	assert.NoError(t, os.MkdirAll(data, 0755))
+	assert.NoError(t, os.MkdirAll(dataDir, 0755))
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	store, err := broker.New(0,
-		broker.OptionDataDir(data),
-		broker.OptionLogDir(logs),
-		broker.OptionRaftAddr("localhost:6000"),
-		broker.OptionTCPAddr("localhost:8000"),
+		broker.OptionDataDir(dataDir),
+		broker.OptionLogDir(dataDir),
+		broker.OptionBindAddr("127.0.0.1"),
+		broker.OptionPort(8000),
+		broker.OptionRaftPort(8001),
 		broker.OptionLogger(logger))
 	assert.NoError(t, err)
 	defer store.Shutdown()

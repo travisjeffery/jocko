@@ -20,17 +20,17 @@ type CommitLog interface {
 }
 
 type Partition struct {
-	Topic string `json:"topic"`
-	ID    int32  `json:"id"`
-
-	// Broker ids
-	Replicas        []*BrokerConn `json:"replicas"`
-	ISR             []*BrokerConn `json:"isr"`
-	Leader          *BrokerConn   `json:"leader"`
-	PreferredLeader *BrokerConn   `json:"preferred_leader"`
+	Topic           string  `json:"topic"`
+	ID              int32   `json:"id"`
+	Replicas        []int32 `json:"replicas"`
+	ISR             []int32 `json:"isr"`
+	Leader          int32   `json:"leader"`
+	PreferredLeader int32   `json:"preferred_leader"`
 
 	LeaderandISRVersionInZK int32     `json:"-"`
 	CommitLog               CommitLog `json:"-"`
+
+	Conn io.ReadWriter `json:"-"`
 }
 
 func NewPartition(topic string, id int32) *Partition {
@@ -58,12 +58,12 @@ func (r *Partition) IsOpen() bool {
 }
 
 func (r *Partition) IsLeader(id int32) bool {
-	return int32(r.Leader.ID) == id
+	return r.Leader == id
 }
 
 func (r *Partition) IsFollowing(id int32) bool {
 	for _, b := range r.Replicas {
-		if int32(b.ID) == id {
+		if b == id {
 			return true
 		}
 	}
@@ -83,11 +83,11 @@ func (p *Partition) TruncateTo(offset int64) error {
 }
 
 func (p *Partition) Write(b []byte) (int, error) {
-	return p.Leader.Write(b)
+	return p.Conn.Write(b)
 }
 
 func (p *Partition) Read(b []byte) (int, error) {
-	return p.Leader.Read(b)
+	return p.Conn.Read(b)
 }
 
 func (p *Partition) Append(ms []byte) (int64, error) {
@@ -95,7 +95,7 @@ func (p *Partition) Append(ms []byte) (int64, error) {
 }
 
 func (p *Partition) LeaderID() int32 {
-	return p.Leader.ID
+	return p.Leader
 }
 
 // func (p *Partition) StartReplica(brokerID int32) (err error) {
@@ -108,7 +108,7 @@ func (p *Partition) LeaderID() int32 {
 
 type Broker interface {
 	ID() int32
-	Port() string
+	Port() int
 	Host() string
 	IsController() bool
 	CreateTopic(topic string, partitions int32) error
@@ -117,7 +117,7 @@ type Broker interface {
 	BrokerConn(brokerID int32) *BrokerConn
 	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
 	BecomeFollower(topic string, id int32, leaderID int32) error
-	Join(brokerID int32, addr ...string) (int, error)
+	Join(addr ...string) (int, error)
 	Cluster() []*BrokerConn
 	TopicPartitions(topic string) ([]*Partition, error)
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
@@ -125,12 +125,17 @@ type Broker interface {
 
 type BrokerConn struct {
 	ID   int32  `json:"id"`
-	Host string `json:"host"`
-	Port string `json:"port"`
+	Port int    `json:"port"`
+	IP   string `json:"addr"`
 
-	Addr *net.TCPAddr `json:"-"`
+	SerfPort int `json:"-"`
+	RaftPort int `json:"-"`
 
 	conn net.Conn
+}
+
+func (b *BrokerConn) Addr() *net.TCPAddr {
+	return &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
 }
 
 func (b *BrokerConn) Write(p []byte) (int, error) {
@@ -152,7 +157,8 @@ func (b *BrokerConn) Read(p []byte) (int, error) {
 }
 
 func (b *BrokerConn) connect() error {
-	conn, err := net.DialTCP("tcp", nil, b.Addr)
+	addr := &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
+	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		return err
 	}
