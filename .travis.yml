@@ -1,4 +1,4 @@
 language: go
-
+script: go test -p=1 ./...
 go:
   - master
