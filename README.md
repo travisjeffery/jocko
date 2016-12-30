@@ -10,7 +10,7 @@ Kafka/distributed commit log service in Go.
 - Protocol compatible with Kafka so Kafka clients and services work with Jocko
 - Make operating simpler
 - Distribute a single binary
-- Use Serf for discovery, Raft for consensus
+- Use Serf for discovery, Raft for consensus (and remove the need to run ZooKeeper)
 - Smarter configuration settings
     - Able to use percentages of disk space for retention policies rather than only bytes and time kept
     - Handling size configs when you change the number of partitions or add topics
