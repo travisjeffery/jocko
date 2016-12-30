@@ -56,50 +56,6 @@ func TestNewCommitLog(t *testing.T) {
 	}
 }
 
-func TestNewCommitLogExisting(t *testing.T) {
-	var err error
-	l := setup(t)
-	defer cleanup(t)
-
-	for _, msgSet := range msgSets {
-		_, err = l.Append(msgSet)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, int64(2), l.NewestOffset())
-
-	l1 := setup(t)
-	msgs1 := []Message{
-		NewMessage([]byte("five")),
-	}
-	msgSet1 := NewMessageSet(2, msgs1...)
-	return
-
-	offset, err := l1.Append(msgSet1)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(len(msgSets)), offset)
-	assert.Equal(t, int64(3), l1.NewestOffset())
-
-	maxBytes := msgSets[0].Size()
-	r, err := l1.NewReader(0, maxBytes)
-	assert.NoError(t, err)
-
-	for i := range msgSets {
-		p := make([]byte, maxBytes)
-		_, err = r.Read(p)
-		assert.NoError(t, err)
-
-		ms := MessageSet(p)
-		assert.Equal(t, int64(i), ms.Offset())
-
-		payload := ms.Payload()
-		var offset int
-		for _, msg := range msgs {
-			assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
-			offset += len(msg)
-		}
-	}
-}
-
 func TestTruncateTo(t *testing.T) {
 	var err error
 	l := setup(t)
