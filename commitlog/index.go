@@ -8,7 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"launchpad.net/gommap"
+	"github.com/tysontate/gommap"
 )
 
 var (

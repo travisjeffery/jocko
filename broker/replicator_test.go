@@ -21,6 +21,8 @@ func TestBroker_Replicate(t *testing.T) {
 	s0 := testServer(t, 0)
 	defer s0.Shutdown()
 
+	s0.WaitForLeader(10 * time.Second)
+
 	addr := &net.TCPAddr{IP: net.ParseIP(s0.bindAddr), Port: s0.port}
 	srv := server.New(addr.String(), s0, logger)
 	err := srv.Start()
