@@ -31,6 +31,11 @@ Kafka/distributed commit log service in Go.
 - [x] Discovery
 - [ ] Replication [current task]
 
+## Reading
+
+- [How Jocko's built-in service discovery and consensus works](https://medium.com/the-hoard/building-a-kafka-that-doesnt-depend-on-zookeeper-2c4701b6e961#.uamxtq1yz)
+- [How Jocko's (and Kafka's) storage internals work](https://medium.com/the-hoard/how-kafkas-storage-internals-work-3a29b02e026#.qfbssm978)
+
 ## License
 
 MIT
