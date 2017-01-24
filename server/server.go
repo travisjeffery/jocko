@@ -258,7 +258,19 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 			return err
 		}
 		if partition == nil {
-			// add it
+			partition = &jocko.Partition{
+				Topic:           p.Topic,
+				ID:              p.Partition,
+				Replicas:        p.Replicas,
+				ISR:             p.ISR,
+				Leader:          p.Leader,
+				PreferredLeader: p.Leader,
+
+				LeaderandISRVersionInZK: p.ZKVersion,
+			}
+			if err := s.broker.StartReplica(partition); err != nil {
+				return err
+			}
 		}
 		// TODO: change broker.ID into a int32
 		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
@@ -268,7 +280,7 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 			}
 		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {
 			// is command asking this broker to follow leader who it isn't a leader of already
-			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p.Leader); err != nil {
+			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != nil {
 				return err
 			}
 		}

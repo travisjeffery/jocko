@@ -41,14 +41,13 @@ func TestBroker_Replicate(t *testing.T) {
 	p, err := s0.Partition("test", 0)
 	assert.NoError(t, err)
 
-
 	t.Run("Replication Test", func(t *testing.T) {
 
-		replicator := NewPartitionReplicator(p, 0,
-			ReplicatorOptionMinBytes(5),
-			ReplicatorOptionMaxWaitTime(int32(time.Millisecond*250)))
+		replicator := newReplicator(p, 0,
+			ReplicatorMinBytes(5),
+			ReplicatorMaxWaitTime(int32(time.Millisecond*250)))
 		assert.NoError(t, err)
-		defer replicator.Close()
+		defer replicator.close()
 
 		msgs := []*protocol.Message{
 			{Value: []byte("msg 0")},

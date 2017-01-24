@@ -95,7 +95,7 @@ func (b *Broker) setupRaft() (err error) {
 	return nil
 }
 
-func (s *Broker) apply(cmdType CmdType, data interface{}) error {
+func (s *Broker) raftApply(cmdType CmdType, data interface{}) error {
 	c, err := newCommand(cmdType, data)
 	if err != nil {
 		return err
@@ -134,7 +134,9 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 		if err := json.Unmarshal(b, p); err != nil {
 			panic(errors.Wrap(err, "json unmarshal failed"))
 		}
-		s.addPartition(p)
+		if err := s.StartReplica(p); err != nil {
+			panic(errors.Wrap(err, "start replica failed"))
+		}
 	case deleteTopic:
 		p := new(jocko.Partition)
 		b, err := c.Data.MarshalJSON()

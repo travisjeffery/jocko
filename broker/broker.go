@@ -55,6 +55,7 @@ type Broker struct {
 	serfReconcileCh       chan serf.Member
 	serfReconcileInterval time.Duration
 	serfEventCh           chan serf.Event
+	serfMembers           []string
 
 	left         bool
 	shutdownCh   chan struct{}
@@ -67,7 +68,7 @@ const (
 	serfSnapshot = "serf/snapshot"
 )
 
-func New(id int32, opts ...Option) (*Broker, error) {
+func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	var err error
 	b := &Broker{
 		serfPort:              7946,
@@ -84,7 +85,7 @@ func New(id int32, opts ...Option) (*Broker, error) {
 	}
 
 	for _, o := range opts {
-		o.modifyBroker(b)
+		o(b)
 	}
 
 	serfConfig := serf.DefaultConfig()
@@ -93,6 +94,13 @@ func New(id int32, opts ...Option) (*Broker, error) {
 		// b.Shutdown()
 		b.logger.Info("failed to start serf: %s", err)
 		return nil, err
+	}
+
+	// bootstrap serf members.
+	if len(b.serfMembers) != 0 {
+		if _, err := b.serf.Join(b.serfMembers, true); err != nil {
+			return nil, err
+		}
 	}
 
 	if err = b.setupRaft(); err != nil {
@@ -159,11 +167,11 @@ func (s *Broker) Partition(topic string, partition int32) (*jocko.Partition, err
 }
 
 func (s *Broker) AddPartition(partition *jocko.Partition) error {
-	return s.apply(addPartition, partition)
+	return s.raftApply(addPartition, partition)
 }
 
 func (s *Broker) AddBroker(broker jocko.BrokerConn) error {
-	return s.apply(addBroker, broker)
+	return s.raftApply(addBroker, broker)
 }
 
 func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
@@ -175,7 +183,7 @@ func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
 	return nil
 }
 
-func (s *Broker) addPartition(partition *jocko.Partition) {
+func (s *Broker) StartReplica(partition *jocko.Partition) error {
 	s.mu.Lock()
 	if v, ok := s.topics[partition.Topic]; ok {
 		s.topics[partition.Topic] = append(v, partition)
@@ -197,18 +205,19 @@ func (s *Broker) addPartition(partition *jocko.Partition) {
 			MaxLogBytes:     -1,
 		})
 		if err != nil {
-			panic(err)
+			return err
 		}
 		if err = commitLog.Init(); err != nil {
-			panic(err)
+			return err
 		}
 		if err = commitLog.Open(); err != nil {
-			panic(err)
+			return err
 		}
 		partition.CommitLog = commitLog
 
 		partition.Conn = s.peers[partition.LeaderID()]
 	}
+	return nil
 }
 
 func (s *Broker) addBroker(broker *jocko.BrokerConn) {
@@ -278,7 +287,7 @@ func (s *Broker) DeleteTopics(topics ...string) error {
 }
 
 func (s *Broker) DeleteTopic(topic string) error {
-	return s.apply(deleteTopic, &jocko.Partition{Topic: topic})
+	return s.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
 }
 
 func (s *Broker) deleteTopic(tp *jocko.Partition) error {

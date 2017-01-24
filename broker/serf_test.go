@@ -117,7 +117,7 @@ func TestBroker_RemovePeer(t *testing.T) {
 	})
 }
 
-func testServer(t *testing.T, id int, opts ...Option) *Broker {
+func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 	idStr := strconv.Itoa(id)
 
 	raftConf := raft.DefaultConfig()
@@ -125,15 +125,15 @@ func testServer(t *testing.T, id int, opts ...Option) *Broker {
 	raftConf.HeartbeatTimeout = 50 * time.Millisecond
 	raftConf.ElectionTimeout = 50 * time.Millisecond
 
-	opts = append(opts, []Option{
-		OptionDataDir(filepath.Join(dataDir, idStr)),
-		OptionLogDir(filepath.Join(dataDir, idStr)),
-		OptionBindAddr("127.0.0.1"),
-		OptionPort(getPort()),
-		OptionSerfPort(getSerfPort()),
-		OptionRaftPort(getRaftPort()),
-		OptionLogger(logger),
-		OptionRaft(raftConf),
+	opts = append(opts, []BrokerFn{
+		DataDir(filepath.Join(dataDir, idStr)),
+		LogDir(filepath.Join(dataDir, idStr)),
+		BindAddr("127.0.0.1"),
+		Port(getPort()),
+		SerfPort(getSerfPort()),
+		RaftPort(getRaftPort()),
+		Logger(logger),
+		RaftConfig(raftConf),
 	}...)
 
 	broker, err := New(

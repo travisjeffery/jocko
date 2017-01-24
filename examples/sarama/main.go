@@ -115,9 +115,9 @@ func setup() {
 	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko")
 
 	store, err := broker.New(*brokerID,
-		broker.OptionDataDir(*logDir),
-		broker.OptionLogDir(*logDir),
-		broker.OptionLogger(logger))
+		broker.DataDir(*logDir),
+		broker.LogDir(*logDir),
+		broker.Logger(logger))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)

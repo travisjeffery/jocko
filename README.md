@@ -2,7 +2,7 @@
 
 Kafka/distributed commit log service in Go.
 
-![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master)](https://travis-ci.org/travisjeffery/jocko) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## Goals of this project:
 

@@ -98,25 +98,18 @@ func (p *Partition) LeaderID() int32 {
 	return p.Leader
 }
 
-// func (p *Partition) StartReplica(brokerID int32) (err error) {
-// 	p.Replicator, err = replicator.NewPartitionReplicator(&replicator.Options{
-// 		Partition: p,
-// 		ReplicaID: brokerID,
-// 	})
-// 	return err
-// }
-
 type Broker interface {
 	ID() int32
 	Port() int
 	Host() string
 	IsController() bool
 	CreateTopic(topic string, partitions int32) error
+	StartReplica(*Partition) error
 	DeleteTopic(topic string) error
 	Partition(topic string, id int32) (*Partition, error)
 	BrokerConn(brokerID int32) *BrokerConn
 	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
-	BecomeFollower(topic string, id int32, leaderID int32) error
+	BecomeFollower(topic string, id int32, command *protocol.PartitionState) error
 	Join(addr ...string) (int, error)
 	Cluster() []*BrokerConn
 	TopicPartitions(topic string) ([]*Partition, error)

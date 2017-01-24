@@ -6,134 +6,94 @@ import (
 	"github.com/travisjeffery/simplelog"
 )
 
-type Option interface {
-	modifyBroker(*Broker)
-}
+type BrokerFn func(b *Broker)
 
-func OptionDataDir(dataDir string) Option {
-	return optionDataDir(dataDir)
-}
-
-type optionDataDir string
-
-func (o optionDataDir) modifyBroker(b *Broker) {
-	b.dataDir = string(o)
-}
-
-func OptionLogDir(logDir string) Option {
-	return optionLogDir(logDir)
-}
-
-type optionLogDir string
-
-func (o optionLogDir) modifyBroker(b *Broker) {
-	b.logDir = string(o)
-}
-
-type optionPort int
-
-func OptionPort(port int) Option {
-	return optionPort(port)
-}
-
-func (o optionPort) modifyBroker(b *Broker) {
-	b.port = int(o)
-}
-
-type optionRaftPort int
-
-func OptionRaftPort(raftPort int) Option {
-	return optionRaftPort(raftPort)
-}
-
-func (o optionRaftPort) modifyBroker(b *Broker) {
-	b.raftPort = int(o)
-}
-
-type optionSerfPort int
-
-func OptionSerfPort(serfPort int) Option {
-	return optionSerfPort(serfPort)
-}
-
-func (o optionSerfPort) modifyBroker(b *Broker) {
-	b.serfPort = int(o)
-}
-
-type optionBindAddr string
-
-func OptionBindAddr(bindAddr string) Option {
-	return optionBindAddr(bindAddr)
-}
-
-func (o optionBindAddr) modifyBroker(b *Broker) {
-	b.bindAddr = string(o)
-}
-
-func OptionBrokers(brokers []*jocko.BrokerConn) Option {
-	return optionBrokers{brokers}
-}
-
-type optionBrokers struct {
-	brokers []*jocko.BrokerConn
-}
-
-func (o optionBrokers) modifyBroker(b *Broker) {
-	b.peerLock.Lock()
-	for _, peer := range o.brokers {
-		b.peers[peer.ID] = peer
+func DataDir(dataDir string) BrokerFn {
+	return func(b *Broker) {
+		b.dataDir = dataDir
 	}
-	b.peerLock.Unlock()
 }
 
-func OptionLogger(logger *simplelog.Logger) Option {
-	return optionLogger{logger}
+func LogDir(logDir string) BrokerFn {
+	return func(b *Broker) {
+		b.logDir = logDir
+	}
 }
 
-type optionLogger struct {
-	logger *simplelog.Logger
+func Port(port int) BrokerFn {
+	return func(b *Broker) {
+		b.port = port
+	}
 }
 
-func (o optionLogger) modifyBroker(b *Broker) {
-	b.logger = o.logger
+func RaftPort(raftPort int) BrokerFn {
+	return func(b *Broker) {
+		b.raftPort = raftPort
+	}
 }
 
-type optionRaft struct {
-	raftConfig *raft.Config
+func SerfPort(serfPort int) BrokerFn {
+	return func(b *Broker) {
+		b.serfPort = serfPort
+	}
 }
 
-func (o optionRaft) modifyBroker(b *Broker) {
-	b.raftConfig = o.raftConfig
+func SerfMembers(serfMembers []string) BrokerFn {
+	return func(b *Broker) {
+		b.serfMembers = serfMembers
+	}
 }
 
-func OptionRaft(conf *raft.Config) Option {
-	return optionRaft{conf}
+func BindAddr(bindAddr string) BrokerFn {
+	return func(b *Broker) {
+		b.bindAddr = bindAddr
+	}
 }
 
-type ReplicatorOption interface {
-	modifyReplicator(*PartitionReplicator)
+func Brokers(brokers []*jocko.BrokerConn) BrokerFn {
+	return func(b *Broker) {
+		b.peerLock.Lock()
+		for _, peer := range brokers {
+			b.peers[peer.ID] = peer
+		}
+		b.peerLock.Unlock()
+	}
 }
 
-type ReplicatorOptionReplicaID int32
-
-func (o ReplicatorOptionReplicaID) modifyReplicator(r *PartitionReplicator) {
-	r.replicaID = int32(o)
+func Logger(logger *simplelog.Logger) BrokerFn {
+	return func(b *Broker) {
+		b.logger = logger
+	}
 }
 
-type ReplicatorOptionFetchSize int32
-
-func (o ReplicatorOptionFetchSize) modifyReplicator(r *PartitionReplicator) {
-	r.fetchSize = int32(o)
+func RaftConfig(raft *raft.Config) BrokerFn {
+	return func(b *Broker) {
+		b.raftConfig = raft
+	}
 }
 
-type ReplicatorOptionMinBytes int32
+type ReplicatorFn func(r *replicator)
 
-func (o ReplicatorOptionMinBytes) modifyReplicator(r *PartitionReplicator) {
-	r.minBytes = int32(o)
+func ReplicatorReplicaID(id int32) ReplicatorFn {
+	return func(r *replicator) {
+		r.replicaID = id
+	}
 }
 
-type ReplicatorOptionMaxWaitTime int32
+func ReplicatorFetchSize(size int32) ReplicatorFn {
+	return func(r *replicator) {
+		r.fetchSize = size
+	}
+}
 
-func (o ReplicatorOptionMaxWaitTime) modifyReplicator(r *PartitionReplicator) {
-	r.maxWaitTime = int32(o)
+func ReplicatorMinBytes(size int32) ReplicatorFn {
+	return func(r *replicator) {
+		r.minBytes = size
+	}
+}
+
+func ReplicatorMaxWaitTime(time int32) ReplicatorFn {
+	return func(r *replicator) {
+		r.maxWaitTime = time
+	}
 }
