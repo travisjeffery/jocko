@@ -97,8 +97,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	}
 
 	if len(b.serfMembers) != 0 {
-		cluster := []string{"127.0.0.1:7946"}
-		b.serf.Join(cluster, false)
+		b.serf.Join(b.serfMembers, false)
 	}
 
 	if err = b.setupRaft(); err != nil {
