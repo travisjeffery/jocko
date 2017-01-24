@@ -96,8 +96,11 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		return nil, err
 	}
 
+	// bootstrap serf members.
 	if len(b.serfMembers) != 0 {
-		b.serf.Join(b.serfMembers, false)
+		if _, err := b.serf.Join(b.serfMembers, true); err != nil {
+			return nil, err
+		}
 	}
 
 	if err = b.setupRaft(); err != nil {

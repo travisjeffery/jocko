@@ -36,7 +36,9 @@ func (b *Broker) setupSerf(conf *serf.Config, eventCh chan serf.Event, serfSnaps
 			addr := &net.TCPAddr{IP: net.ParseIP(p.IP), Port: p.SerfPort}
 			addrs = append(addrs, addr.String())
 		}
-		s.Join(addrs, true)
+		if _, err := s.Join(addrs, true); err != nil {
+			return nil, err
+		}
 	}
 	return s, nil
 }
