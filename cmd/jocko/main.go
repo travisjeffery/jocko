@@ -31,9 +31,9 @@ func main() {
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
 	store, err := broker.New(*brokerID,
-		broker.OptionDataDir(*logDir),
-		broker.OptionLogDir(*logDir),
-		broker.OptionLogger(logger))
+		broker.DataDir(*logDir),
+		broker.LogDir(*logDir),
+		broker.Logger(logger))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
 		os.Exit(1)

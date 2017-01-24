@@ -42,9 +42,9 @@ func TestBroker_Replicate(t *testing.T) {
 	p, err := s0.Partition("test", 0)
 	assert.NoError(t, err)
 
-	replicator := NewPartitionReplicator(p, 0,
-		ReplicatorOptionMinBytes(5),
-		ReplicatorOptionMaxWaitTime(int32(time.Millisecond*250)))
+	replicator := NewReplicator(p, 0,
+		ReplicatorMinBytes(5),
+		ReplicatorMaxWaitTime(int32(time.Millisecond*250)))
 	assert.NoError(t, err)
 	defer replicator.Close()
 

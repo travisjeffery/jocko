@@ -37,12 +37,12 @@ func TestBroker_Server(t *testing.T) {
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	store, err := broker.New(0,
-		broker.OptionDataDir(dataDir),
-		broker.OptionLogDir(dataDir),
-		broker.OptionBindAddr("127.0.0.1"),
-		broker.OptionPort(8000),
-		broker.OptionRaftPort(8001),
-		broker.OptionLogger(logger))
+		broker.DataDir(dataDir),
+		broker.LogDir(dataDir),
+		broker.BindAddr("127.0.0.1"),
+		broker.Port(8000),
+		broker.RaftPort(8001),
+		broker.Logger(logger))
 	assert.NoError(t, err)
 	defer store.Shutdown()
 

@@ -7,12 +7,12 @@ import (
 
 type replicationManager struct {
 	jocko.Broker
-	replicators map[*jocko.Partition]*PartitionReplicator
+	replicators map[*jocko.Partition]*Replicator
 }
 
 func newReplicationManager() *replicationManager {
 	return &replicationManager{
-		replicators: make(map[*jocko.Partition]*PartitionReplicator),
+		replicators: make(map[*jocko.Partition]*Replicator),
 	}
 }
 
@@ -33,7 +33,7 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, leader int
 	if err := p.TruncateTo(hw); err != nil {
 		return err
 	}
-	r := NewPartitionReplicator(p, rm.ID())
+	r := NewReplicator(p, rm.ID())
 	r.Replicate()
 	rm.replicators[p] = r
 	return nil

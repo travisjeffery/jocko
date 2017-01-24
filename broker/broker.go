@@ -67,7 +67,7 @@ const (
 	serfSnapshot = "serf/snapshot"
 )
 
-func New(id int32, opts ...Option) (*Broker, error) {
+func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	var err error
 	b := &Broker{
 		serfPort:              7946,
@@ -84,7 +84,7 @@ func New(id int32, opts ...Option) (*Broker, error) {
 	}
 
 	for _, o := range opts {
-		o.modifyBroker(b)
+		o(b)
 	}
 
 	serfConfig := serf.DefaultConfig()

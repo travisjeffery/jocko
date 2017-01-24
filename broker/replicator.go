@@ -1,4 +1,4 @@
-// Package replicator provides the PartitionReplicator which fetches
+// Package replicator provides the Replicator which fetches
 // from the partition's leader and produces to a follower thereby
 // replicating the partition.
 
@@ -14,7 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type PartitionReplicator struct {
+type Replicator struct {
 	replicaID           int32
 	partition           *jocko.Partition
 	clientID            string
@@ -27,8 +27,8 @@ type PartitionReplicator struct {
 	done                chan struct{}
 }
 
-func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorOption) *PartitionReplicator {
-	r := &PartitionReplicator{
+func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *Replicator {
+	r := &Replicator{
 		partition: partition,
 		replicaID: replicaID,
 		clientID:  fmt.Sprintf("Replicator-%d", replicaID),
@@ -36,17 +36,17 @@ func NewPartitionReplicator(partition *jocko.Partition, replicaID int32, opts ..
 		msgs:      make(chan []byte, 2),
 	}
 	for _, o := range opts {
-		o.modifyReplicator(r)
+		o(r)
 	}
 	return r
 }
 
-func (r *PartitionReplicator) Replicate() {
+func (r *Replicator) Replicate() {
 	go r.fetchMessages()
 	go r.writeMessages()
 }
 
-func (r *PartitionReplicator) fetchMessages() {
+func (r *Replicator) fetchMessages() {
 	for {
 		select {
 		case <-r.done:
@@ -110,7 +110,7 @@ func (r *PartitionReplicator) fetchMessages() {
 	}
 }
 
-func (r *PartitionReplicator) writeMessages() {
+func (r *Replicator) writeMessages() {
 	for {
 		select {
 		case <-r.done:
@@ -124,7 +124,7 @@ func (r *PartitionReplicator) writeMessages() {
 	}
 }
 
-func (pr *PartitionReplicator) Close() error {
+func (pr *Replicator) Close() error {
 	close(pr.done)
 	return nil
 }
