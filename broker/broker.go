@@ -175,7 +175,7 @@ func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
 	return nil
 }
 
-func (s *Broker) addPartition(partition *jocko.Partition) {
+func (s *Broker) StartReplica(partition *jocko.Partition) error {
 	s.mu.Lock()
 	if v, ok := s.topics[partition.Topic]; ok {
 		s.topics[partition.Topic] = append(v, partition)
@@ -197,18 +197,19 @@ func (s *Broker) addPartition(partition *jocko.Partition) {
 			MaxLogBytes:     -1,
 		})
 		if err != nil {
-			panic(err)
+			return err
 		}
 		if err = commitLog.Init(); err != nil {
-			panic(err)
+			return err
 		}
 		if err = commitLog.Open(); err != nil {
-			panic(err)
+			return err
 		}
 		partition.CommitLog = commitLog
 
 		partition.Conn = s.peers[partition.LeaderID()]
 	}
+	return nil
 }
 
 func (s *Broker) addBroker(broker *jocko.BrokerConn) {
