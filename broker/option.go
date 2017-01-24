@@ -38,6 +38,12 @@ func SerfPort(serfPort int) BrokerFn {
 	}
 }
 
+func SerfMembers(serfMembers []string) BrokerFn {
+	return func(b *Broker) {
+		b.serfMembers = serfMembers
+	}
+}
+
 func BindAddr(bindAddr string) BrokerFn {
 	return func(b *Broker) {
 		b.bindAddr = bindAddr

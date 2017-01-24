@@ -55,6 +55,7 @@ type Broker struct {
 	serfReconcileCh       chan serf.Member
 	serfReconcileInterval time.Duration
 	serfEventCh           chan serf.Event
+	serfMembers           []string
 
 	left         bool
 	shutdownCh   chan struct{}
@@ -93,6 +94,11 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		// b.Shutdown()
 		b.logger.Info("failed to start serf: %s", err)
 		return nil, err
+	}
+
+	if len(b.serfMembers) != 0 {
+		cluster := []string{"127.0.0.1:7946"}
+		b.serf.Join(cluster, false)
 	}
 
 	if err = b.setupRaft(); err != nil {
