@@ -116,7 +116,7 @@ type Broker interface {
 	Partition(topic string, id int32) (*Partition, error)
 	BrokerConn(brokerID int32) *BrokerConn
 	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
-	BecomeFollower(topic string, id int32, leaderID int32) error
+	BecomeFollower(topic string, id int32, command *protocol.PartitionState) error
 	Join(addr ...string) (int, error)
 	Cluster() []*BrokerConn
 	TopicPartitions(topic string) ([]*Partition, error)

@@ -7,34 +7,34 @@ import (
 
 type replicationManager struct {
 	jocko.Broker
-	replicators map[*jocko.Partition]*Replicator
+	replicators map[*jocko.Partition]*replicator
 }
 
 func newReplicationManager() *replicationManager {
 	return &replicationManager{
-		replicators: make(map[*jocko.Partition]*Replicator),
+		replicators: make(map[*jocko.Partition]*replicator),
 	}
 }
 
-func (rm *replicationManager) BecomeFollower(topic string, pid int32, leader int32) error {
+func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *protocol.PartitionState) error {
 	p, err := rm.Partition(topic, pid)
 	if err != nil {
 		return err
 	}
 	// stop replicator to current leader
 	if r, ok := rm.replicators[p]; ok {
-		if err := r.Close(); err != nil {
+		if err := r.close(); err != nil {
 			return err
 		}
 	}
 	delete(rm.replicators, p)
-	p.Leader = leader
+	p.Leader = command.Leader
 	hw := p.HighWatermark()
 	if err := p.TruncateTo(hw); err != nil {
 		return err
 	}
-	r := NewReplicator(p, rm.ID())
-	r.Replicate()
+	r := newReplicator(p, rm.ID())
+	r.replicate()
 	rm.replicators[p] = r
 	return nil
 }
@@ -45,7 +45,7 @@ func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *pro
 		return err
 	}
 	if r, ok := rm.replicators[p]; ok {
-		if err := r.Close(); err != nil {
+		if err := r.close(); err != nil {
 			return err
 		}
 	}

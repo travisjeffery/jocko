@@ -66,28 +66,28 @@ func RaftConfig(raft *raft.Config) BrokerFn {
 	}
 }
 
-type ReplicatorFn func(r *Replicator)
+type ReplicatorFn func(r *replicator)
 
 func ReplicatorReplicaID(id int32) ReplicatorFn {
-	return func(r *Replicator) {
+	return func(r *replicator) {
 		r.replicaID = id
 	}
 }
 
 func ReplicatorFetchSize(size int32) ReplicatorFn {
-	return func(r *Replicator) {
+	return func(r *replicator) {
 		r.fetchSize = size
 	}
 }
 
 func ReplicatorMinBytes(size int32) ReplicatorFn {
-	return func(r *Replicator) {
+	return func(r *replicator) {
 		r.minBytes = size
 	}
 }
 
 func ReplicatorMaxWaitTime(time int32) ReplicatorFn {
-	return func(r *Replicator) {
+	return func(r *replicator) {
 		r.maxWaitTime = time
 	}
 }

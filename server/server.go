@@ -268,7 +268,7 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 			}
 		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {
 			// is command asking this broker to follow leader who it isn't a leader of already
-			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p.Leader); err != nil {
+			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != nil {
 				return err
 			}
 		}
