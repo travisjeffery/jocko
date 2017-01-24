@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/tj/go-gracefully"
@@ -20,7 +19,7 @@ var (
 	raftAddr    = kingpin.Flag("raftaddr", "Address for Raft to bind on").String()
 	raftPort    = kingpin.Flag("raftport", "Port for Raft to bind on").Int()
 	serfPort    = kingpin.Flag("serfport", "Port for Serf to bind on").Default("7946").Int()
-	serfMembers = kingpin.Flag("serfmembers", "List of existing serf members").String()
+	serfMembers = kingpin.Flag("serfmembers", "List of existing serf members").Strings()
 	brokerID    = kingpin.Flag("id", "Broker ID").Int32()
 	debugLogs   = kingpin.Flag("debug", "Enable debug logs").Default("false").Bool()
 )
@@ -41,7 +40,7 @@ func main() {
 		broker.BindAddr(*raftAddr),
 		broker.RaftPort(*raftPort),
 		broker.SerfPort(*serfPort),
-		broker.SerfMembers(strings.Split(*serfMembers, ",")),
+		broker.SerfMembers(*serfMembers),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
