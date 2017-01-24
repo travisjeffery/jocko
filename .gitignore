@@ -2,3 +2,9 @@ peers.json
 store.db
 vendor/*
 !vendor/vendor.json
+.idea
+*.coverprofile
+projectFilesBackup
+coverage.txt
+
+
