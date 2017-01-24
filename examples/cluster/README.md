@@ -1,11 +1,11 @@
-# Quick start
+# Jocko cluster example
 
-This will start up a local three node cluster.
+This will start a local three node cluster.
 
 ## Build
 
 ```bash
-$ go get
+$ go get github.com/travisjeffery/jocko
 $ cd $GOPATH/src/github.com/travisjeffery/jocko/cmd/jocko
 $ go build
 ```
@@ -21,6 +21,7 @@ $ ./jocko --debug \
           --raftport=8001 \
           --serfport=7946 \
           --id=1
+          
 $ ./jocko --debug \
           --logdir="/tmp/jocko2" \
           --tcpaddr=127.0.0.1:9002 \
@@ -30,6 +31,7 @@ $ ./jocko --debug \
           --serfport=7947 \
           --serfmembers=127.0.0.1:7946 \
           --id=2
+          
 $ ./jocko --debug \
           --logdir="/tmp/jocko3" \
           --tcpaddr=127.0.0.1:9003 \
