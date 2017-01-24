@@ -159,11 +159,11 @@ func (s *Broker) Partition(topic string, partition int32) (*jocko.Partition, err
 }
 
 func (s *Broker) AddPartition(partition *jocko.Partition) error {
-	return s.apply(addPartition, partition)
+	return s.raftApply(addPartition, partition)
 }
 
 func (s *Broker) AddBroker(broker jocko.BrokerConn) error {
-	return s.apply(addBroker, broker)
+	return s.raftApply(addBroker, broker)
 }
 
 func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
@@ -278,7 +278,7 @@ func (s *Broker) DeleteTopics(topics ...string) error {
 }
 
 func (s *Broker) DeleteTopic(topic string) error {
-	return s.apply(deleteTopic, &jocko.Partition{Topic: topic})
+	return s.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
 }
 
 func (s *Broker) deleteTopic(tp *jocko.Partition) error {
