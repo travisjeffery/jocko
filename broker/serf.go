@@ -102,12 +102,12 @@ func (b *Broker) localMemberEvent(me serf.MemberEvent) {
 // nodeFailed is used to handle fail events on the serf cluster.
 func (b *Broker) nodeFailed(me serf.MemberEvent) {
 	for _, m := range me.Members {
-		b.logger.Info("removing peer: %s", me)
-		b.peerLock.Lock()
 		peer, err := brokerConn(m)
 		if err != nil {
 			continue
 		}
+		b.logger.Info("removing peer: %s", me)
+		b.peerLock.Lock()
 		delete(b.peers, peer.ID)
 		b.peerLock.Unlock()
 	}
