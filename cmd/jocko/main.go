@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -33,6 +34,11 @@ func main() {
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
+	addr, err := net.ResolveTCPAddr("tcp", *tcpAddr)
+	if err != nil {
+		panic(err)
+	}
+
 	store, err := broker.New(*brokerID,
 		broker.DataDir(*logDir),
 		broker.LogDir(*logDir),
@@ -41,6 +47,7 @@ func main() {
 		broker.RaftPort(*raftPort),
 		broker.SerfPort(*serfPort),
 		broker.SerfMembers(*serfMembers),
+		broker.Port(addr.Port),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
