@@ -139,22 +139,22 @@ func (b *Broker) Cluster() []*jocko.BrokerConn {
 }
 
 // IsController checks if this broker is the cluster controller
-func (s *Broker) IsController() bool {
-	return s.raft.State() == raft.Leader
+func (b *Broker) IsController() bool {
+	return b.raft.State() == raft.Leader
 }
 
-func (s *Broker) ControllerID() string {
-	return s.raft.Leader()
+func (b *Broker) ControllerID() string {
+	return b.raft.Leader()
 }
 
-func (s *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.topics[topic], nil
+func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.topics[topic], nil
 }
 
-func (s *Broker) Partition(topic string, partition int32) (*jocko.Partition, error) {
-	found, err := s.TopicPartitions(topic)
+func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, error) {
+	found, err := b.TopicPartitions(topic)
 	if err != nil {
 		return nil, err
 	}
@@ -166,16 +166,16 @@ func (s *Broker) Partition(topic string, partition int32) (*jocko.Partition, err
 	return nil, errors.New("partition not found")
 }
 
-func (s *Broker) AddPartition(partition *jocko.Partition) error {
-	return s.raftApply(addPartition, partition)
+func (b *Broker) AddPartition(partition *jocko.Partition) error {
+	return b.raftApply(addPartition, partition)
 }
 
-func (s *Broker) AddBroker(broker jocko.BrokerConn) error {
-	return s.raftApply(addBroker, broker)
+func (b *Broker) AddBroker(broker jocko.BrokerConn) error {
+	return b.raftApply(addBroker, broker)
 }
 
-func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
-	for _, b := range s.Cluster() {
+func (b *Broker) BrokerConn(id int32) *jocko.BrokerConn {
+	for _, b := range b.Cluster() {
 		if b.ID == id {
 			return b
 		}
@@ -183,24 +183,24 @@ func (s *Broker) BrokerConn(id int32) *jocko.BrokerConn {
 	return nil
 }
 
-func (s *Broker) StartReplica(partition *jocko.Partition) error {
-	s.mu.Lock()
-	if v, ok := s.topics[partition.Topic]; ok {
-		s.topics[partition.Topic] = append(v, partition)
+func (b *Broker) StartReplica(partition *jocko.Partition) error {
+	b.mu.Lock()
+	if v, ok := b.topics[partition.Topic]; ok {
+		b.topics[partition.Topic] = append(v, partition)
 	} else {
-		s.topics[partition.Topic] = []*jocko.Partition{partition}
+		b.topics[partition.Topic] = []*jocko.Partition{partition}
 	}
-	s.mu.Unlock()
-	isLeader := partition.Leader == s.id
+	b.mu.Unlock()
+	isLeader := partition.Leader == b.id
 	isFollower := false
 	for _, r := range partition.Replicas {
-		if r == s.id {
+		if r == b.id {
 			isFollower = true
 		}
 	}
 	if isLeader || isFollower {
 		commitLog, err := commitlog.New(commitlog.Options{
-			Path:            path.Join(s.logDir, partition.String()),
+			Path:            path.Join(b.logDir, partition.String()),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
 		})
@@ -215,23 +215,23 @@ func (s *Broker) StartReplica(partition *jocko.Partition) error {
 		}
 		partition.CommitLog = commitLog
 
-		partition.Conn = s.peers[partition.LeaderID()]
+		partition.Conn = b.peers[partition.LeaderID()]
 	}
 	return nil
 }
 
-func (s *Broker) addBroker(broker *jocko.BrokerConn) {
+func (b *Broker) addBroker(broker *jocko.BrokerConn) {
 	// TODO: remove this
-	s.peerLock.Lock()
-	s.peers[broker.ID] = broker
-	s.peerLock.Unlock()
+	b.peerLock.Lock()
+	b.peers[broker.ID] = broker
+	b.peerLock.Unlock()
 }
 
-func (s *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	result := false
-	for _, p := range s.topics[topic] {
+	for _, p := range b.topics[topic] {
 		if p.ID == pid {
 			result = lid == p.LeaderID()
 			break
@@ -240,9 +240,9 @@ func (s *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 	return result
 }
 
-func (s *Broker) Topics() []string {
+func (b *Broker) Topics() []string {
 	topics := []string{}
-	for k := range s.topics {
+	for k := range b.topics {
 		topics = append(topics, k)
 	}
 	return topics
@@ -250,13 +250,13 @@ func (s *Broker) Topics() []string {
 
 // Join is used to have the broker join the gossip ring
 // The target address should be another broker listening on the Serf address
-func (s *Broker) Join(addrs ...string) (int, error) {
-	return s.serf.Join(addrs, true)
+func (b *Broker) Join(addrs ...string) (int, error) {
+	return b.serf.Join(addrs, true)
 }
 
 // CreateTopic creates topic with partitions count.
-func (s *Broker) CreateTopic(topic string, partitions int32) error {
-	for _, t := range s.Topics() {
+func (b *Broker) CreateTopic(topic string, partitions int32) error {
+	for _, t := range b.Topics() {
 		if t == topic {
 			return ErrTopicExists
 		}
@@ -269,7 +269,7 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 			PreferredLeader: i,
 			Replicas:        []int32{i},
 		}
-		if err := s.AddPartition(partition); err != nil {
+		if err := b.AddPartition(partition); err != nil {
 			return err
 		}
 	}
@@ -277,21 +277,21 @@ func (s *Broker) CreateTopic(topic string, partitions int32) error {
 }
 
 // DeleteTopics creates topic with partitions count.
-func (s *Broker) DeleteTopics(topics ...string) error {
+func (b *Broker) DeleteTopics(topics ...string) error {
 	for _, topic := range topics {
-		if err := s.DeleteTopic(topic); err != nil {
+		if err := b.DeleteTopic(topic); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Broker) DeleteTopic(topic string) error {
-	return s.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
+func (b *Broker) DeleteTopic(topic string) error {
+	return b.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
 }
 
-func (s *Broker) deleteTopic(tp *jocko.Partition) error {
-	partitions, err := s.TopicPartitions(tp.Topic)
+func (b *Broker) deleteTopic(tp *jocko.Partition) error {
+	partitions, err := b.TopicPartitions(tp.Topic)
 	if err != nil {
 		return err
 	}
@@ -300,9 +300,9 @@ func (s *Broker) deleteTopic(tp *jocko.Partition) error {
 			return err
 		}
 	}
-	s.mu.Lock()
-	delete(s.topics, tp.Topic)
-	s.mu.Unlock()
+	b.mu.Lock()
+	delete(b.topics, tp.Topic)
+	b.mu.Unlock()
 	return nil
 }
 
