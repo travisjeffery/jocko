@@ -324,14 +324,14 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, req *protocol.MetadataRequest) error {
-	brokers := make([]*protocol.Broker, len(s.broker.Cluster()))
+	brokers := make([]*protocol.Broker, 0, len(s.broker.Cluster()))
 	topics := make([]*protocol.TopicMetadata, len(req.Topics))
-	for i, b := range s.broker.Cluster() {
-		brokers[i] = &protocol.Broker{
+	for _, b := range s.broker.Cluster() {
+		brokers = append(brokers, &protocol.Broker{
 			NodeID: b.ID,
 			Host:   b.IP,
 			Port:   int32(b.Port),
-		}
+		})
 	}
 	for i, t := range req.Topics {
 		partitions, err := s.broker.TopicPartitions(t)

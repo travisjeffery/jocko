@@ -131,9 +131,12 @@ func (b *Broker) Port() int {
 }
 
 func (b *Broker) Cluster() []*jocko.BrokerConn {
-	cluster := make([]*jocko.BrokerConn, len(b.peers))
-	for i, v := range b.peers {
-		cluster[i] = v
+	b.peerLock.Lock()
+	defer b.peerLock.Unlock()
+
+	cluster := make([]*jocko.BrokerConn, 0, len(b.peers))
+	for _, v := range b.peers {
+		cluster = append(cluster, v)
 	}
 	return cluster
 }
@@ -215,7 +218,9 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 		}
 		partition.CommitLog = commitLog
 
+		b.peerLock.Lock()
 		partition.Conn = b.peers[partition.LeaderID()]
+		b.peerLock.Unlock()
 	}
 	return nil
 }
