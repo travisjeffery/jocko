@@ -5,7 +5,7 @@ This will start a local three node cluster.
 ## Build
 
 ```bash
-$ go get github.com/travisjeffery/jocko
+$ go get github.com/travisjeffery/jocko/...
 $ cd $GOPATH/src/github.com/travisjeffery/jocko/cmd/jocko
 $ go build
 ```
