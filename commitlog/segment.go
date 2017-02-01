@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/protocol"
 )
 
 const (
@@ -82,13 +81,13 @@ func (s *Segment) SetupIndex(path string) (err error) {
 		if err != nil {
 			return err
 		}
-		s.NextOffset = int64(protocol.Encoding.Uint64(b.Bytes()[0:8]))
+		s.NextOffset = int64(Encoding.Uint64(b.Bytes()[0:8]))
 
 		_, err = io.CopyN(b, s.log, 4)
 		if err != nil {
 			return err
 		}
-		size := int64(protocol.Encoding.Uint32(b.Bytes()[8:12]))
+		size := int64(Encoding.Uint32(b.Bytes()[8:12]))
 
 		_, err = io.CopyN(b, s.log, size)
 		if err != nil {
