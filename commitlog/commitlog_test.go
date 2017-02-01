@@ -2,6 +2,7 @@ package commitlog
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"os"
@@ -129,6 +130,7 @@ func setup(t *testing.T) *CommitLog {
 		Path:            path,
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
+		Encoding:        binary.BigEndian,
 	}
 	l, err := New(opts)
 	assert.NoError(t, err)

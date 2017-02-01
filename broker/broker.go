@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -206,6 +207,7 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 			Path:            path.Join(b.logDir, partition.String()),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
+			Encoding:        protocol.Encoding,
 		})
 		if err != nil {
 			return err
