@@ -2,7 +2,6 @@ package commitlog
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -31,7 +30,7 @@ type Segment struct {
 	sync.Mutex
 }
 
-func NewSegment(path string, baseOffset int64, maxBytes int64, encoding binary.ByteOrder) (*Segment, error) {
+func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error) {
 	logPath := filepath.Join(path, fmt.Sprintf(logNameFormat, baseOffset))
 	log, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -46,7 +45,7 @@ func NewSegment(path string, baseOffset int64, maxBytes int64, encoding binary.B
 		BaseOffset: baseOffset,
 		NextOffset: baseOffset,
 	}
-	err = s.SetupIndex(path, encoding)
+	err = s.SetupIndex(path)
 	if err == io.EOF {
 		return s, nil
 	}
@@ -54,7 +53,7 @@ func NewSegment(path string, baseOffset int64, maxBytes int64, encoding binary.B
 	return s, err
 }
 
-func (s *Segment) SetupIndex(path string, encoding binary.ByteOrder) (err error) {
+func (s *Segment) SetupIndex(path string) (err error) {
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, s.BaseOffset))
 	s.Index, err = newIndex(options{
 		path:       indexPath,
@@ -82,13 +81,13 @@ func (s *Segment) SetupIndex(path string, encoding binary.ByteOrder) (err error)
 		if err != nil {
 			return err
 		}
-		s.NextOffset = int64(encoding.Uint64(b.Bytes()[0:8]))
+		s.NextOffset = int64(Encoding.Uint64(b.Bytes()[0:8]))
 
 		_, err = io.CopyN(b, s.log, 4)
 		if err != nil {
 			return err
 		}
-		size := int64(encoding.Uint32(b.Bytes()[8:12]))
+		size := int64(Encoding.Uint32(b.Bytes()[8:12]))
 
 		_, err = io.CopyN(b, s.log, size)
 		if err != nil {

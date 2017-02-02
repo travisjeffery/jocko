@@ -15,6 +15,7 @@ import (
 
 var (
 	ErrSegmentNotFound = errors.New("segment not found")
+	Encoding           = binary.BigEndian
 )
 
 const (
@@ -35,7 +36,6 @@ type Options struct {
 	Path            string
 	MaxSegmentBytes int64
 	MaxLogBytes     int64
-	Encoding        binary.ByteOrder
 }
 
 func New(opts Options) (*CommitLog, error) {
@@ -84,7 +84,7 @@ func (l *CommitLog) Open() error {
 		} else if strings.HasSuffix(file.Name(), LogFileSuffix) {
 			offsetStr := strings.TrimSuffix(file.Name(), LogFileSuffix)
 			baseOffset, err := strconv.Atoi(offsetStr)
-			segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes, l.Encoding)
+			segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes)
 			if err != nil {
 				return err
 			}
@@ -92,7 +92,7 @@ func (l *CommitLog) Open() error {
 		}
 	}
 	if len(l.segments) == 0 {
-		segment, err := NewSegment(l.Path, 0, l.MaxSegmentBytes, l.Encoding)
+		segment, err := NewSegment(l.Path, 0, l.MaxSegmentBytes)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (l *CommitLog) checkSplit() bool {
 }
 
 func (l *CommitLog) split() error {
-	segment, err := NewSegment(l.Path, l.NewestOffset(), l.MaxSegmentBytes, l.Encoding)
+	segment, err := NewSegment(l.Path, l.NewestOffset(), l.MaxSegmentBytes)
 	if err != nil {
 		return err
 	}
