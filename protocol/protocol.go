@@ -3,11 +3,9 @@ package protocol
 import (
 	"encoding/binary"
 	"io"
-
-	"github.com/travisjeffery/jocko/commitlog"
 )
 
-var Encoding = commitlog.Encoding
+var Encoding = binary.BigEndian
 
 func Read(r io.Reader, data interface{}) error {
 	return binary.Read(r, Encoding, data)
