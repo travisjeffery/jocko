@@ -96,7 +96,7 @@ func newIndex(opts options) (idx *index, err error) {
 func (idx *index) WriteEntry(entry Entry) (err error) {
 	b := new(bytes.Buffer)
 	relEntry := newRelEntry(entry, idx.baseOffset)
-	if err = binary.Write(b, binary.BigEndian, relEntry); err != nil {
+	if err = binary.Write(b, Encoding, relEntry); err != nil {
 		return errors.Wrap(err, "binary write failed")
 	}
 	idx.WriteAt(b.Bytes(), idx.position)
@@ -111,7 +111,7 @@ func (idx *index) ReadEntry(e *Entry, offset int64) error {
 	idx.ReadAt(p, offset)
 	b := bytes.NewReader(p)
 	rel := &relEntry{}
-	err := binary.Read(b, binary.BigEndian, rel)
+	err := binary.Read(b, Encoding, rel)
 	if err != nil {
 		return errors.Wrap(err, "binary read failed")
 	}
