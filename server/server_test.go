@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -49,7 +50,7 @@ func TestBroker_Server(t *testing.T) {
 	_, err = store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
 
-	s := New(":8000", store, logger)
+	s := server.New(":8000", store, logger)
 	assert.NotNil(t, s)
 	assert.NoError(t, s.Start())
 
