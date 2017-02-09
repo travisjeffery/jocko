@@ -15,7 +15,7 @@ import (
 var (
 	logDir      = kingpin.Flag("logdir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
 	raftAddr    = kingpin.Flag("raftaddr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
-	brokerAddr  = kingpin.Flag("serveraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
+	brokerAddr  = kingpin.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
 	serfAddr    = kingpin.Flag("serfaddr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
 	serfMembers = kingpin.Flag("serfmembers", "List of existing Serf members").Strings()
 	brokerID    = kingpin.Flag("id", "Broker ID").Int32()
