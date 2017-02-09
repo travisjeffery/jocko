@@ -194,9 +194,8 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 	store, err := broker.New(0,
 		broker.DataDir(dataDir),
 		broker.LogDir(dataDir),
-		broker.BindAddr("127.0.0.1"),
+		broker.BindAddr("127.0.0.1:8001"),
 		broker.Port(8000),
-		broker.RaftPort(8001),
 		broker.Logger(logger))
 	assert.NoError(t, err)
 

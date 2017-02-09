@@ -41,7 +41,10 @@ func newCommand(cmd CmdType, data interface{}) (c command, err error) {
 
 // setupRaft is used to configure and create the raft node
 func (b *Broker) setupRaft() (err error) {
-	addr := &net.TCPAddr{IP: net.ParseIP(b.bindAddr), Port: b.raftPort}
+	addr, err := net.ResolveTCPAddr("tcp", b.bindAddr)
+	if err != nil {
+		return errors.Wrap(err, "resolving raft addr failed")
+	}
 
 	if b.raftTransport == nil {
 		b.raftTransport, err = raft.NewTCPTransport(addr.String(), nil, 3, timeout, os.Stderr)

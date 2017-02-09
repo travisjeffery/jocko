@@ -42,7 +42,6 @@ type Broker struct {
 	devDisableBootstrap bool
 
 	raft          *raft.Raft
-	raftPort      int
 	raftPeers     raft.PeerStore
 	raftTransport *raft.NetworkTransport
 	raftStore     *raftboltdb.BoltStore
@@ -50,7 +49,6 @@ type Broker struct {
 	raftConfig    *raft.Config
 
 	serf                  *serf.Serf
-	serfPort              int
 	serfAddr              string
 	serfReconcileCh       chan serf.Member
 	serfReconcileInterval time.Duration
@@ -71,8 +69,7 @@ const (
 func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	var err error
 	b := &Broker{
-		serfPort:              7946,
-		serfAddr:              "0.0.0.0",
+		serfAddr:              "0.0.0.0:7946",
 		raftConfig:            raft.DefaultConfig(),
 		replicationManager:    newReplicationManager(),
 		peers:                 make(map[int32]*jocko.BrokerConn),

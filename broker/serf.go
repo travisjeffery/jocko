@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/serf/serf"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -18,12 +19,20 @@ const (
 func (b *Broker) setupSerf(conf *serf.Config, eventCh chan serf.Event, serfSnapshot string) (*serf.Serf, error) {
 	conf.Init()
 	id := fmt.Sprintf("jocko-%03d", b.id)
-	conf.MemberlistConfig.BindAddr = b.serfAddr
-	conf.MemberlistConfig.BindPort = b.serfPort
+	serfaddr, err := net.ResolveTCPAddr("tcp", b.serfAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to resolve serf address")
+	}
+	conf.MemberlistConfig.BindAddr = serfaddr.IP.String()
+	conf.MemberlistConfig.BindPort = serfaddr.Port
 	conf.NodeName = id
 	conf.Tags["id"] = strconv.Itoa(int(b.id))
 	conf.Tags["port"] = strconv.Itoa(b.port)
-	conf.Tags["raft_port"] = strconv.Itoa(b.raftPort)
+	raftaddr, err := net.ResolveTCPAddr("tcp", b.bindAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to resolve raft address")
+	}
+	conf.Tags["raft_port"] = strconv.Itoa(raftaddr.Port)
 	conf.EventCh = eventCh
 	conf.EnableNameConflictResolution = false
 	s, err := serf.Create(conf)

@@ -26,15 +26,9 @@ func Port(port int) BrokerFn {
 	}
 }
 
-func RaftPort(raftPort int) BrokerFn {
+func SerfAddr(serfAddr string) BrokerFn {
 	return func(b *Broker) {
-		b.raftPort = raftPort
-	}
-}
-
-func SerfPort(serfPort int) BrokerFn {
-	return func(b *Broker) {
-		b.serfPort = serfPort
+		b.serfAddr = serfAddr
 	}
 }
 
