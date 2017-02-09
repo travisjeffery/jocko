@@ -20,33 +20,27 @@ func LogDir(logDir string) BrokerFn {
 	}
 }
 
-func Port(port int) BrokerFn {
+func RaftAddr(raftAddr string) BrokerFn {
 	return func(b *Broker) {
-		b.port = port
+		b.raftAddr = raftAddr
 	}
 }
 
-func RaftPort(raftPort int) BrokerFn {
+func SerfAddr(serfAddr string) BrokerFn {
 	return func(b *Broker) {
-		b.raftPort = raftPort
+		b.serfAddr = serfAddr
 	}
 }
 
-func SerfPort(serfPort int) BrokerFn {
+func BrokerAddr(brokerAddr string) BrokerFn {
 	return func(b *Broker) {
-		b.serfPort = serfPort
+		b.brokerAddr = brokerAddr
 	}
 }
 
 func SerfMembers(serfMembers []string) BrokerFn {
 	return func(b *Broker) {
 		b.serfMembers = serfMembers
-	}
-}
-
-func BindAddr(bindAddr string) BrokerFn {
-	return func(b *Broker) {
-		b.bindAddr = bindAddr
 	}
 }
 

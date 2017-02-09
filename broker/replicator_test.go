@@ -3,7 +3,6 @@ package broker
 import (
 	"bytes"
 	"io/ioutil"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -23,8 +22,7 @@ func TestBroker_Replicate(t *testing.T) {
 
 	s0.WaitForLeader(10 * time.Second)
 
-	addr := &net.TCPAddr{IP: net.ParseIP(s0.bindAddr), Port: s0.port}
-	srv := server.New(addr.String(), s0, logger)
+	srv := server.New(s0.brokerAddr, s0, logger)
 	err := srv.Start()
 	assert.NoError(t, err)
 

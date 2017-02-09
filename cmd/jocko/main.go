@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -15,11 +14,9 @@ import (
 
 var (
 	logDir      = kingpin.Flag("logdir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
-	tcpAddr     = kingpin.Flag("tcpaddr", "HTTP Address to listen on").String()
-	raftDir     = kingpin.Flag("raftdir", "Directory for Raft to store data").String()
-	raftAddr    = kingpin.Flag("raftaddr", "Address for Raft to bind on").String()
-	raftPort    = kingpin.Flag("raftport", "Port for Raft to bind on").Int()
-	serfPort    = kingpin.Flag("serfport", "Port for Serf to bind on").Default("7946").Int()
+	raftAddr    = kingpin.Flag("raftaddr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
+	brokerAddr  = kingpin.Flag("serveraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
+	serfAddr    = kingpin.Flag("serfaddr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
 	serfMembers = kingpin.Flag("serfmembers", "List of existing Serf members").Strings()
 	brokerID    = kingpin.Flag("id", "Broker ID").Int32()
 	debugLogs   = kingpin.Flag("debug", "Enable debug logs").Default("false").Bool()
@@ -34,26 +31,20 @@ func main() {
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
-	addr, err := net.ResolveTCPAddr("tcp", *tcpAddr)
-	if err != nil {
-		panic(err)
-	}
-
 	store, err := broker.New(*brokerID,
 		broker.DataDir(*logDir),
 		broker.LogDir(*logDir),
 		broker.Logger(logger),
-		broker.BindAddr(*raftAddr),
-		broker.RaftPort(*raftPort),
-		broker.SerfPort(*serfPort),
+		broker.BrokerAddr(*brokerAddr),
+		broker.RaftAddr(*raftAddr),
+		broker.SerfAddr(*serfAddr),
 		broker.SerfMembers(*serfMembers),
-		broker.Port(addr.Port),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
 		os.Exit(1)
 	}
-	srv := server.New(*tcpAddr, store, logger)
+	srv := server.New(*brokerAddr, store, logger)
 	if err := srv.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)

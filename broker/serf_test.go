@@ -128,10 +128,9 @@ func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 	opts = append(opts, []BrokerFn{
 		DataDir(filepath.Join(dataDir, idStr)),
 		LogDir(filepath.Join(dataDir, idStr)),
-		BindAddr("127.0.0.1"),
-		Port(getPort()),
-		SerfPort(getSerfPort()),
-		RaftPort(getRaftPort()),
+		BrokerAddr(getBrokerAddr()),
+		SerfAddr(getSerfAddr()),
+		RaftAddr(getRaftAddr()),
 		Logger(logger),
 		RaftConfig(raftConf),
 	}...)
@@ -144,25 +143,24 @@ func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 	return broker
 }
 
-func getRaftPort() int {
-	raftPort++
-	return raftPort
-}
-
-func getSerfPort() int {
-	serfPort++
-	return serfPort
-}
-
-func getPort() int {
+func getBrokerAddr() string {
 	port++
-	return port
+	return fmt.Sprintf("0.0.0.0:%d", port)
+}
+
+func getRaftAddr() string {
+	raftPort++
+	return fmt.Sprintf("127.0.0.1:%d", raftPort)
+}
+
+func getSerfAddr() string {
+	serfPort++
+	return fmt.Sprintf("0.0.0.0:%d", serfPort)
 }
 
 func testJoin(t *testing.T, s0 *Broker, other ...*Broker) {
-	addr := fmt.Sprintf("127.0.0.1:%d", s0.serfPort)
 	for _, s1 := range other {
-		num, err := s1.Join(addr)
+		num, err := s1.Join(s0.serfAddr)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, num)
 	}

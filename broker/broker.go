@@ -1,7 +1,9 @@
 package broker
 
 import (
+	"net"
 	"path"
+	"strconv"
 	"sync"
 	"time"
 
@@ -37,12 +39,12 @@ type Broker struct {
 	peerLock sync.Mutex
 
 	dataDir             string
-	bindAddr            string
+	brokerAddr          string
 	logDir              string
 	devDisableBootstrap bool
 
 	raft          *raft.Raft
-	raftPort      int
+	raftAddr      string
 	raftPeers     raft.PeerStore
 	raftTransport *raft.NetworkTransport
 	raftStore     *raftboltdb.BoltStore
@@ -50,7 +52,6 @@ type Broker struct {
 	raftConfig    *raft.Config
 
 	serf                  *serf.Serf
-	serfPort              int
 	serfAddr              string
 	serfReconcileCh       chan serf.Member
 	serfReconcileInterval time.Duration
@@ -71,8 +72,6 @@ const (
 func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	var err error
 	b := &Broker{
-		serfPort:              7946,
-		serfAddr:              "0.0.0.0",
 		raftConfig:            raft.DefaultConfig(),
 		replicationManager:    newReplicationManager(),
 		peers:                 make(map[int32]*jocko.BrokerConn),
@@ -87,6 +86,19 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	for _, o := range opts {
 		o(b)
 	}
+
+	host, strPort, err := net.SplitHostPort(b.brokerAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return nil, err
+	}
+
+	b.host = host
+	b.port = port
 
 	serfConfig := serf.DefaultConfig()
 	b.serf, err = b.setupSerf(serfConfig, b.serfEventCh, serfSnapshot)

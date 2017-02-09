@@ -17,13 +17,29 @@ const (
 // setupSerf is used to configure and create the serf instance
 func (b *Broker) setupSerf(conf *serf.Config, eventCh chan serf.Event, serfSnapshot string) (*serf.Serf, error) {
 	conf.Init()
+
+	addr, strPort, err := net.SplitHostPort(b.serfAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return nil, err
+	}
+
+	_, strRaftPort, err := net.SplitHostPort(b.raftAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	id := fmt.Sprintf("jocko-%03d", b.id)
-	conf.MemberlistConfig.BindAddr = b.serfAddr
-	conf.MemberlistConfig.BindPort = b.serfPort
+	conf.MemberlistConfig.BindAddr = addr
+	conf.MemberlistConfig.BindPort = port
 	conf.NodeName = id
 	conf.Tags["id"] = strconv.Itoa(int(b.id))
 	conf.Tags["port"] = strconv.Itoa(b.port)
-	conf.Tags["raft_port"] = strconv.Itoa(b.raftPort)
+	conf.Tags["raft_port"] = strRaftPort
 	conf.EventCh = eventCh
 	conf.EnableNameConflictResolution = false
 	s, err := serf.Create(conf)
