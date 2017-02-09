@@ -128,10 +128,9 @@ func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 	opts = append(opts, []BrokerFn{
 		DataDir(filepath.Join(dataDir, idStr)),
 		LogDir(filepath.Join(dataDir, idStr)),
-		BindAddr("127.0.0.1"),
+		BindAddr("127.0.0.1:" + strconv.Itoa(getRaftPort())),
 		Port(getPort()),
-		SerfPort(getSerfPort()),
-		RaftPort(getRaftPort()),
+		SerfAddr("127.0.0.1:" + strconv.Itoa(getSerfPort())),
 		Logger(logger),
 		RaftConfig(raftConf),
 	}...)
@@ -160,9 +159,8 @@ func getPort() int {
 }
 
 func testJoin(t *testing.T, s0 *Broker, other ...*Broker) {
-	addr := fmt.Sprintf("127.0.0.1:%d", s0.serfPort)
 	for _, s1 := range other {
-		num, err := s1.Join(addr)
+		num, err := s1.Join(s0.serfAddr)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, num)
 	}

@@ -23,9 +23,10 @@ func TestBroker_Replicate(t *testing.T) {
 
 	s0.WaitForLeader(10 * time.Second)
 
-	addr := &net.TCPAddr{IP: net.ParseIP(s0.bindAddr), Port: s0.port}
+	addr, err := net.ResolveTCPAddr("tcp", s0.bindAddr)
+	assert.NoError(t, err)
 	srv := server.New(addr.String(), s0, logger)
-	err := srv.Start()
+	err = srv.Start()
 	assert.NoError(t, err)
 
 	tp := &jocko.Partition{
