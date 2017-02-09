@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
@@ -22,17 +23,170 @@ var (
 	dataDir string
 )
 
+const (
+	topic         = "test_topic"
+	messageCount  = 15
+	clientID      = "test_client"
+	numPartitions = int32(1)
+)
+
 func init() {
 	dataDir, _ = ioutil.TempDir("", "server_test")
 }
 
-const (
-	clientID = "test_client"
-)
+func TestBroker(t *testing.T) {
+	conn, teardown := setup(t)
 
-func TestBroker_Server(t *testing.T) {
+	t.Run("Server", func(t *testing.T) {
+		buf := new(bytes.Buffer)
+		var header protocol.Response
+		var body protocol.Body
+
+		body = &protocol.MetadataRequest{
+			Topics: []string{"test_topic"},
+		}
+		var req protocol.Encoder = &protocol.Request{
+			CorrelationID: rand.Int31(),
+			ClientID:      clientID,
+			Body:          body,
+		}
+		b, err := protocol.Encode(req)
+		assert.NoError(t, err)
+
+		_, err = conn.Write(b)
+		assert.NoError(t, err)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, 8)
+		assert.NoError(t, err)
+		protocol.Decode(buf.Bytes(), &header)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, int64(header.Size-4))
+		assert.NoError(t, err)
+
+		metadataResponse := &protocol.MetadataResponse{}
+		err = protocol.Decode(buf.Bytes(), metadataResponse)
+		assert.NoError(t, err)
+
+		assert.Equal(t, 1, len(metadataResponse.Brokers))
+		assert.Equal(t, "test_topic", metadataResponse.TopicMetadata[0].Topic)
+
+		m0 := commitlog.NewMessage([]byte("Hello world!"))
+		ms := commitlog.NewMessageSet(0, m0)
+		body = &protocol.ProduceRequest{
+			TopicData: []*protocol.TopicData{{
+				Topic: "test_topic",
+				Data: []*protocol.Data{{
+					Partition: 0,
+					RecordSet: ms,
+				}},
+			}},
+		}
+		req = &protocol.Request{
+			CorrelationID: rand.Int31(),
+			ClientID:      clientID,
+			Body:          body,
+		}
+		b, err = protocol.Encode(req)
+		assert.NoError(t, err)
+		_, err = conn.Write(b)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, 8)
+		assert.NoError(t, err)
+		protocol.Decode(buf.Bytes(), &header)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, int64(header.Size-4))
+		produceResponse := &protocol.ProduceResponses{}
+		err = protocol.Decode(buf.Bytes(), produceResponse)
+		assert.NoError(t, err)
+
+		assert.Equal(t, req.(*protocol.Request).CorrelationID, header.CorrelationID)
+		assert.Equal(t, "test_topic", produceResponse.Responses[0].Topic)
+		assert.Equal(t, protocol.ErrNone, produceResponse.Responses[0].PartitionResponses[0].ErrorCode)
+		assert.NotEqual(t, 0, produceResponse.Responses[0].PartitionResponses[0].Timestamp)
+
+		body = &protocol.FetchRequest{
+			MinBytes: 5,
+			Topics: []*protocol.FetchTopic{{
+				Topic: "test_topic",
+				Partitions: []*protocol.FetchPartition{{
+					Partition:   int32(0),
+					FetchOffset: int64(0),
+					MaxBytes:    int32(5000),
+				}},
+			}},
+		}
+		req = &protocol.Request{
+			CorrelationID: rand.Int31(),
+			ClientID:      clientID,
+			Body:          body,
+		}
+		b, err = protocol.Encode(req)
+		assert.NoError(t, err)
+		_, err = conn.Write(b)
+		assert.NoError(t, err)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, 8)
+		assert.NoError(t, err)
+		err = protocol.Decode(buf.Bytes(), &header)
+		assert.NoError(t, err)
+
+		buf.Reset()
+		_, err = io.CopyN(buf, conn, int64(header.Size-4))
+		fetchResponse := &protocol.FetchResponses{}
+		err = protocol.Decode(buf.Bytes(), fetchResponse)
+		assert.NoError(t, err)
+
+		recordSet := commitlog.MessageSet(fetchResponse.Responses[0].PartitionResponses[0].RecordSet)
+		assert.Equal(t, int64(0), recordSet.Offset())
+		assert.Equal(t, []byte(m0), recordSet.Payload())
+	})
+
+	t.Run("Sarama", func(t *testing.T) {
+		config := sarama.NewConfig()
+		config.ChannelBufferSize = 1
+		config.Version = sarama.V0_10_0_1
+		config.Producer.Return.Successes = true
+		config.Consumer.Offsets.Initial = sarama.OffsetNewest
+
+		brokers := []string{"127.0.0.1:8000"}
+		producer, err := sarama.NewSyncProducer(brokers, config)
+		if err != nil {
+			panic(err)
+		}
+
+		bValue := []byte("Hello from Jocko!")
+		msgValue := sarama.ByteEncoder(bValue)
+		pPartition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
+			Topic: topic,
+			Value: msgValue,
+		})
+		assert.NoError(t, err)
+
+		consumer, err := sarama.NewConsumer(brokers, config)
+		assert.NoError(t, err)
+
+		cPartition, err := consumer.ConsumePartition(topic, pPartition, 1)
+		assert.NoError(t, err)
+
+		select {
+		case msg := <-cPartition.Messages():
+			assert.Equal(t, msg.Offset, offset)
+			assert.Equal(t, pPartition, msg.Partition)
+			assert.Equal(t, topic, msg.Topic)
+			assert.Equal(t, 0, bytes.Compare(bValue, msg.Value))
+		}
+	})
+
+	teardown()
+}
+
+func setup(t *testing.T) (*net.TCPConn, func()) {
 	dir := os.TempDir()
-	defer os.RemoveAll(dir)
 
 	assert.NoError(t, os.MkdirAll(dataDir, 0755))
 
@@ -45,29 +199,41 @@ func TestBroker_Server(t *testing.T) {
 		broker.RaftPort(8001),
 		broker.Logger(logger))
 	assert.NoError(t, err)
-	defer store.Shutdown()
 
 	_, err = store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
 
-	s := server.New(":8000", store, logger)
-	assert.NotNil(t, s)
-	assert.NoError(t, s.Start())
+	srv := server.New(":8000", store, logger)
+	assert.NotNil(t, srv)
+	assert.NoError(t, srv.Start())
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", ":8000")
 	assert.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	assert.NoError(t, err)
-	defer conn.Close()
 
-	var body protocol.Body = &protocol.CreateTopicRequests{
+	createTopic(t, conn)
+
+	return conn, func() {
+		conn.Close()
+		srv.Close()
+		store.Shutdown()
+		os.RemoveAll(dir)
+	}
+}
+func createTopic(t *testing.T, conn *net.TCPConn) {
+	buf := new(bytes.Buffer)
+	var header protocol.Response
+	var body protocol.Body
+
+	body = &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
-			Topic:             "test_topic",
-			NumPartitions:     int32(8),
-			ReplicationFactor: int16(2),
+			Topic:             topic,
+			NumPartitions:     int32(1),
+			ReplicationFactor: int16(1),
 			ReplicaAssignment: map[int32][]int32{
-				0: []int32{1, 2},
+				0: []int32{0, 1},
 			},
 			Configs: map[string]string{
 				"config_key": "config_val",
@@ -86,11 +252,9 @@ func TestBroker_Server(t *testing.T) {
 	_, err = conn.Write(b)
 	assert.NoError(t, err)
 
-	buf := new(bytes.Buffer)
 	_, err = io.CopyN(buf, conn, 8)
 	assert.NoError(t, err)
 
-	var header protocol.Response
 	protocol.Decode(buf.Bytes(), &header)
 
 	buf.Reset()
@@ -102,109 +266,6 @@ func TestBroker_Server(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, 1, len(createTopicsResponse.TopicErrorCodes))
-	assert.Equal(t, "test_topic", createTopicsResponse.TopicErrorCodes[0].Topic)
+	assert.Equal(t, topic, createTopicsResponse.TopicErrorCodes[0].Topic)
 	assert.Equal(t, protocol.ErrNone, createTopicsResponse.TopicErrorCodes[0].ErrorCode)
-
-	body = &protocol.MetadataRequest{
-		Topics: []string{"test_topic"},
-	}
-	req = &protocol.Request{
-		CorrelationID: rand.Int31(),
-		ClientID:      clientID,
-		Body:          body,
-	}
-	b, err = protocol.Encode(req)
-	assert.NoError(t, err)
-
-	_, err = conn.Write(b)
-	assert.NoError(t, err)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, 8)
-	assert.NoError(t, err)
-	protocol.Decode(buf.Bytes(), &header)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, int64(header.Size-4))
-	assert.NoError(t, err)
-
-	metadataResponse := &protocol.MetadataResponse{}
-	err = protocol.Decode(buf.Bytes(), metadataResponse)
-	assert.NoError(t, err)
-
-	assert.Equal(t, 1, len(metadataResponse.Brokers))
-	assert.Equal(t, "test_topic", metadataResponse.TopicMetadata[0].Topic)
-
-	m0 := commitlog.NewMessage([]byte("Hello world!"))
-	ms := commitlog.NewMessageSet(0, m0)
-	body = &protocol.ProduceRequest{
-		TopicData: []*protocol.TopicData{{
-			Topic: "test_topic",
-			Data: []*protocol.Data{{
-				Partition: 0,
-				RecordSet: ms,
-			}},
-		}},
-	}
-	req = &protocol.Request{
-		CorrelationID: rand.Int31(),
-		ClientID:      clientID,
-		Body:          body,
-	}
-	b, err = protocol.Encode(req)
-	assert.NoError(t, err)
-	_, err = conn.Write(b)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, 8)
-	assert.NoError(t, err)
-	protocol.Decode(buf.Bytes(), &header)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, int64(header.Size-4))
-	produceResponse := &protocol.ProduceResponses{}
-	err = protocol.Decode(buf.Bytes(), produceResponse)
-	assert.NoError(t, err)
-
-	assert.Equal(t, req.(*protocol.Request).CorrelationID, header.CorrelationID)
-	assert.Equal(t, "test_topic", produceResponse.Responses[0].Topic)
-	assert.Equal(t, protocol.ErrNone, produceResponse.Responses[0].PartitionResponses[0].ErrorCode)
-	assert.NotEqual(t, 0, produceResponse.Responses[0].PartitionResponses[0].Timestamp)
-
-	body = &protocol.FetchRequest{
-		MinBytes: 5,
-		Topics: []*protocol.FetchTopic{{
-			Topic: "test_topic",
-			Partitions: []*protocol.FetchPartition{{
-				Partition:   int32(0),
-				FetchOffset: int64(0),
-				MaxBytes:    int32(5000),
-			}},
-		}},
-	}
-	req = &protocol.Request{
-		CorrelationID: rand.Int31(),
-		ClientID:      clientID,
-		Body:          body,
-	}
-	b, err = protocol.Encode(req)
-	assert.NoError(t, err)
-	_, err = conn.Write(b)
-	assert.NoError(t, err)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, 8)
-	assert.NoError(t, err)
-	err = protocol.Decode(buf.Bytes(), &header)
-	assert.NoError(t, err)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, int64(header.Size-4))
-	fetchResponse := &protocol.FetchResponses{}
-	err = protocol.Decode(buf.Bytes(), fetchResponse)
-	assert.NoError(t, err)
-
-	recordSet := commitlog.MessageSet(fetchResponse.Responses[0].PartitionResponses[0].RecordSet)
-	assert.Equal(t, int64(0), recordSet.Offset())
-	assert.Equal(t, []byte(m0), recordSet.Payload())
 }
