@@ -419,6 +419,7 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			}
 			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
 				presp.ErrorCode = protocol.ErrNotLeaderForPartition
+				// break ?
 			}
 			offset, err := partition.Append(p.RecordSet)
 			if err != nil {

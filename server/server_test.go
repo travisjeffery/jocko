@@ -15,6 +15,8 @@ import (
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/raft"
+	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
 )
@@ -182,12 +184,20 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 	assert.NoError(t, err)
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
+	serf, err := serf.New(
+		serf.Logger(logger),
+		serf.Addr("127.0.0.1:8002"),
+	)
+	raft, err := raft.New(
+		raft.Logger(logger),
+		raft.DataDir(dataDir),
+		raft.Addr("127.0.0.1:8001"),
+	)
 	store, err := broker.New(0,
-		broker.DataDir(dataDir),
 		broker.LogDir(dataDir),
-		broker.BrokerAddr("127.0.0.1:8000"),
-		broker.RaftAddr("127.0.0.1:8001"),
-		broker.SerfAddr("127.0.0.1:8002"),
+		broker.Addr("127.0.0.1:8000"),
+		broker.Raft(raft),
+		broker.Serf(serf),
 		broker.Logger(logger))
 	assert.NoError(t, err)
 

@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/nomad/testutil"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
+	jockoraft "github.com/travisjeffery/jocko/raft"
+	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -42,23 +44,11 @@ func TestBroker_JoinPeer(t *testing.T) {
 	testJoin(t, s0, s1)
 
 	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.members()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.members())
+		if len(s1.Cluster()) != 2 {
+			return false, fmt.Errorf("bad: %#v", s1.Cluster())
 		}
-		if len(s0.members()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.members())
-		}
-		return true, nil
-	}, func(err error) {
-		t.Fatalf("err: %v", err)
-	})
-
-	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.peers) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.peers)
-		}
-		if len(s0.peers) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.peers)
+		if len(s0.Cluster()) != 2 {
+			return false, fmt.Errorf("bad: %#v", s0.Cluster())
 		}
 		return true, nil
 	}, func(err error) {
@@ -78,38 +68,25 @@ func TestBroker_RemovePeer(t *testing.T) {
 	testJoin(t, s0, s1)
 
 	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.members()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.members())
+		if len(s1.Cluster()) != 2 {
+			return false, fmt.Errorf("bad: %#v", s1.Cluster())
 		}
-		if len(s0.members()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.members())
-		}
-		return true, nil
-	}, func(err error) {
-		t.Fatalf("err: %v", err)
-	})
-
-	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.peers) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.peers)
-		}
-		if len(s0.peers) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.peers)
+		if len(s0.Cluster()) != 2 {
+			return false, fmt.Errorf("bad: %#v", s0.Cluster())
 		}
 		return true, nil
 	}, func(err error) {
 		t.Fatalf("err: %v", err)
 	})
 
-	s1.Leave()
 	s1.Shutdown()
 
 	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.peers) != 1 {
-			return false, fmt.Errorf("bad: %#v", s1.peers)
+		if len(s1.Cluster()) != 1 {
+			return false, fmt.Errorf("bad: %#v", s1.Cluster())
 		}
-		if len(s0.peers) != 1 {
-			return false, fmt.Errorf("bad: %#v", s0.peers)
+		if len(s0.Cluster()) != 1 {
+			return false, fmt.Errorf("bad: %#v", s0.Cluster())
 		}
 		return true, nil
 	}, func(err error) {
@@ -125,14 +102,24 @@ func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 	raftConf.HeartbeatTimeout = 50 * time.Millisecond
 	raftConf.ElectionTimeout = 50 * time.Millisecond
 
+	serf, err := serf.New(
+		serf.Logger(logger),
+		serf.Addr(getSerfAddr()),
+	)
+
+	raft, err := jockoraft.New(
+		jockoraft.Logger(logger),
+		jockoraft.DataDir(filepath.Join(dataDir, idStr)),
+		jockoraft.Addr(getRaftAddr()),
+		jockoraft.Config(raftConf),
+	)
+
 	opts = append(opts, []BrokerFn{
-		DataDir(filepath.Join(dataDir, idStr)),
 		LogDir(filepath.Join(dataDir, idStr)),
-		BrokerAddr(getBrokerAddr()),
-		SerfAddr(getSerfAddr()),
-		RaftAddr(getRaftAddr()),
+		Addr(getBrokerAddr()),
+		Serf(serf),
+		Raft(raft),
 		Logger(logger),
-		RaftConfig(raftConf),
 	}...)
 
 	broker, err := New(
@@ -160,7 +147,7 @@ func getSerfAddr() string {
 
 func testJoin(t *testing.T, s0 *Broker, other ...*Broker) {
 	for _, s1 := range other {
-		num, err := s1.Join(s0.serfAddr)
+		num, err := s1.Join(s0.serf.Addr())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, num)
 	}

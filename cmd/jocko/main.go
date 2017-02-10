@@ -7,6 +7,8 @@ import (
 
 	"github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/raft"
+	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -31,14 +33,24 @@ func main() {
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
+	serf, err := serf.New(
+		serf.Logger(logger),
+		serf.Addr(*serfAddr),
+		serf.InitMembers(*serfMembers),
+	)
+
+	raft, err := raft.New(
+		raft.Logger(logger),
+		raft.DataDir(*logDir),
+		raft.Addr(*raftAddr),
+	)
+
 	store, err := broker.New(*brokerID,
-		broker.DataDir(*logDir),
 		broker.LogDir(*logDir),
 		broker.Logger(logger),
-		broker.BrokerAddr(*brokerAddr),
-		broker.RaftAddr(*raftAddr),
-		broker.SerfAddr(*serfAddr),
-		broker.SerfMembers(*serfMembers),
+		broker.Addr(*brokerAddr),
+		broker.Serf(serf),
+		broker.Raft(raft),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)

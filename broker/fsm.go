@@ -32,6 +32,21 @@ const (
 	// others
 )
 
+func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
+	var b []byte
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	r := json.RawMessage(b)
+	c := jocko.RaftCommand{
+		Cmd:  cmd,
+		Data: &r,
+	}
+	return s.raft.Apply(c)
+}
+
+// Apply raft command as fsm
 func (s *Broker) Apply(l *raft.Log) interface{} {
 	var c jocko.RaftCommand
 	if err := json.Unmarshal(l.Data, &c); err != nil {
