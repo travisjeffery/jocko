@@ -19,20 +19,12 @@ import (
 	"github.com/travisjeffery/simplelog"
 )
 
-var (
-	dataDir string
-)
-
 const (
 	topic         = "test_topic"
 	messageCount  = 15
 	clientID      = "test_client"
 	numPartitions = int32(1)
 )
-
-func init() {
-	dataDir, _ = ioutil.TempDir("", "server_test")
-}
 
 func TestBroker(t *testing.T) {
 	conn, teardown := setup(t)
@@ -186,9 +178,8 @@ func TestBroker(t *testing.T) {
 }
 
 func setup(t *testing.T) (*net.TCPConn, func()) {
-	dir := os.TempDir()
-
-	assert.NoError(t, os.MkdirAll(dataDir, 0755))
+	dataDir, err := ioutil.TempDir("", "server_test")
+	assert.NoError(t, err)
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	store, err := broker.New(0,
@@ -219,7 +210,7 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 		conn.Close()
 		srv.Close()
 		store.Shutdown()
-		os.RemoveAll(dir)
+		os.RemoveAll(dataDir)
 	}
 }
 func createTopic(t *testing.T, conn *net.TCPConn) {
