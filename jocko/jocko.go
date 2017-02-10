@@ -1,10 +1,13 @@
 package jocko
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 
+	"github.com/hashicorp/raft"
+	"github.com/hashicorp/serf/serf"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
@@ -98,10 +101,39 @@ func (p *Partition) LeaderID() int32 {
 	return p.Leader
 }
 
+// Serf manages the cluster membership for Jocko nodes
+type Serf interface {
+	Bootstrap(node *BrokerConn, reconcileCh chan<- *BrokerConn) error
+	Cluster() []*BrokerConn
+	Member(memberID int32) *BrokerConn
+	Join(addrs ...string) (int, error)
+	Leave() error
+	Shutdown() error
+	Addr() string
+}
+
+type RaftCmdType int
+
+type RaftCommand struct {
+	Cmd  RaftCmdType      `json:"type"`
+	Data *json.RawMessage `json:"data"`
+}
+
+// Raft manages consensus for Jocko cluster
+type Raft interface {
+	Bootstrap(peers []*BrokerConn, fsm raft.FSM, leaderCh chan<- bool) (err error)
+	Apply(cmd RaftCommand) error
+	IsLeader() bool
+	LeaderID() string
+	WaitForBarrier() error
+	AddPeer(addr string) error
+	RemovePeer(addr string) error
+	Shutdown() error
+	Addr() string
+}
+
 type Broker interface {
 	ID() int32
-	Port() int
-	Host() string
 	IsController() bool
 	CreateTopic(topic string, partitions int32) error
 	StartReplica(*Partition) error
@@ -121,8 +153,9 @@ type BrokerConn struct {
 	Port int    `json:"port"`
 	IP   string `json:"addr"`
 
-	SerfPort int `json:"-"`
-	RaftPort int `json:"-"`
+	SerfPort int               `json:"-"`
+	RaftPort int               `json:"-"`
+	Status   serf.MemberStatus `json:"-"`
 
 	conn net.Conn
 }
