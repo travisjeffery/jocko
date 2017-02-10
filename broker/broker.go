@@ -1,24 +1,14 @@
 package broker
 
 import (
-	"net"
 	"path"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/hashicorp/raft"
-	raftboltdb "github.com/hashicorp/raft-boltdb"
-	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/simplelog"
-)
-
-const (
-	timeout   = 10 * time.Second
-	waitDelay = 100 * time.Millisecond
 )
 
 var (
@@ -30,99 +20,64 @@ type Broker struct {
 	mu     sync.RWMutex
 	logger *simplelog.Logger
 
-	id     int32
-	host   string
-	port   int
-	topics map[string][]*jocko.Partition
+	id         int32
+	topics     map[string][]*jocko.Partition
+	brokerAddr string
+	logDir     string
 
-	peers    map[int32]*jocko.BrokerConn
-	peerLock sync.Mutex
+	raft     jocko.Raft
+	leaderCh chan bool
 
-	dataDir             string
-	brokerAddr          string
-	logDir              string
-	devDisableBootstrap bool
-
-	raft          *raft.Raft
-	raftAddr      string
-	raftPeers     raft.PeerStore
-	raftTransport *raft.NetworkTransport
-	raftStore     *raftboltdb.BoltStore
-	raftLeaderCh  chan bool
-	raftConfig    *raft.Config
-
-	serf                  *serf.Serf
-	serfAddr              string
-	serfReconcileCh       chan serf.Member
-	serfReconcileInterval time.Duration
-	serfEventCh           chan serf.Event
-	serfMembers           []string
+	serf              jocko.Serf
+	reconcileCh       chan *jocko.BrokerConn
+	reconcileInterval time.Duration
 
 	shutdownCh   chan struct{}
 	shutdown     bool
 	shutdownLock sync.Mutex
 }
 
-const (
-	raftState    = "raft/"
-	serfSnapshot = "serf/snapshot"
-)
-
 func New(id int32, opts ...BrokerFn) (*Broker, error) {
-	var err error
 	b := &Broker{
-		raftConfig:            raft.DefaultConfig(),
-		replicationManager:    newReplicationManager(),
-		peers:                 make(map[int32]*jocko.BrokerConn),
-		id:                    id,
-		topics:                make(map[string][]*jocko.Partition),
-		serfReconcileCh:       make(chan serf.Member, 32),
-		serfEventCh:           make(chan serf.Event, 256),
-		serfReconcileInterval: time.Second * 5,
-		shutdownCh:            make(chan struct{}),
+		replicationManager: newReplicationManager(),
+		id:                 id,
+		topics:             make(map[string][]*jocko.Partition),
+		reconcileCh:        make(chan *jocko.BrokerConn, 32),
+		reconcileInterval:  time.Second * 5,
+		shutdownCh:         make(chan struct{}),
+		leaderCh:           make(chan bool, 1),
 	}
 
 	for _, o := range opts {
 		o(b)
 	}
 
-	host, strPort, err := net.SplitHostPort(b.brokerAddr)
+	port, err := getPortFromAddr(b.brokerAddr)
+	if err != nil {
+		return nil, err
+	}
+	raftPort, err := getPortFromAddr(b.raft.Addr())
 	if err != nil {
 		return nil, err
 	}
 
-	port, err := strconv.Atoi(strPort)
-	if err != nil {
-		return nil, err
+	conn := &jocko.BrokerConn{
+		ID:       b.id,
+		Port:     port,
+		RaftPort: raftPort,
 	}
 
-	b.host = host
-	b.port = port
-
-	serfConfig := serf.DefaultConfig()
-	b.serf, err = b.setupSerf(serfConfig, b.serfEventCh, serfSnapshot)
-	if err != nil {
-		// b.Shutdown()
+	if err := b.serf.Bootstrap(conn, b.reconcileCh); err != nil {
 		b.logger.Info("failed to start serf: %s", err)
 		return nil, err
 	}
 
-	// bootstrap serf members.
-	if len(b.serfMembers) != 0 {
-		if _, err := b.serf.Join(b.serfMembers, true); err != nil {
-			return nil, err
-		}
-	}
-
-	if err = b.setupRaft(); err != nil {
+	if err := b.raft.Bootstrap(b.serf.Cluster(), b, b.leaderCh); err != nil {
 		return nil, err
 	}
 
 	// monitor leadership changes
 	go b.monitorLeadership()
-
-	// ingest events for serf
-	go b.serfEventHandler()
 
 	return b, nil
 }
@@ -133,23 +88,16 @@ func (b *Broker) ID() int32 {
 }
 
 func (b *Broker) Cluster() []*jocko.BrokerConn {
-	b.peerLock.Lock()
-	defer b.peerLock.Unlock()
-
-	cluster := make([]*jocko.BrokerConn, 0, len(b.peers))
-	for _, v := range b.peers {
-		cluster = append(cluster, v)
-	}
-	return cluster
+	return b.serf.Cluster()
 }
 
 // IsController checks if this broker is the cluster controller
 func (b *Broker) IsController() bool {
-	return b.raft.State() == raft.Leader
+	return b.raft.IsLeader()
 }
 
 func (b *Broker) ControllerID() string {
-	return b.raft.Leader()
+	return b.raft.LeaderID()
 }
 
 func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
@@ -176,12 +124,7 @@ func (b *Broker) AddPartition(partition *jocko.Partition) error {
 }
 
 func (b *Broker) BrokerConn(id int32) *jocko.BrokerConn {
-	for _, b := range b.Cluster() {
-		if b.ID == id {
-			return b
-		}
-	}
-	return nil
+	return b.serf.Member(id)
 }
 
 func (b *Broker) StartReplica(partition *jocko.Partition) error {
@@ -215,10 +158,7 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 			return err
 		}
 		partition.CommitLog = commitLog
-
-		b.peerLock.Lock()
-		partition.Conn = b.peers[partition.LeaderID()]
-		b.peerLock.Unlock()
+		partition.Conn = b.serf.Member(partition.LeaderID())
 	}
 	return nil
 }
@@ -247,7 +187,7 @@ func (b *Broker) Topics() []string {
 // Join is used to have the broker join the gossip ring
 // The target address should be another broker listening on the Serf address
 func (b *Broker) Join(addrs ...string) (int, error) {
-	return b.serf.Join(addrs, true)
+	return b.serf.Join(addrs...)
 }
 
 // CreateTopic creates topic with partitions count.
@@ -307,8 +247,8 @@ func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	return nil
 }
 
-// Leave is used to prepare for a graceful shutdown of the server
-func (b *Broker) Leave() error {
+// leave is used to prepare for a graceful shutdown of the server
+func (b *Broker) leave() error {
 	b.logger.Info("broker starting to leave")
 
 	// TODO: handle case if we're the controller/leader
@@ -333,20 +273,22 @@ func (b *Broker) Shutdown() error {
 	}
 
 	b.shutdown = true
+	if err := b.leave(); err != nil {
+		return err
+	}
 	close(b.shutdownCh)
 
 	if b.serf != nil {
-		b.serf.Shutdown()
+		if err := b.serf.Shutdown(); err != nil {
+			b.logger.Info("failed to shut down serf: %v", err)
+			return err
+		}
 	}
 
 	if b.raft != nil {
-		b.raftTransport.Close()
-		future := b.raft.Shutdown()
-		if err := future.Error(); err != nil {
-			b.logger.Info("failed to shutdown raft: %s", err)
-		}
-		if b.raftStore != nil {
-			b.raftStore.Close()
+		if err := b.raft.Shutdown(); err != nil {
+			b.logger.Info("failed to shut down raft: %v", err)
+			return err
 		}
 	}
 

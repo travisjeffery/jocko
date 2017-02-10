@@ -1,12 +1,11 @@
 package broker
 
 import (
-	"fmt"
 	"net"
 	"time"
 
-	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
+	"github.com/travisjeffery/jocko/jocko"
 )
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
@@ -15,7 +14,7 @@ func (b *Broker) monitorLeadership() {
 	var stopCh chan struct{}
 	for {
 		select {
-		case isLeader := <-b.raftLeaderCh:
+		case isLeader := <-b.leaderCh:
 			if isLeader {
 				stopCh = make(chan struct{})
 				go b.leaderLoop(stopCh)
@@ -40,17 +39,14 @@ func (b *Broker) revokeLeadership() error {
 // leaderLoop runs as long as we are the leader to run maintainence duties
 func (b *Broker) leaderLoop(stopCh chan struct{}) {
 	defer b.revokeLeadership()
-	var reconcileCh chan serf.Member
+	var reconcileCh chan *jocko.BrokerConn
 	establishedLeader := false
 
 RECONCILE:
 	reconcileCh = nil
-	interval := time.After(b.serfReconcileInterval)
+	interval := time.After(b.reconcileInterval)
 
-	// start := time.Now()
-	barrier := b.raft.Barrier(0)
-	if err := barrier.Error(); err != nil {
-		b.logger.Info("failed to waat for barrier: %v", err)
+	if err := b.raft.WaitForBarrier(); err != nil {
 		goto WAIT
 	}
 
@@ -67,7 +63,7 @@ RECONCILE:
 		goto WAIT
 	}
 
-	reconcileCh = b.serfReconcileCh
+	reconcileCh = b.reconcileCh
 
 WAIT:
 	for {
@@ -79,7 +75,9 @@ WAIT:
 		case <-interval:
 			goto RECONCILE
 		case member := <-reconcileCh:
-			b.reconcileMember(member)
+			if b.IsController() {
+				b.reconcileMember(member)
+			}
 		}
 	}
 }
@@ -92,7 +90,7 @@ func (b *Broker) establishLeadership(stopCh chan struct{}) error {
 }
 
 func (b *Broker) reconcile() error {
-	members := b.serf.Members()
+	members := b.Cluster()
 	for _, member := range members {
 		if err := b.reconcileMember(member); err != nil {
 			return err
@@ -101,9 +99,9 @@ func (b *Broker) reconcile() error {
 	return nil
 }
 
-func (b *Broker) reconcileMember(member serf.Member) error {
+func (b *Broker) reconcileMember(member *jocko.BrokerConn) error {
 	// don't reconcile ourself
-	if member.Name == fmt.Sprintf("%d", b.id) {
+	if member.ID == b.id {
 		return nil
 	}
 	var err error
@@ -120,29 +118,11 @@ func (b *Broker) reconcileMember(member serf.Member) error {
 	return nil
 }
 
-func (b *Broker) addRaftPeer(member serf.Member) error {
-	broker, err := brokerConn(member)
-	if err != nil {
-		return err
-	}
-	addr := &net.TCPAddr{IP: net.ParseIP(broker.IP), Port: broker.RaftPort}
-	future := b.raft.AddPeer(addr.String())
-	if err := future.Error(); err != nil && err != raft.ErrKnownPeer {
-		b.logger.Info("failed to add raft peer: %v", err)
-		return err
-	} else if err == nil {
-		b.logger.Info("added raft peer: %v", member)
-	}
-	return nil
+func (b *Broker) addRaftPeer(member *jocko.BrokerConn) error {
+	addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
+	return b.raft.AddPeer(addr.String())
 }
 
-func (b *Broker) removeRaftPeer(member serf.Member) error {
-	future := b.raft.RemovePeer(member.Addr.String())
-	if err := future.Error(); err != nil && err != raft.ErrUnknownPeer {
-		b.logger.Info("failed to remove raft peer: %v", err)
-		return err
-	} else if err == nil {
-		b.logger.Info("removed raft peer: %v", member)
-	}
-	return nil
+func (b *Broker) removeRaftPeer(member *jocko.BrokerConn) error {
+	return b.raft.RemovePeer(member.IP)
 }
