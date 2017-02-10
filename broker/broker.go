@@ -58,7 +58,6 @@ type Broker struct {
 	serfEventCh           chan serf.Event
 	serfMembers           []string
 
-	left         bool
 	shutdownCh   chan struct{}
 	shutdown     bool
 	shutdownLock sync.Mutex
@@ -133,15 +132,6 @@ func (b *Broker) ID() int32 {
 	return b.id
 }
 
-// Host is used to get Broker's host
-func (b *Broker) Host() string {
-	return b.host
-}
-
-func (b *Broker) Port() int {
-	return b.port
-}
-
 func (b *Broker) Cluster() []*jocko.BrokerConn {
 	b.peerLock.Lock()
 	defer b.peerLock.Unlock()
@@ -183,10 +173,6 @@ func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, err
 
 func (b *Broker) AddPartition(partition *jocko.Partition) error {
 	return b.raftApply(addPartition, partition)
-}
-
-func (b *Broker) AddBroker(broker jocko.BrokerConn) error {
-	return b.raftApply(addBroker, broker)
 }
 
 func (b *Broker) BrokerConn(id int32) *jocko.BrokerConn {
@@ -235,13 +221,6 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 		b.peerLock.Unlock()
 	}
 	return nil
-}
-
-func (b *Broker) addBroker(broker *jocko.BrokerConn) {
-	// TODO: remove this
-	b.peerLock.Lock()
-	b.peers[broker.ID] = broker
-	b.peerLock.Unlock()
 }
 
 func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
@@ -331,7 +310,6 @@ func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 // Leave is used to prepare for a graceful shutdown of the server
 func (b *Broker) Leave() error {
 	b.logger.Info("broker starting to leave")
-	b.left = true
 
 	// TODO: handle case if we're the controller/leader
 
@@ -373,13 +351,4 @@ func (b *Broker) Shutdown() error {
 	}
 
 	return nil
-}
-
-func (b *Broker) IsShutdown() bool {
-	select {
-	case <-b.shutdownCh:
-		return true
-	default:
-		return false
-	}
 }
