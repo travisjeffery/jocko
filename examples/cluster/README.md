@@ -15,30 +15,24 @@ $ go build
 ```bash
 $ ./jocko --debug \
           --logdir="/tmp/jocko1" \
-          --tcpaddr=127.0.0.1:9001 \
-          --raftdir="/tmp/jocko1/raft" \
-          --raftaddr=127.0.0.1 \
-          --raftport=8001 \
-          --serfport=7946 \
+          --brokeraddr=127.0.0.1:9001 \
+          --raftaddr=127.0.0.1:9002 \
+          --serfaddr=127.0.0.1:9003 \
           --id=1
-          
+
 $ ./jocko --debug \
           --logdir="/tmp/jocko2" \
-          --tcpaddr=127.0.0.1:9002 \
-          --raftdir="/tmp/jocko2/raft" \
-          --raftaddr=127.0.0.1 \
-          --raftport=8002 \
-          --serfport=7947 \
-          --serfmembers=127.0.0.1:7946 \
+          --brokeraddr=127.0.0.1:9101 \
+          --raftaddr=127.0.0.1:9102 \
+          --serfaddr=127.0.0.1:9103 \
+          --serfmembers=127.0.0.1:9003 \
           --id=2
-          
+
 $ ./jocko --debug \
           --logdir="/tmp/jocko3" \
-          --tcpaddr=127.0.0.1:9003 \
-          --raftdir="/tmp/jocko3/raft" \
-          --raftaddr=127.0.0.1 \
-          --raftport=8003 \
-          --serfport=7948 \
-          --serfmembers=127.0.0.1:7946 \
+          --brokeraddr=127.0.0.1:9201 \
+          --raftaddr=127.0.0.1:9202 \
+          --serfaddr=127.0.0.1:9203 \
+          --serfmembers=127.0.0.1:9003 \
           --id=3
 ```
