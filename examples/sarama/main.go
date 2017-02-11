@@ -10,7 +10,6 @@ import (
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 type check struct {
@@ -24,27 +23,22 @@ const (
 	messageCount  = 15
 	clientID      = "test_client"
 	numPartitions = int32(8)
-)
-
-var (
-	logDir   = kingpin.Flag("logdir", "A comma separated list of directories under which to store log files").Default("logdir").String()
-	tcpAddr  = kingpin.Flag("tcpAddr", "HTTP Address to listen on").Default(":8000").String()
-	raftDir  = kingpin.Flag("raftdir", "Directory for raft to store data").Default("raftdir").String()
-	raftAddr = kingpin.Flag("raftaddr", "Address for Raft to bind on").Default(":4000").String()
-	brokerID = kingpin.Flag("id", "Broker ID").Int32()
+	brokerAddr    = "127.0.0.1:9092"
+	raftAddr      = "127.0.0.1:9093"
+	serfAddr      = "127.0.0.1:9094"
+	logDir        = "logdir"
+	brokerID      = 0
 )
 
 func main() {
-	kingpin.Parse()
-
-	setup()
+	defer setup()()
 
 	config := sarama.NewConfig()
 	config.ChannelBufferSize = 1
 	config.Version = sarama.V0_10_0_1
 	config.Producer.Return.Successes = true
 
-	brokers := []string{*tcpAddr}
+	brokers := []string{brokerAddr}
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
 		panic(err)
@@ -111,18 +105,22 @@ func main() {
 	fmt.Printf("producer and consumer worked! %d messages ok\n", totalChecked)
 }
 
-func setup() {
-	logger := simplelog.New(os.Stdout, simplelog.INFO, "jocko")
+func setup() func() {
+	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko")
 
-	store, err := broker.New(*brokerID,
-		broker.DataDir(*logDir),
-		broker.LogDir(*logDir),
+	store, err := broker.New(brokerID,
+		broker.DataDir(logDir),
+		broker.BrokerAddr(brokerAddr),
+		broker.RaftAddr(raftAddr),
+		broker.SerfAddr(serfAddr),
+		broker.LogDir(logDir),
 		broker.Logger(logger))
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
 	}
-	server := server.New(*tcpAddr, store, logger)
+	server := server.New(brokerAddr, store, logger)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
@@ -135,5 +133,9 @@ func setup() {
 	// creating/deleting topic directly since Sarama doesn't support it
 	if err := store.CreateTopic(topic, numPartitions); err != nil && err != broker.ErrTopicExists {
 		panic(err)
+	}
+
+	return func() {
+		os.RemoveAll(logDir)
 	}
 }
