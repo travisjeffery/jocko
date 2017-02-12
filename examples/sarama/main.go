@@ -8,6 +8,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/raft"
+	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
 )
@@ -108,14 +110,24 @@ func main() {
 func setup() func() {
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko")
 
-	store, err := broker.New(brokerID,
-		broker.DataDir(logDir),
-		broker.BrokerAddr(brokerAddr),
-		broker.RaftAddr(raftAddr),
-		broker.SerfAddr(serfAddr),
-		broker.LogDir(logDir),
-		broker.Logger(logger))
+	serf, err := serf.New(
+		serf.Logger(logger),
+		serf.Addr(serfAddr),
+	)
 
+	raft, err := raft.New(
+		raft.Logger(logger),
+		raft.DataDir(logDir),
+		raft.Addr(raftAddr),
+	)
+
+	store, err := broker.New(brokerID,
+		broker.LogDir(logDir),
+		broker.Logger(logger),
+		broker.Addr(brokerAddr),
+		broker.Serf(serf),
+		broker.Raft(raft),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)

@@ -1,11 +1,13 @@
 package broker
 
 import (
+	"net"
 	"strconv"
 	"time"
+)
 
-	"github.com/hashicorp/serf/serf"
-	"github.com/travisjeffery/jocko/jocko"
+const (
+	waitDelay = 100 * time.Millisecond
 )
 
 func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
@@ -18,7 +20,7 @@ func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
 	for {
 		select {
 		case <-tick.C:
-			l := s.raft.Leader()
+			l := s.raft.LeaderID()
 			if l != "" {
 				return l, nil
 			}
@@ -27,7 +29,7 @@ func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
 	}
 }
 
-func (s *Broker) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
+/*func (s *Broker) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
 	tick := time.NewTicker(waitDelay)
 	defer tick.Stop()
 	timer := time.NewTimer(timeout)
@@ -42,33 +44,17 @@ func (s *Broker) WaitForAppliedIndex(idx uint64, timeout time.Duration) error {
 		case <-timer.C:
 		}
 	}
-}
+}*/
 
-func brokerConn(m serf.Member) (*jocko.BrokerConn, error) {
-	portStr := m.Tags["port"]
-	port, err := strconv.Atoi(portStr)
+func getPortFromAddr(addr string) (int, error) {
+	_, strPort, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	idStr := m.Tags["id"]
-	id, err := strconv.Atoi(idStr)
+	port, err := strconv.Atoi(strPort)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-
-	raftPortStr := m.Tags["raft_port"]
-	raftPort, err := strconv.Atoi(raftPortStr)
-	if err != nil {
-		return nil, err
-	}
-
-	conn := &jocko.BrokerConn{
-		IP:       m.Addr.String(),
-		ID:       int32(id),
-		RaftPort: raftPort,
-		Port:     port,
-	}
-
-	return conn, nil
+	return port, nil
 }
