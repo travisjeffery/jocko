@@ -103,9 +103,9 @@ func (p *Partition) LeaderID() int32 {
 
 // Serf manages the cluster membership for Jocko nodes
 type Serf interface {
-	Bootstrap(node *BrokerConn, reconcileCh chan<- *BrokerConn) error
-	Cluster() []*BrokerConn
-	Member(memberID int32) *BrokerConn
+	Bootstrap(node *ClusterMember, reconcileCh chan<- *ClusterMember) error
+	Cluster() []*ClusterMember
+	Member(memberID int32) *ClusterMember
 	Join(addrs ...string) (int, error)
 	Leave() error
 	Shutdown() error
@@ -121,7 +121,7 @@ type RaftCommand struct {
 
 // Raft manages consensus for Jocko cluster
 type Raft interface {
-	Bootstrap(peers []*BrokerConn, fsm raft.FSM, leaderCh chan<- bool) (err error)
+	Bootstrap(peers []*ClusterMember, fsm raft.FSM, leaderCh chan<- bool) (err error)
 	Apply(cmd RaftCommand) error
 	IsLeader() bool
 	LeaderID() string
@@ -139,16 +139,16 @@ type Broker interface {
 	StartReplica(*Partition) error
 	DeleteTopic(topic string) error
 	Partition(topic string, id int32) (*Partition, error)
-	BrokerConn(brokerID int32) *BrokerConn
+	ClusterMember(brokerID int32) *ClusterMember
 	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
 	BecomeFollower(topic string, id int32, command *protocol.PartitionState) error
 	Join(addr ...string) (int, error)
-	Cluster() []*BrokerConn
+	Cluster() []*ClusterMember
 	TopicPartitions(topic string) ([]*Partition, error)
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
 }
 
-type BrokerConn struct {
+type ClusterMember struct {
 	ID   int32  `json:"id"`
 	Port int    `json:"port"`
 	IP   string `json:"addr"`
@@ -160,11 +160,11 @@ type BrokerConn struct {
 	conn net.Conn
 }
 
-func (b *BrokerConn) Addr() *net.TCPAddr {
+func (b *ClusterMember) Addr() *net.TCPAddr {
 	return &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
 }
 
-func (b *BrokerConn) Write(p []byte) (int, error) {
+func (b *ClusterMember) Write(p []byte) (int, error) {
 	if b.conn == nil {
 		if err := b.connect(); err != nil {
 			return 0, err
@@ -173,7 +173,7 @@ func (b *BrokerConn) Write(p []byte) (int, error) {
 	return b.conn.Write(p)
 }
 
-func (b *BrokerConn) Read(p []byte) (int, error) {
+func (b *ClusterMember) Read(p []byte) (int, error) {
 	if b.conn == nil {
 		if err := b.connect(); err != nil {
 			return 0, err
@@ -182,7 +182,7 @@ func (b *BrokerConn) Read(p []byte) (int, error) {
 	return b.conn.Read(p)
 }
 
-func (b *BrokerConn) connect() error {
+func (b *ClusterMember) connect() error {
 	addr := &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {

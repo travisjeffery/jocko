@@ -45,7 +45,7 @@ func New(opts ...OptionFn) (*Raft, error) {
 
 // Bootstrap the Raft agent using fsm and connect to peers
 // Updates to leadership are returned on leaderCh channel
-func (b *Raft) Bootstrap(peers []*jocko.BrokerConn, fsm raft.FSM, leaderCh chan<- bool) (err error) {
+func (b *Raft) Bootstrap(peers []*jocko.ClusterMember, fsm raft.FSM, leaderCh chan<- bool) (err error) {
 	b.transport, err = raft.NewTCPTransport(b.addr, nil, 3, timeout, os.Stderr)
 	if err != nil {
 		return errors.Wrap(err, "tcp transport failed")

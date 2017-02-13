@@ -29,7 +29,7 @@ type Broker struct {
 	leaderCh chan bool
 
 	serf              jocko.Serf
-	reconcileCh       chan *jocko.BrokerConn
+	reconcileCh       chan *jocko.ClusterMember
 	reconcileInterval time.Duration
 
 	shutdownCh   chan struct{}
@@ -42,7 +42,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		replicationManager: newReplicationManager(),
 		id:                 id,
 		topics:             make(map[string][]*jocko.Partition),
-		reconcileCh:        make(chan *jocko.BrokerConn, 32),
+		reconcileCh:        make(chan *jocko.ClusterMember, 32),
 		reconcileInterval:  time.Second * 5,
 		shutdownCh:         make(chan struct{}),
 		leaderCh:           make(chan bool, 1),
@@ -61,7 +61,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		return nil, err
 	}
 
-	conn := &jocko.BrokerConn{
+	conn := &jocko.ClusterMember{
 		ID:       b.id,
 		Port:     port,
 		RaftPort: raftPort,
@@ -87,7 +87,7 @@ func (b *Broker) ID() int32 {
 	return b.id
 }
 
-func (b *Broker) Cluster() []*jocko.BrokerConn {
+func (b *Broker) Cluster() []*jocko.ClusterMember {
 	return b.serf.Cluster()
 }
 
@@ -123,7 +123,7 @@ func (b *Broker) AddPartition(partition *jocko.Partition) error {
 	return b.raftApply(addPartition, partition)
 }
 
-func (b *Broker) BrokerConn(id int32) *jocko.BrokerConn {
+func (b *Broker) ClusterMember(id int32) *jocko.ClusterMember {
 	return b.serf.Member(id)
 }
 

@@ -21,19 +21,19 @@ type Serf struct {
 	logger      *simplelog.Logger
 	serf        *serf.Serf
 	addr        string
-	reconcileCh chan<- *jocko.BrokerConn
+	reconcileCh chan<- *jocko.ClusterMember
 	eventCh     chan serf.Event
 	initMembers []string
 	shutdownCh  chan struct{}
 
-	peers    map[int32]*jocko.BrokerConn
+	peers    map[int32]*jocko.ClusterMember
 	peerLock sync.RWMutex
 }
 
 // New Serf object
 func New(opts ...OptionFn) (*Serf, error) {
 	b := &Serf{
-		peers:      make(map[int32]*jocko.BrokerConn),
+		peers:      make(map[int32]*jocko.ClusterMember),
 		eventCh:    make(chan serf.Event, 256),
 		shutdownCh: make(chan struct{}),
 	}
@@ -47,7 +47,7 @@ func New(opts ...OptionFn) (*Serf, error) {
 
 // Bootstrap saves the node metadata and starts the serf agent
 // Info of node updates is returned on reconcileCh channel
-func (b *Serf) Bootstrap(node *jocko.BrokerConn, reconcileCh chan<- *jocko.BrokerConn) error {
+func (b *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
 	addr, strPort, err := net.SplitHostPort(b.addr)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (b *Serf) serfEventHandler() {
 func (b *Serf) nodeJoinEvent(me serf.MemberEvent) {
 	for _, m := range me.Members {
 		// TODO: need to change these parts
-		peer, err := brokerConn(m)
+		peer, err := clusterMember(m)
 		if err != nil {
 			b.logger.Info("failed to parse peer from serf member: %s", m.Name)
 			continue
@@ -127,7 +127,7 @@ func (b *Serf) nodeJoinEvent(me serf.MemberEvent) {
 func (b *Serf) nodeFailedEvent(me serf.MemberEvent) {
 	for _, m := range me.Members {
 		b.logger.Info("removing peer: %s", me)
-		peer, err := brokerConn(m)
+		peer, err := clusterMember(m)
 		if err != nil {
 			continue
 		}
@@ -144,7 +144,7 @@ func (b *Serf) localMemberEvent(me serf.MemberEvent) error {
 		if isReap {
 			m.Status = StatusReap
 		}
-		conn, err := brokerConn(m)
+		conn, err := clusterMember(m)
 		if err != nil {
 			b.logger.Info("failed to parse serf member event: %s", m)
 			continue
@@ -168,11 +168,11 @@ func (b *Serf) Join(addrs ...string) (int, error) {
 }
 
 // Cluster is the list of all nodes connected to Serf
-func (b *Serf) Cluster() []*jocko.BrokerConn {
+func (b *Serf) Cluster() []*jocko.ClusterMember {
 	b.peerLock.RLock()
 	defer b.peerLock.RUnlock()
 
-	cluster := make([]*jocko.BrokerConn, 0, len(b.peers))
+	cluster := make([]*jocko.ClusterMember, 0, len(b.peers))
 	for _, v := range b.peers {
 		cluster = append(cluster, v)
 	}
@@ -180,7 +180,7 @@ func (b *Serf) Cluster() []*jocko.BrokerConn {
 }
 
 // Member returns broker details of node with given ID
-func (b *Serf) Member(memberID int32) *jocko.BrokerConn {
+func (b *Serf) Member(memberID int32) *jocko.ClusterMember {
 	b.peerLock.RLock()
 	defer b.peerLock.RUnlock()
 	return b.peers[memberID]
@@ -203,7 +203,7 @@ func (b *Serf) Shutdown() error {
 	return nil
 }
 
-func brokerConn(m serf.Member) (*jocko.BrokerConn, error) {
+func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
 	portStr := m.Tags["port"]
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
@@ -222,7 +222,7 @@ func brokerConn(m serf.Member) (*jocko.BrokerConn, error) {
 		return nil, err
 	}
 
-	conn := &jocko.BrokerConn{
+	conn := &jocko.ClusterMember{
 		IP:       m.Addr.String(),
 		ID:       int32(id),
 		RaftPort: raftPort,

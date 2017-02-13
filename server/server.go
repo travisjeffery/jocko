@@ -250,7 +250,7 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 	body := &protocol.LeaderAndISRResponse{}
 	for _, p := range req.PartitionStates {
 		partition, err := s.broker.Partition(p.Topic, p.Partition)
-		broker := s.broker.BrokerConn(p.Leader)
+		broker := s.broker.ClusterMember(p.Leader)
 		if broker == nil {
 			// TODO: error cause we don't know who this broker is
 		}
@@ -309,7 +309,7 @@ func zero(p []byte) {
 }
 
 func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
-	b := new(jocko.BrokerConn)
+	b := new(jocko.ClusterMember)
 	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return

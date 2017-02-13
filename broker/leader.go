@@ -40,7 +40,7 @@ func (b *Broker) revokeLeadership() error {
 // leaderLoop runs as long as we are the leader to run maintainence duties
 func (b *Broker) leaderLoop(stopCh chan struct{}) {
 	defer b.revokeLeadership()
-	var reconcileCh chan *jocko.BrokerConn
+	var reconcileCh chan *jocko.ClusterMember
 	establishedLeader := false
 
 RECONCILE:
@@ -100,7 +100,7 @@ func (b *Broker) reconcile() error {
 	return nil
 }
 
-func (b *Broker) reconcileMember(member *jocko.BrokerConn) error {
+func (b *Broker) reconcileMember(member *jocko.ClusterMember) error {
 	// don't reconcile ourself
 	if member.ID == b.id {
 		return nil
@@ -119,11 +119,11 @@ func (b *Broker) reconcileMember(member *jocko.BrokerConn) error {
 	return nil
 }
 
-func (b *Broker) addRaftPeer(member *jocko.BrokerConn) error {
+func (b *Broker) addRaftPeer(member *jocko.ClusterMember) error {
 	addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
 	return b.raft.AddPeer(addr.String())
 }
 
-func (b *Broker) removeRaftPeer(member *jocko.BrokerConn) error {
+func (b *Broker) removeRaftPeer(member *jocko.ClusterMember) error {
 	return b.raft.RemovePeer(member.IP)
 }
