@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 
-	"github.com/hashicorp/raft"
-	"github.com/hashicorp/serf/serf"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
@@ -121,6 +119,19 @@ func (p *Partition) LeaderID() int32 {
 	return p.Leader
 }
 
+// MemberStatus is the state that a member is in.
+type MemberStatus int
+
+// Different possible states of serf member
+const (
+	StatusNone MemberStatus = iota
+	StatusAlive
+	StatusLeaving
+	StatusLeft
+	StatusFailed
+	StatusReap
+)
+
 // Serf is the interface that wraps Serf methods and is used to manage
 // the cluster membership for Jocko nodes.
 type Serf interface {
@@ -143,7 +154,7 @@ type RaftCommand struct {
 // Raft is the interface that wraps Raft's methods and is used to
 // manage consensus for the Jocko cluster.
 type Raft interface {
-	Bootstrap(peers []*ClusterMember, fsm raft.FSM, leaderCh chan<- bool) (err error)
+	Bootstrap(peers []*ClusterMember, broker Broker, leaderCh chan<- bool) (err error)
 	Apply(cmd RaftCommand) error
 	IsLeader() bool
 	LeaderID() string
@@ -169,6 +180,8 @@ type Broker interface {
 	Cluster() []*ClusterMember
 	TopicPartitions(topic string) ([]*Partition, error)
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
+
+	Apply(c RaftCommand)
 }
 
 // ClusterMember is used as a wrapper around a broker's info and a
@@ -178,9 +191,9 @@ type ClusterMember struct {
 	Port int    `json:"port"`
 	IP   string `json:"addr"`
 
-	SerfPort int               `json:"-"`
-	RaftPort int               `json:"-"`
-	Status   serf.MemberStatus `json:"-"`
+	SerfPort int          `json:"-"`
+	RaftPort int          `json:"-"`
+	Status   MemberStatus `json:"-"`
 
 	conn net.Conn
 }

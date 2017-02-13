@@ -4,9 +4,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/hashicorp/serf/serf"
 	"github.com/travisjeffery/jocko"
-	jockoserf "github.com/travisjeffery/jocko/serf"
 )
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
@@ -107,9 +105,9 @@ func (b *Broker) reconcileMember(member *jocko.ClusterMember) error {
 	}
 	var err error
 	switch member.Status {
-	case serf.StatusAlive:
+	case jocko.StatusAlive:
 		err = b.addRaftPeer(member)
-	case serf.StatusLeft, jockoserf.StatusReap:
+	case jocko.StatusLeft, jocko.StatusReap:
 		err = b.removeRaftPeer(member)
 	}
 	if err != nil {

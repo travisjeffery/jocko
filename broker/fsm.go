@@ -26,12 +26,6 @@ func (s *Broker) Snapshot() (raft.FSMSnapshot, error) {
 	return &FSMSnapshot{}, nil
 }
 
-const (
-	addPartition jocko.RaftCmdType = iota
-	deleteTopic
-	// others
-)
-
 func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 	var b []byte
 	b, err := json.Marshal(data)
@@ -47,11 +41,7 @@ func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 }
 
 // Apply raft command as fsm
-func (s *Broker) Apply(l *raft.Log) interface{} {
-	var c jocko.RaftCommand
-	if err := json.Unmarshal(l.Data, &c); err != nil {
-		panic(errors.Wrap(err, "json unmarshal failed"))
-	}
+func (s *Broker) Apply(c jocko.RaftCommand) {
 	s.logger.Debug("broker/apply cmd [%d]", c.Cmd)
 	switch c.Cmd {
 	case addPartition:
@@ -79,5 +69,4 @@ func (s *Broker) Apply(l *raft.Log) interface{} {
 			panic(errors.Wrap(err, "topic delete failed"))
 		}
 	}
-	return nil
 }
