@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
 )

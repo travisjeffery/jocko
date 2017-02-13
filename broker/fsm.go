@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 )
 
 func (s *Broker) Restore(rc io.ReadCloser) error {

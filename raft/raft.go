@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/simplelog"
 )
 

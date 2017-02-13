@@ -1,7 +1,7 @@
 package broker
 
 import (
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 )
 

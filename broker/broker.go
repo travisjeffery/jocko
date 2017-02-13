@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/commitlog"
-	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/simplelog"
 )
 

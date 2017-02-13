@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
 )

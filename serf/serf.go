@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/serf/serf"
-	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/simplelog"
 )
 
