@@ -1,5 +1,6 @@
 package protocol
 
+// Protocol API keys. See: https://kafka.apache.org/protocol#protocol_api_keys
 const (
 	ProduceKey = iota
 	FetchKey
@@ -19,7 +20,7 @@ const (
 	DescribeGroupsKey
 	ListGroupsKey
 	SaslHandshakeKey
-	ApiVersionsKey
+	APIVersionsKey
 	CreateTopicsKey
 	DeleteTopicsKey
 )
