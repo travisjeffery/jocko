@@ -2,29 +2,16 @@ package broker
 
 import (
 	"encoding/json"
-	"io"
 
-	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 )
 
-func (s *Broker) Restore(rc io.ReadCloser) error {
-	return nil
-}
-
-type FSMSnapshot struct {
-}
-
-func (f *FSMSnapshot) Persist(sink raft.SnapshotSink) error {
-	return nil
-}
-
-func (f *FSMSnapshot) Release() {}
-
-func (s *Broker) Snapshot() (raft.FSMSnapshot, error) {
-	return &FSMSnapshot{}, nil
-}
+const (
+	addPartition jocko.RaftCmdType = iota
+	deleteTopic
+	// others
+)
 
 func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 	var b []byte
@@ -40,30 +27,41 @@ func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 	return s.raft.Apply(c)
 }
 
-// Apply raft command as fsm
-func (s *Broker) Apply(c jocko.RaftCommand) {
+func (s *Broker) handleRaftCommmands() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Info("Error while applying raft command: %v", r)
+			s.Shutdown()
+		}
+	}()
+	for {
+		select {
+		case cmd := <-s.commandCh:
+			s.apply(cmd)
+		case <-s.shutdownCh:
+			return
+		}
+	}
+}
+
+// apply command received over raft
+func (s *Broker) apply(c jocko.RaftCommand) {
 	s.logger.Debug("broker/apply cmd [%d]", c.Cmd)
 	switch c.Cmd {
 	case addPartition:
 		p := new(jocko.Partition)
-		b, err := c.Data.MarshalJSON()
-		if err != nil {
-			panic(errors.Wrap(err, "json marshal failed"))
-		}
-		if err := json.Unmarshal(b, p); err != nil {
-			panic(errors.Wrap(err, "json unmarshal failed"))
+		if err := unmarshalData(c.Data, p); err != nil {
+			s.logger.Info("received malformed raft command: %v", err)
+			return
 		}
 		if err := s.StartReplica(p); err != nil {
 			panic(errors.Wrap(err, "start replica failed"))
 		}
 	case deleteTopic:
 		p := new(jocko.Partition)
-		b, err := c.Data.MarshalJSON()
-		if err != nil {
-			panic(errors.Wrap(err, "json marshal failed"))
-		}
-		if err := json.Unmarshal(b, p); err != nil {
-			panic(errors.Wrap(err, "json unmarshal failed"))
+		if err := unmarshalData(c.Data, p); err != nil {
+			s.logger.Info("received malformed raft command: %v", err)
+			return
 		}
 		if err := s.deleteTopic(p); err != nil {
 			panic(errors.Wrap(err, "topic delete failed"))

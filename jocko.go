@@ -154,7 +154,7 @@ type RaftCommand struct {
 // Raft is the interface that wraps Raft's methods and is used to
 // manage consensus for the Jocko cluster.
 type Raft interface {
-	Bootstrap(peers []*ClusterMember, broker Broker, leaderCh chan<- bool) (err error)
+	Bootstrap(peers []*ClusterMember, commandCh chan<- RaftCommand, leaderCh chan<- bool) (err error)
 	Apply(cmd RaftCommand) error
 	IsLeader() bool
 	LeaderID() string
@@ -180,8 +180,6 @@ type Broker interface {
 	Cluster() []*ClusterMember
 	TopicPartitions(topic string) ([]*Partition, error)
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
-
-	Apply(c RaftCommand)
 }
 
 // ClusterMember is used as a wrapper around a broker's info and a

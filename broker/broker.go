@@ -15,12 +15,6 @@ var (
 	ErrTopicExists = errors.New("topic exists already")
 )
 
-const (
-	addPartition jocko.RaftCmdType = iota
-	deleteTopic
-	// others
-)
-
 type Broker struct {
 	*replicationManager
 	mu     sync.RWMutex
@@ -31,8 +25,9 @@ type Broker struct {
 	brokerAddr string
 	logDir     string
 
-	raft     jocko.Raft
-	leaderCh chan bool
+	raft      jocko.Raft
+	leaderCh  chan bool
+	commandCh chan jocko.RaftCommand
 
 	serf              jocko.Serf
 	reconcileCh       chan *jocko.ClusterMember
@@ -52,6 +47,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		reconcileInterval:  time.Second * 5,
 		shutdownCh:         make(chan struct{}),
 		leaderCh:           make(chan bool, 1),
+		commandCh:          make(chan jocko.RaftCommand, 16),
 	}
 
 	for _, o := range opts {
@@ -78,12 +74,14 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		return nil, err
 	}
 
-	if err := b.raft.Bootstrap(b.serf.Cluster(), b, b.leaderCh); err != nil {
+	if err := b.raft.Bootstrap(b.serf.Cluster(), b.commandCh, b.leaderCh); err != nil {
 		return nil, err
 	}
 
 	// monitor leadership changes
 	go b.monitorLeadership()
+
+	go b.handleRaftCommmands()
 
 	return b, nil
 }
@@ -218,16 +216,6 @@ func (b *Broker) CreateTopic(topic string, partitions int32) error {
 			Replicas:        []int32{},
 		}
 		if err := b.AddPartition(partition); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// DeleteTopics creates topic with partitions count.
-func (b *Broker) DeleteTopics(topics ...string) error {
-	for _, topic := range topics {
-		if err := b.DeleteTopic(topic); err != nil {
 			return err
 		}
 	}
