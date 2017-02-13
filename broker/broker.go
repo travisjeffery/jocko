@@ -284,11 +284,12 @@ func (b *Broker) CreateTopic(topic string, partitions int32) error {
 
 	for i := int32(0); i < partitions; i++ {
 		// TODO: need to know replica assignment here
+		leader := c[i%cLen].ID
 		partition := &jocko.Partition{
 			Topic:           topic,
 			ID:              i,
-			Leader:          c[i%cLen].ID,
-			PreferredLeader: c[i%cLen].ID,
+			Leader:          leader,
+			PreferredLeader: leader,
 			Replicas:        []int32{},
 		}
 		if err := b.AddPartition(partition); err != nil {
