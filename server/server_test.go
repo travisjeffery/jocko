@@ -2,9 +2,7 @@ package server_test
 
 import (
 	"bytes"
-	"io"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"os"
 	"testing"
@@ -17,6 +15,7 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
+	"github.com/travisjeffery/jocko/testutil"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -107,7 +106,18 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	assert.NoError(t, err)
 
-	createTopic(t, conn)
+	err = testutil.CreateTopic(conn, &protocol.CreateTopicRequest{
+		Topic:             topic,
+		NumPartitions:     int32(1),
+		ReplicationFactor: int16(1),
+		ReplicaAssignment: map[int32][]int32{
+			0: []int32{0, 1},
+		},
+		Configs: map[string]string{
+			"config_key": "config_val",
+		},
+	})
+	assert.NoError(t, err)
 
 	return conn, func() {
 		conn.Close()
@@ -115,51 +125,4 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 		store.Shutdown()
 		os.RemoveAll(dataDir)
 	}
-}
-func createTopic(t *testing.T, conn *net.TCPConn) {
-	buf := new(bytes.Buffer)
-	var header protocol.Response
-	var body protocol.Body
-
-	body = &protocol.CreateTopicRequests{
-		Requests: []*protocol.CreateTopicRequest{{
-			Topic:             topic,
-			NumPartitions:     int32(1),
-			ReplicationFactor: int16(1),
-			ReplicaAssignment: map[int32][]int32{
-				0: []int32{0, 1},
-			},
-			Configs: map[string]string{
-				"config_key": "config_val",
-			},
-		}},
-	}
-	var req protocol.Encoder = &protocol.Request{
-		CorrelationID: rand.Int31(),
-		ClientID:      clientID,
-		Body:          body,
-	}
-
-	b, err := protocol.Encode(req)
-	assert.NoError(t, err)
-
-	_, err = conn.Write(b)
-	assert.NoError(t, err)
-
-	_, err = io.CopyN(buf, conn, 8)
-	assert.NoError(t, err)
-
-	protocol.Decode(buf.Bytes(), &header)
-
-	buf.Reset()
-	_, err = io.CopyN(buf, conn, int64(header.Size-4))
-	assert.NoError(t, err)
-
-	createTopicsResponse := &protocol.CreateTopicsResponse{}
-	err = protocol.Decode(buf.Bytes(), createTopicsResponse)
-	assert.NoError(t, err)
-
-	assert.Equal(t, 1, len(createTopicsResponse.TopicErrorCodes))
-	assert.Equal(t, topic, createTopicsResponse.TopicErrorCodes[0].Topic)
-	assert.Equal(t, protocol.ErrNone, createTopicsResponse.TopicErrorCodes[0].ErrorCode)
 }
