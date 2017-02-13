@@ -18,45 +18,22 @@ import (
 )
 
 var (
-	logger   *simplelog.Logger
-	serfPort int
-	raftPort int
-	port     int
-	dataDir  string
+	logger     *simplelog.Logger
+	serfPort   int
+	raftPort   int
+	brokerPort int
+	dataDir    string
 )
 
 func init() {
 	logger = simplelog.New(os.Stdout, simplelog.INFO, "jocko/broker_test")
 	serfPort = 7946
 	raftPort = 5000
-	port = 8000
+	brokerPort = 8000
 	dataDir, _ = ioutil.TempDir("", "broker_test")
 }
 
-func TestBroker_JoinPeer(t *testing.T) {
-	defer os.RemoveAll(dataDir)
-
-	s0 := testServer(t, 0)
-	defer s0.Shutdown()
-	s1 := testServer(t, 1)
-	defer s1.Shutdown()
-
-	testJoin(t, s0, s1)
-
-	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.Cluster()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.Cluster())
-		}
-		if len(s0.Cluster()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.Cluster())
-		}
-		return true, nil
-	}, func(err error) {
-		t.Fatalf("err: %v", err)
-	})
-}
-
-func TestBroker_RemovePeer(t *testing.T) {
+func TestBroker_Membership(t *testing.T) {
 	defer os.RemoveAll(dataDir)
 
 	s0 := testServer(t, 0)
@@ -65,32 +42,37 @@ func TestBroker_RemovePeer(t *testing.T) {
 	s1 := testServer(t, 1)
 	defer s1.Shutdown()
 
-	testJoin(t, s0, s1)
+	t.Run("Join Peer", func(t *testing.T) {
+		testJoin(t, s0, s1)
 
-	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.Cluster()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s1.Cluster())
-		}
-		if len(s0.Cluster()) != 2 {
-			return false, fmt.Errorf("bad: %#v", s0.Cluster())
-		}
-		return true, nil
-	}, func(err error) {
-		t.Fatalf("err: %v", err)
+		testutil.WaitForResult(func() (bool, error) {
+			if len(s1.Cluster()) != 2 {
+				return false, fmt.Errorf("bad: %#v", s1.Cluster())
+			}
+			if len(s0.Cluster()) != 2 {
+				return false, fmt.Errorf("bad: %#v", s0.Cluster())
+			}
+			return true, nil
+		}, func(err error) {
+			t.Fatalf("err: %v", err)
+		})
 	})
 
-	s1.Shutdown()
+	t.Run("Remove Peer", func(t *testing.T) {
+		err := s1.Shutdown()
+		assert.NoError(t, err)
 
-	testutil.WaitForResult(func() (bool, error) {
-		if len(s1.Cluster()) != 1 {
-			return false, fmt.Errorf("bad: %#v", s1.Cluster())
-		}
-		if len(s0.Cluster()) != 1 {
-			return false, fmt.Errorf("bad: %#v", s0.Cluster())
-		}
-		return true, nil
-	}, func(err error) {
-		t.Fatalf("err: %v", err)
+		testutil.WaitForResult(func() (bool, error) {
+			if len(s1.Cluster()) != 1 {
+				return false, fmt.Errorf("bad: %#v", s1.Cluster())
+			}
+			if len(s0.Cluster()) != 1 {
+				return false, fmt.Errorf("bad: %#v", s0.Cluster())
+			}
+			return true, nil
+		}, func(err error) {
+			t.Fatalf("err: %v", err)
+		})
 	})
 }
 
@@ -126,13 +108,14 @@ func testServer(t *testing.T, id int, opts ...BrokerFn) *Broker {
 		int32(id),
 		opts...,
 	)
+
 	assert.NoError(t, err)
 	return broker
 }
 
 func getBrokerAddr() string {
-	port++
-	return fmt.Sprintf("0.0.0.0:%d", port)
+	brokerPort++
+	return fmt.Sprintf("0.0.0.0:%d", brokerPort)
 }
 
 func getRaftAddr() string {
