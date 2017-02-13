@@ -1,9 +1,12 @@
 package broker
 
 import (
+	"encoding/json"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -57,4 +60,15 @@ func getPortFromAddr(addr string) (int, error) {
 		return 0, err
 	}
 	return port, nil
+}
+
+func unmarshalData(data *json.RawMessage, p interface{}) error {
+	b, err := data.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "json marshal failed")
+	}
+	if err := json.Unmarshal(b, p); err != nil {
+		return errors.Wrap(err, "json unmarshal failed")
+	}
+	return nil
 }

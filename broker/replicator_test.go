@@ -2,11 +2,13 @@ package broker
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/nomad/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
@@ -37,10 +39,19 @@ func TestBroker_Replicate(t *testing.T) {
 	err = s0.AddPartition(tp)
 	assert.NoError(t, err)
 
-	time.Sleep(time.Second * 1)
-
-	p, err := s0.Partition("test", 0)
-	assert.NoError(t, err)
+	var p *jocko.Partition
+	testutil.WaitForResult(func() (bool, error) {
+		p, err = s0.Partition("test", 0)
+		if err != nil {
+			return false, fmt.Errorf("error in fetching partition: %v", err)
+		}
+		if p == nil {
+			return false, fmt.Errorf("partition not found")
+		}
+		return true, nil
+	}, func(err error) {
+		t.Fatalf("err: %v", err)
+	})
 
 	replicator := newReplicator(p, 0,
 		ReplicatorMinBytes(5),

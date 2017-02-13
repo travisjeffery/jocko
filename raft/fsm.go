@@ -5,13 +5,13 @@ import (
 	"io"
 
 	"github.com/hashicorp/raft"
-	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/simplelog"
 )
 
 type fsm struct {
-	//commandCh chan<- jocko.RaftCommand
-	broker jocko.Broker
+	logger    *simplelog.Logger
+	commandCh chan<- jocko.RaftCommand
 }
 
 func (s *fsm) Restore(rc io.ReadCloser) error {
@@ -31,13 +31,14 @@ func (s *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	return &FSMSnapshot{}, nil
 }
 
-// Apply raft command as fsm
+// Apply forwards the commands received over command channel to be
+// applied by broker
 func (s *fsm) Apply(l *raft.Log) interface{} {
 	var c jocko.RaftCommand
 	if err := json.Unmarshal(l.Data, &c); err != nil {
-		panic(errors.Wrap(err, "json unmarshal failed"))
+		s.logger.Info("json unmarshal failed: bad raft command")
+		return nil
 	}
-	//s.commandCh <- c
-	s.broker.Apply(c)
+	s.commandCh <- c
 	return nil
 }
