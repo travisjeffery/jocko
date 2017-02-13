@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	// StatusReap is node status in case of EventMemberReap
-	StatusReap = serf.MemberStatus(-1)
+	statusReap = serf.MemberStatus(-1)
 )
 
 // Serf manages membership of Jocko cluster using Hashicorp Serf
@@ -142,7 +141,7 @@ func (b *Serf) localMemberEvent(me serf.MemberEvent) error {
 	isReap := me.EventType() == serf.EventMemberReap
 	for _, m := range me.Members {
 		if isReap {
-			m.Status = StatusReap
+			m.Status = statusReap
 		}
 		conn, err := clusterMember(m)
 		if err != nil {
@@ -227,8 +226,25 @@ func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
 		ID:       int32(id),
 		RaftPort: raftPort,
 		Port:     port,
-		Status:   m.Status,
+		Status:   status(m.Status),
 	}
 
 	return conn, nil
+}
+
+func status(s serf.MemberStatus) jocko.MemberStatus {
+	switch s {
+	case serf.StatusAlive:
+		return jocko.StatusAlive
+	case serf.StatusFailed:
+		return jocko.StatusFailed
+	case serf.StatusLeaving:
+		return jocko.StatusLeaving
+	case serf.StatusLeft:
+		return jocko.StatusLeft
+	case statusReap:
+		return jocko.StatusReap
+	default:
+		return jocko.StatusNone
+	}
 }

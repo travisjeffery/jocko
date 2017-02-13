@@ -15,6 +15,12 @@ var (
 	ErrTopicExists = errors.New("topic exists already")
 )
 
+const (
+	addPartition jocko.RaftCmdType = iota
+	deleteTopic
+	// others
+)
+
 type Broker struct {
 	*replicationManager
 	mu     sync.RWMutex

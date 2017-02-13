@@ -37,6 +37,8 @@ func TestBroker_Replicate(t *testing.T) {
 	err = s0.AddPartition(tp)
 	assert.NoError(t, err)
 
+	time.Sleep(time.Second * 1)
+
 	p, err := s0.Partition("test", 0)
 	assert.NoError(t, err)
 
