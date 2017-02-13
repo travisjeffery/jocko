@@ -13,7 +13,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
@@ -29,125 +28,17 @@ const (
 )
 
 func TestBroker(t *testing.T) {
-	conn, teardown := setup(t)
-
-	t.Run("Server", func(t *testing.T) {
-		buf := new(bytes.Buffer)
-		var header protocol.Response
-		var body protocol.Body
-
-		body = &protocol.MetadataRequest{
-			Topics: []string{"test_topic"},
-		}
-		var req protocol.Encoder = &protocol.Request{
-			CorrelationID: rand.Int31(),
-			ClientID:      clientID,
-			Body:          body,
-		}
-		b, err := protocol.Encode(req)
-		assert.NoError(t, err)
-
-		_, err = conn.Write(b)
-		assert.NoError(t, err)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, 8)
-		assert.NoError(t, err)
-		protocol.Decode(buf.Bytes(), &header)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, int64(header.Size-4))
-		assert.NoError(t, err)
-
-		metadataResponse := &protocol.MetadataResponse{}
-		err = protocol.Decode(buf.Bytes(), metadataResponse)
-		assert.NoError(t, err)
-
-		assert.Equal(t, 1, len(metadataResponse.Brokers))
-		assert.Equal(t, "test_topic", metadataResponse.TopicMetadata[0].Topic)
-
-		m0 := commitlog.NewMessage([]byte("Hello world!"))
-		ms := commitlog.NewMessageSet(0, m0)
-		body = &protocol.ProduceRequest{
-			TopicData: []*protocol.TopicData{{
-				Topic: "test_topic",
-				Data: []*protocol.Data{{
-					Partition: 0,
-					RecordSet: ms,
-				}},
-			}},
-		}
-		req = &protocol.Request{
-			CorrelationID: rand.Int31(),
-			ClientID:      clientID,
-			Body:          body,
-		}
-		b, err = protocol.Encode(req)
-		assert.NoError(t, err)
-		_, err = conn.Write(b)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, 8)
-		assert.NoError(t, err)
-		protocol.Decode(buf.Bytes(), &header)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, int64(header.Size-4))
-		produceResponse := &protocol.ProduceResponses{}
-		err = protocol.Decode(buf.Bytes(), produceResponse)
-		assert.NoError(t, err)
-
-		assert.Equal(t, req.(*protocol.Request).CorrelationID, header.CorrelationID)
-		assert.Equal(t, "test_topic", produceResponse.Responses[0].Topic)
-		assert.Equal(t, protocol.ErrNone, produceResponse.Responses[0].PartitionResponses[0].ErrorCode)
-		assert.NotEqual(t, 0, produceResponse.Responses[0].PartitionResponses[0].Timestamp)
-
-		body = &protocol.FetchRequest{
-			MinBytes: 5,
-			Topics: []*protocol.FetchTopic{{
-				Topic: "test_topic",
-				Partitions: []*protocol.FetchPartition{{
-					Partition:   int32(0),
-					FetchOffset: int64(0),
-					MaxBytes:    int32(5000),
-				}},
-			}},
-		}
-		req = &protocol.Request{
-			CorrelationID: rand.Int31(),
-			ClientID:      clientID,
-			Body:          body,
-		}
-		b, err = protocol.Encode(req)
-		assert.NoError(t, err)
-		_, err = conn.Write(b)
-		assert.NoError(t, err)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, 8)
-		assert.NoError(t, err)
-		err = protocol.Decode(buf.Bytes(), &header)
-		assert.NoError(t, err)
-
-		buf.Reset()
-		_, err = io.CopyN(buf, conn, int64(header.Size-4))
-		fetchResponse := &protocol.FetchResponses{}
-		err = protocol.Decode(buf.Bytes(), fetchResponse)
-		assert.NoError(t, err)
-
-		recordSet := commitlog.MessageSet(fetchResponse.Responses[0].PartitionResponses[0].RecordSet)
-		assert.Equal(t, int64(0), recordSet.Offset())
-		assert.Equal(t, []byte(m0), recordSet.Payload())
-	})
+	_, teardown := setup(t)
 
 	t.Run("Sarama", func(t *testing.T) {
 		config := sarama.NewConfig()
+		config.Version = sarama.V0_10_0_0
 		config.ChannelBufferSize = 1
-		config.Version = sarama.V0_10_0_1
 		config.Producer.Return.Successes = true
-		config.Consumer.Offsets.Initial = sarama.OffsetNewest
-
+		config.Producer.RequiredAcks = sarama.WaitForAll
+		config.Producer.Retry.Max = 10
 		brokers := []string{"127.0.0.1:8000"}
+
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
 			panic(err)
@@ -164,7 +55,7 @@ func TestBroker(t *testing.T) {
 		consumer, err := sarama.NewConsumer(brokers, config)
 		assert.NoError(t, err)
 
-		cPartition, err := consumer.ConsumePartition(topic, pPartition, 1)
+		cPartition, err := consumer.ConsumePartition(topic, pPartition, 0)
 		assert.NoError(t, err)
 
 		select {
@@ -173,6 +64,8 @@ func TestBroker(t *testing.T) {
 			assert.Equal(t, pPartition, msg.Partition)
 			assert.Equal(t, topic, msg.Topic)
 			assert.Equal(t, 0, bytes.Compare(bValue, msg.Value))
+		case err := <-cPartition.Errors():
+			assert.NoError(t, err)
 		}
 	})
 
