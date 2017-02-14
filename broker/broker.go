@@ -133,12 +133,12 @@ func (b *Broker) ClusterMember(id int32) *jocko.ClusterMember {
 
 func (b *Broker) StartReplica(partition *jocko.Partition) error {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	if v, ok := b.topics[partition.Topic]; ok {
 		b.topics[partition.Topic] = append(v, partition)
 	} else {
 		b.topics[partition.Topic] = []*jocko.Partition{partition}
 	}
-	b.mu.Unlock()
 	isLeader := partition.Leader == b.id
 	isFollower := false
 	for _, r := range partition.Replicas {
