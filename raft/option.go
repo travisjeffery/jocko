@@ -19,9 +19,9 @@ func DataDir(dataDir string) OptionFn {
 	}
 }
 
-func Addr(raftAddr string) OptionFn {
+func Addr(addr string) OptionFn {
 	return func(b *Raft) {
-		b.addr = raftAddr
+		b.addr = addr
 	}
 }
 
