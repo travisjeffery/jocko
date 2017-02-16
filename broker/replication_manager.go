@@ -29,11 +29,12 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 		}
 	}
 	delete(rm.replicators, p)
-	p.Leader = command.Leader
 	hw := p.HighWatermark()
 	if err := p.TruncateTo(hw); err != nil {
 		return err
 	}
+	p.Leader = command.Leader
+	p.Conn = rm.ClusterMember(p.LeaderID())
 	r := newReplicator(p, rm.ID(),
 		ReplicatorProxy(server.NewProxy(p.Conn)))
 	r.replicate()
@@ -52,6 +53,7 @@ func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *pro
 		}
 	}
 	p.Leader = rm.ID()
+	p.Conn = rm.ClusterMember(p.LeaderID())
 	p.ISR = command.ISR
 	p.LeaderAndISRVersionInZK = command.ZKVersion
 	return nil
