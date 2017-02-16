@@ -115,7 +115,7 @@ func (b *Serf) nodeJoinEvent(me serf.MemberEvent) {
 			b.logger.Info("failed to parse peer from serf member: %s", m.Name)
 			continue
 		}
-		b.logger.Info("adding peer: %s", peer)
+		b.logger.Info("adding peer: %+v", peer)
 		b.peerLock.Lock()
 		b.peers[peer.ID] = peer
 		b.peerLock.Unlock()
