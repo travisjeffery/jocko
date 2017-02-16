@@ -15,7 +15,6 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/testutil"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -106,7 +105,9 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	assert.NoError(t, err)
 
-	err = testutil.CreateTopic(conn, &protocol.CreateTopicRequest{
+	proxy := server.NewProxy(conn)
+
+	_, err = proxy.CreateTopic("dummyClientID", &protocol.CreateTopicRequest{
 		Topic:             topic,
 		NumPartitions:     int32(1),
 		ReplicationFactor: int16(1),

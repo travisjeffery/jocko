@@ -1,19 +1,14 @@
-// Package replicator provides the replicator which fetches
-// from the partition's leader and produces to a follower thereby
-// replicating the partition.
-
 package broker
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"math/rand"
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+// replicator fetches from the partition's leader and produces to a follower
+// thereby replicating the partition
 type replicator struct {
 	replicaID           int32
 	partition           *jocko.Partition
@@ -25,8 +20,10 @@ type replicator struct {
 	offset              int64
 	msgs                chan []byte
 	done                chan struct{}
+	proxy               jocko.Proxy
 }
 
+// newReplicator returns a new replicator object
 func newReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *replicator {
 	r := &replicator{
 		partition: partition,
@@ -41,6 +38,7 @@ func newReplicator(partition *jocko.Partition, replicaID int32, opts ...Replicat
 	return r
 }
 
+// replicate starts replication process of fetching and writing messages
 func (r *replicator) replicate() {
 	go r.fetchMessages()
 	go r.writeMessages()
@@ -52,7 +50,7 @@ func (r *replicator) fetchMessages() {
 		case <-r.done:
 			return
 		default:
-			fetchBody := &protocol.FetchRequest{
+			fetchRequest := &protocol.FetchRequest{
 				ReplicaID:   r.replicaID,
 				MaxWaitTime: r.maxWaitTime,
 				MinBytes:    r.minBytes,
@@ -64,35 +62,7 @@ func (r *replicator) fetchMessages() {
 					}},
 				}},
 			}
-			var req protocol.Encoder = &protocol.Request{
-				CorrelationID: rand.Int31(),
-				ClientID:      r.clientID,
-				Body:          fetchBody,
-			}
-			b, err := protocol.Encode(req)
-			if err != nil {
-				panic(err)
-			}
-			_, err = r.partition.Write(b)
-			if err != nil {
-				panic(err)
-			}
-			var header protocol.Response
-			br := bytes.NewBuffer(make([]byte, 0, 8))
-			if _, err = io.CopyN(br, r.partition, 8); err != nil {
-				panic(err)
-			}
-			if err = protocol.Decode(br.Bytes(), &header); err != nil {
-				panic(err)
-			}
-			c := make([]byte, 0, header.Size-4)
-			cr := bytes.NewBuffer(c)
-			_, err = io.CopyN(cr, r.partition, int64(header.Size-4))
-			if err != nil {
-				panic(err)
-			}
-			fetchResponse := new(protocol.FetchResponses)
-			err = protocol.Decode(cr.Bytes(), fetchResponse)
+			fetchResponse, err := r.proxy.FetchMessages(r.clientID, fetchRequest)
 			if err != nil {
 				panic(err)
 			}
@@ -124,7 +94,8 @@ func (r *replicator) writeMessages() {
 	}
 }
 
-func (pr *replicator) close() error {
-	close(pr.done)
+// close the replicator object when we are no longer following
+func (r *replicator) close() error {
+	close(r.done)
 	return nil
 }

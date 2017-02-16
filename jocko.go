@@ -22,6 +22,14 @@ type CommitLog interface {
 	Append([]byte) (int64, error)
 }
 
+// Proxy is the interface that wraps Proxy methods for forwarding requests
+// to an existing Jocko server and returning server response to caller
+type Proxy interface {
+	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
+	CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error)
+	// others
+}
+
 // Partition is the unit of storage in Jocko.
 type Partition struct {
 	Topic           string  `json:"topic"`
@@ -31,7 +39,7 @@ type Partition struct {
 	Leader          int32   `json:"leader"`
 	PreferredLeader int32   `json:"preferred_leader"`
 
-	LeaderandISRVersionInZK int32     `json:"-"`
+	LeaderAndISRVersionInZK int32     `json:"-"`
 	CommitLog               CommitLog `json:"-"`
 
 	Conn io.ReadWriter `json:"-"`

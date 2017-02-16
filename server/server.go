@@ -187,9 +187,6 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := s.broker.IsController()
-	if err != nil {
-		return err
-	}
 	if isController {
 		for i, req := range reqs.Requests {
 			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
@@ -266,13 +263,12 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 				Leader:          p.Leader,
 				PreferredLeader: p.Leader,
 
-				LeaderandISRVersionInZK: p.ZKVersion,
+				LeaderAndISRVersionInZK: p.ZKVersion,
 			}
 			if err := s.broker.StartReplica(partition); err != nil {
 				return err
 			}
 		}
-		// TODO: change broker.ID into a int32
 		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
 			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != nil {

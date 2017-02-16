@@ -5,8 +5,7 @@ import (
 	"net"
 
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil"
-
+	"github.com/travisjeffery/jocko/server"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -29,7 +28,9 @@ func main() {
 		panic(err)
 	}
 
-	err = testutil.CreateTopic(conn, &protocol.CreateTopicRequest{
+	proxy := server.NewProxy(conn)
+
+	_, err = proxy.CreateTopic("dummyClientID", &protocol.CreateTopicRequest{
 		Topic:             *topic,
 		NumPartitions:     *partitions,
 		ReplicationFactor: int16(1),

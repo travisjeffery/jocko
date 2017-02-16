@@ -3,6 +3,7 @@ package broker
 import (
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/server"
 )
 
 type replicationManager struct {
@@ -33,7 +34,8 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 	if err := p.TruncateTo(hw); err != nil {
 		return err
 	}
-	r := newReplicator(p, rm.ID())
+	r := newReplicator(p, rm.ID(),
+		ReplicatorProxy(server.NewProxy(p.Conn)))
 	r.replicate()
 	rm.replicators[p] = r
 	return nil
@@ -51,6 +53,6 @@ func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *pro
 	}
 	p.Leader = rm.ID()
 	p.ISR = command.ISR
-	p.LeaderandISRVersionInZK = command.ZKVersion
+	p.LeaderAndISRVersionInZK = command.ZKVersion
 	return nil
 }

@@ -55,7 +55,8 @@ func TestBroker_Replicate(t *testing.T) {
 
 	replicator := newReplicator(p, 0,
 		ReplicatorMinBytes(5),
-		ReplicatorMaxWaitTime(int32(time.Millisecond*250)))
+		ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
+		ReplicatorProxy(server.NewProxy(p.Conn)))
 	assert.NoError(t, err)
 	defer replicator.close()
 

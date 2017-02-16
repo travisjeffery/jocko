@@ -62,3 +62,9 @@ func ReplicatorMaxWaitTime(time int32) ReplicatorFn {
 		r.maxWaitTime = time
 	}
 }
+
+func ReplicatorProxy(proxy jocko.Proxy) ReplicatorFn {
+	return func(r *replicator) {
+		r.proxy = proxy
+	}
+}
