@@ -70,7 +70,60 @@ func TestBroker(t *testing.T) {
 	teardown()
 }
 
-func setup(t *testing.T) (*net.TCPConn, func()) {
+func BenchmarkBroker(b *testing.B) {
+	_, teardown := setup(b)
+
+	config := sarama.NewConfig()
+	config.Version = sarama.V0_10_0_0
+	config.ChannelBufferSize = 1
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 10
+	brokers := []string{"127.0.0.1:8000"}
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		panic(err)
+	}
+
+	bValue := []byte("Hello from Jocko!")
+	msgValue := sarama.ByteEncoder(bValue)
+
+	var msgCount int
+
+	b.Run("Sarama_Produce", func(b *testing.B) {
+		msgCount = b.N
+
+		for i := 0; i < b.N; i++ {
+			_, _, err := producer.SendMessage(&sarama.ProducerMessage{
+				Topic: topic,
+				Value: msgValue,
+			})
+			assert.NoError(b, err)
+		}
+	})
+
+	b.Run("Sarama_Consume", func(b *testing.B) {
+		consumer, err := sarama.NewConsumer(brokers, config)
+		assert.NoError(b, err)
+
+		cPartition, err := consumer.ConsumePartition(topic, 0, 0)
+		assert.NoError(b, err)
+
+		for i := 0; i < msgCount; i++ {
+			select {
+			case msg := <-cPartition.Messages():
+				assert.Equal(b, topic, msg.Topic)
+			case err := <-cPartition.Errors():
+				assert.NoError(b, err)
+			}
+		}
+	})
+
+	teardown()
+}
+
+func setup(t assert.TestingT) (*net.TCPConn, func()) {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	assert.NoError(t, err)
 
