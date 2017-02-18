@@ -30,7 +30,7 @@ func main() {
 
 	proxy := server.NewProxy(conn)
 
-	_, err = proxy.CreateTopic("dummyClientID", &protocol.CreateTopicRequest{
+	_, err = proxy.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
 		Topic:             *topic,
 		NumPartitions:     *partitions,
 		ReplicationFactor: int16(1),

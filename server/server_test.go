@@ -107,7 +107,7 @@ func setup(t *testing.T) (*net.TCPConn, func()) {
 
 	proxy := server.NewProxy(conn)
 
-	_, err = proxy.CreateTopic("dummyClientID", &protocol.CreateTopicRequest{
+	_, err = proxy.CreateTopic("testclient", &protocol.CreateTopicRequest{
 		Topic:             topic,
 		NumPartitions:     int32(1),
 		ReplicationFactor: int16(1),
