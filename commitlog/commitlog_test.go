@@ -56,6 +56,19 @@ func TestNewCommitLog(t *testing.T) {
 	}
 }
 
+func BenchmarkCommitLog(b *testing.B) {
+	var err error
+	l := setup(b)
+	defer cleanup(b)
+
+	msgSet := msgSets[0]
+
+	for i := 0; i < b.N; i++ {
+		_, err = l.Append(msgSet)
+		assert.NoError(b, err)
+	}
+}
+
 func TestTruncateTo(t *testing.T) {
 	var err error
 	l := setup(t)
@@ -118,13 +131,13 @@ func TestCleaner(t *testing.T) {
 	}
 }
 
-func check(t *testing.T, got, want []byte) {
+func check(t assert.TestingT, got, want []byte) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("got = %s, want %s", string(got), string(want))
 	}
 }
 
-func setup(t *testing.T) *CommitLog {
+func setup(t assert.TestingT) *CommitLog {
 	opts := Options{
 		Path:            path,
 		MaxSegmentBytes: 6,
@@ -139,7 +152,7 @@ func setup(t *testing.T) *CommitLog {
 	return l
 }
 
-func cleanup(t *testing.T) {
+func cleanup(t assert.TestingT) {
 	os.RemoveAll(path)
 	os.MkdirAll(path, 0755)
 }
