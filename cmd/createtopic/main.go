@@ -12,7 +12,7 @@ import (
 var (
 	brokerAddr = kingpin.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
 	topic      = kingpin.Flag("topic", "Name of topic to create").String()
-	partitions = kingpin.Flag("partitions", "Number of partitions").Int32()
+	partitions = kingpin.Flag("partitions", "Number of partitions").Default("1").Int32()
 )
 
 func main() {
