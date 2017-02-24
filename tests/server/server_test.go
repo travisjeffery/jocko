@@ -1,4 +1,4 @@
-package server_test
+package tests
 
 import (
 	"bytes"
@@ -27,6 +27,7 @@ const (
 
 func TestBroker(t *testing.T) {
 	_, teardown := setup(t)
+	defer teardown()
 
 	t.Run("Sarama", func(t *testing.T) {
 		config := sarama.NewConfig()
@@ -66,12 +67,11 @@ func TestBroker(t *testing.T) {
 			assert.NoError(t, err)
 		}
 	})
-
-	teardown()
 }
 
 func BenchmarkBroker(b *testing.B) {
 	_, teardown := setup(b)
+	defer teardown()
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V0_10_0_0
@@ -119,8 +119,6 @@ func BenchmarkBroker(b *testing.B) {
 			}
 		}
 	})
-
-	teardown()
 }
 
 func setup(t assert.TestingT) (*net.TCPConn, func()) {
@@ -159,7 +157,6 @@ func setup(t assert.TestingT) (*net.TCPConn, func()) {
 	assert.NoError(t, err)
 
 	proxy := server.NewProxy(conn)
-
 	_, err = proxy.CreateTopic("testclient", &protocol.CreateTopicRequest{
 		Topic:             topic,
 		NumPartitions:     int32(1),

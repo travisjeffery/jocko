@@ -1,4 +1,4 @@
-package commitlog
+package tests
 
 import (
 	"bytes"
@@ -9,18 +9,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/travisjeffery/jocko/commitlog"
 )
 
 var (
-	msgs = []Message{
-		NewMessage([]byte("one")),
-		NewMessage([]byte("two")),
-		NewMessage([]byte("three")),
-		NewMessage([]byte("four")),
+	msgs = []commitlog.Message{
+		commitlog.NewMessage([]byte("one")),
+		commitlog.NewMessage([]byte("two")),
+		commitlog.NewMessage([]byte("three")),
+		commitlog.NewMessage([]byte("four")),
 	}
-	msgSets = []MessageSet{
-		NewMessageSet(0, msgs...),
-		NewMessageSet(1, msgs...),
+	msgSets = []commitlog.MessageSet{
+		commitlog.NewMessageSet(0, msgs...),
+		commitlog.NewMessageSet(1, msgs...),
 	}
 	maxBytes = msgSets[0].Size()
 	path     = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
@@ -44,7 +45,7 @@ func TestNewCommitLog(t *testing.T) {
 		_, err = r.Read(p)
 		assert.NoError(t, err)
 
-		ms := MessageSet(p)
+		ms := commitlog.MessageSet(p)
 		assert.Equal(t, int64(i), ms.Offset())
 
 		payload := ms.Payload()
@@ -97,7 +98,7 @@ func TestTruncateTo(t *testing.T) {
 		_, err = r.Read(p)
 		assert.NoError(t, err)
 
-		ms := MessageSet(p)
+		ms := commitlog.MessageSet(p)
 		assert.Equal(t, int64(i+1), ms.Offset())
 
 		payload := ms.Payload()
@@ -137,17 +138,14 @@ func check(t assert.TestingT, got, want []byte) {
 	}
 }
 
-func setup(t assert.TestingT) *CommitLog {
-	opts := Options{
+func setup(t assert.TestingT) *commitlog.CommitLog {
+	opts := commitlog.Options{
 		Path:            path,
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
 	}
-	l, err := New(opts)
+	l, err := commitlog.New(opts)
 	assert.NoError(t, err)
-
-	assert.NoError(t, l.Init())
-	assert.NoError(t, l.Open())
 
 	return l
 }

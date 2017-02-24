@@ -54,10 +54,18 @@ func New(opts Options) (*CommitLog, error) {
 		cleaner: NewDeleteCleaner(opts.MaxLogBytes),
 	}
 
+	if err := l.init(); err != nil {
+		return nil, err
+	}
+
+	if err := l.open(); err != nil {
+		return nil, err
+	}
+
 	return l, nil
 }
 
-func (l *CommitLog) Init() error {
+func (l *CommitLog) init() error {
 	err := os.MkdirAll(l.Path, 0755)
 	if err != nil {
 		return errors.Wrap(err, "mkdir failed")
@@ -65,7 +73,7 @@ func (l *CommitLog) Init() error {
 	return nil
 }
 
-func (l *CommitLog) Open() error {
+func (l *CommitLog) open() error {
 	files, err := ioutil.ReadDir(l.Path)
 	if err != nil {
 		return errors.Wrap(err, "read dir failed")
@@ -130,6 +138,7 @@ func (l *CommitLog) Read(p []byte) (n int, err error) {
 	defer l.mu.Unlock()
 	return l.activeSegment().Read(p)
 }
+
 func (l *CommitLog) NewestOffset() int64 {
 	return l.activeSegment().NextOffset
 }

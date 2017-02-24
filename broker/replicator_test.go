@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/nomad/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
+	"github.com/travisjeffery/jocko/testutil"
 )
 
 func TestBroker_Replicate(t *testing.T) {

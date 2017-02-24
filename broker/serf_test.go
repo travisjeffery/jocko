@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/nomad/testutil"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	jockoraft "github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
+	"github.com/travisjeffery/jocko/testutil"
 	"github.com/travisjeffery/simplelog"
 )
 
