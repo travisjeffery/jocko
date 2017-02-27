@@ -12,8 +12,6 @@ import (
 // CommitLog is the interface that wraps the commit log's methods and
 // is used to manage a partition's data.
 type CommitLog interface {
-	Init() error
-	Open() error
 	DeleteAll() error
 	NewReader(offset int64, maxBytes int32) (io.Reader, error)
 	TruncateTo(int64) error

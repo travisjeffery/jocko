@@ -155,12 +155,6 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 		if err != nil {
 			return err
 		}
-		if err = commitLog.Init(); err != nil {
-			return err
-		}
-		if err = commitLog.Open(); err != nil {
-			return err
-		}
 		partition.CommitLog = commitLog
 		partition.Conn = b.serf.Member(partition.LeaderID())
 	}

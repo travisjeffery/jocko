@@ -147,9 +147,6 @@ func setup(t assert.TestingT) *commitlog.CommitLog {
 	l, err := commitlog.New(opts)
 	assert.NoError(t, err)
 
-	assert.NoError(t, l.Init())
-	assert.NoError(t, l.Open())
-
 	return l
 }
 
