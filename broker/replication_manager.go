@@ -8,12 +8,12 @@ import (
 
 type replicationManager struct {
 	jocko.Broker
-	replicators map[*jocko.Partition]*replicator
+	replicators map[*jocko.Partition]*Replicator
 }
 
 func newReplicationManager() *replicationManager {
 	return &replicationManager{
-		replicators: make(map[*jocko.Partition]*replicator),
+		replicators: make(map[*jocko.Partition]*Replicator),
 	}
 }
 
@@ -24,7 +24,7 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 	}
 	// stop replicator to current leader
 	if r, ok := rm.replicators[p]; ok {
-		if err := r.close(); err != nil {
+		if err := r.Close(); err != nil {
 			return err
 		}
 	}
@@ -35,9 +35,8 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 	}
 	p.Leader = command.Leader
 	p.Conn = rm.ClusterMember(p.LeaderID())
-	r := newReplicator(p, rm.ID(),
+	r := NewReplicator(p, rm.ID(),
 		ReplicatorProxy(server.NewProxy(p.Conn)))
-	r.replicate()
 	rm.replicators[p] = r
 	return nil
 }
@@ -48,7 +47,7 @@ func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *pro
 		return err
 	}
 	if r, ok := rm.replicators[p]; ok {
-		if err := r.close(); err != nil {
+		if err := r.Close(); err != nil {
 			return err
 		}
 	}
