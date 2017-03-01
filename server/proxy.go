@@ -9,7 +9,7 @@ import (
 )
 
 // Proxy acts as a proxy for an existing Jocko server
-// It forwards requests to server over tcp connection and returns server response to caller
+// It forwards requests to server over provided connection and returns server response to caller
 type Proxy struct {
 	conn io.ReadWriter
 }
