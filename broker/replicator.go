@@ -7,9 +7,9 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// replicator fetches from the partition's leader and produces to a follower
+// Replicator fetches from the partition's leader and produces to a follower
 // thereby replicating the partition
-type replicator struct {
+type Replicator struct {
 	replicaID           int32
 	partition           *jocko.Partition
 	clientID            string
@@ -23,9 +23,9 @@ type replicator struct {
 	proxy               jocko.Proxy
 }
 
-// newReplicator returns a new replicator object
-func newReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *replicator {
-	r := &replicator{
+// NewReplicator returns a new replicator object
+func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *Replicator {
+	r := &Replicator{
 		partition: partition,
 		replicaID: replicaID,
 		clientID:  fmt.Sprintf("Replicator-%d", replicaID),
@@ -35,16 +35,14 @@ func newReplicator(partition *jocko.Partition, replicaID int32, opts ...Replicat
 	for _, o := range opts {
 		o(r)
 	}
+
+	go r.fetchMessages()
+	go r.writeMessages()
+
 	return r
 }
 
-// replicate starts replication process of fetching and writing messages
-func (r *replicator) replicate() {
-	go r.fetchMessages()
-	go r.writeMessages()
-}
-
-func (r *replicator) fetchMessages() {
+func (r *Replicator) fetchMessages() {
 	for {
 		select {
 		case <-r.done:
@@ -80,7 +78,7 @@ func (r *replicator) fetchMessages() {
 	}
 }
 
-func (r *replicator) writeMessages() {
+func (r *Replicator) writeMessages() {
 	for {
 		select {
 		case <-r.done:
@@ -94,8 +92,8 @@ func (r *replicator) writeMessages() {
 	}
 }
 
-// close the replicator object when we are no longer following
-func (r *replicator) close() error {
+// Close the replicator object when we are no longer following
+func (r *Replicator) Close() error {
 	close(r.done)
 	return nil
 }

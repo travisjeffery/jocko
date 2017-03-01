@@ -37,34 +37,34 @@ func Raft(raft jocko.Raft) BrokerFn {
 	}
 }
 
-type ReplicatorFn func(r *replicator)
+type ReplicatorFn func(r *Replicator)
 
 func ReplicatorReplicaID(id int32) ReplicatorFn {
-	return func(r *replicator) {
+	return func(r *Replicator) {
 		r.replicaID = id
 	}
 }
 
 func ReplicatorFetchSize(size int32) ReplicatorFn {
-	return func(r *replicator) {
+	return func(r *Replicator) {
 		r.fetchSize = size
 	}
 }
 
 func ReplicatorMinBytes(size int32) ReplicatorFn {
-	return func(r *replicator) {
+	return func(r *Replicator) {
 		r.minBytes = size
 	}
 }
 
 func ReplicatorMaxWaitTime(time int32) ReplicatorFn {
-	return func(r *replicator) {
+	return func(r *Replicator) {
 		r.maxWaitTime = time
 	}
 }
 
 func ReplicatorProxy(proxy jocko.Proxy) ReplicatorFn {
-	return func(r *replicator) {
+	return func(r *Replicator) {
 		r.proxy = proxy
 	}
 }
