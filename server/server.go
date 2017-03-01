@@ -19,18 +19,20 @@ import (
 )
 
 type Server struct {
-	addr   string
-	ln     *net.TCPListener
-	mu     sync.Mutex
-	logger *simplelog.Logger
-	broker jocko.Broker
+	addr       string
+	ln         *net.TCPListener
+	mu         sync.Mutex
+	logger     *simplelog.Logger
+	broker     jocko.Broker
+	shutdownCh chan struct{}
 }
 
 func New(addr string, broker jocko.Broker, logger *simplelog.Logger) *Server {
 	return &Server{
-		addr:   addr,
-		broker: broker,
-		logger: logger,
+		addr:       addr,
+		broker:     broker,
+		logger:     logger,
+		shutdownCh: make(chan struct{}),
 	}
 }
 
@@ -60,13 +62,18 @@ func (s *Server) Start() error {
 
 	go func() {
 		for {
-			conn, err := s.ln.Accept()
-			if err != nil {
-				s.logger.Debug("listener accept failed: %v", err)
-				continue
-			}
+			select {
+			case <-s.shutdownCh:
+				break
+			default:
+				conn, err := s.ln.Accept()
+				if err != nil {
+					s.logger.Debug("listener accept failed: %v", err)
+					continue
+				}
 
-			go s.handleRequest(conn)
+				go s.handleRequest(conn)
+			}
 		}
 	}()
 
@@ -82,6 +89,7 @@ func (s *Server) Start() error {
 
 // Close closes the service.
 func (s *Server) Close() {
+	close(s.shutdownCh)
 	s.ln.Close()
 	return
 }
@@ -95,7 +103,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			s.logger.Info("Read deadilne failed: %s", err)
+			s.logger.Info("Read deadline failed: %s", err)
 			continue
 		}
 		n, err := io.ReadFull(conn, p[:])
