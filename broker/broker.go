@@ -242,13 +242,6 @@ func (b *Broker) leave() error {
 
 	// TODO: handle case if we're the controller/leader
 
-	// leave the gossip pool
-	if b.serf != nil {
-		if err := b.serf.Leave(); err != nil {
-			b.logger.Info("failed to leave serf cluster: %v", err)
-		}
-	}
-
 	return nil
 }
 

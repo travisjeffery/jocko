@@ -28,12 +28,6 @@ func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 }
 
 func (s *Broker) handleRaftCommmands() {
-	defer func() {
-		if r := recover(); r != nil {
-			s.logger.Info("Error while applying raft command: %v", r)
-			s.Shutdown()
-		}
-	}()
 	for {
 		select {
 		case cmd := <-s.commandCh:
@@ -46,6 +40,13 @@ func (s *Broker) handleRaftCommmands() {
 
 // apply command received over raft
 func (s *Broker) apply(c jocko.RaftCommand) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Info("Error while applying raft command: %v", r)
+			s.Shutdown()
+		}
+	}()
+
 	s.logger.Debug("broker/apply cmd [%d]", c.Cmd)
 	switch c.Cmd {
 	case addPartition:

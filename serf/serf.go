@@ -185,8 +185,8 @@ func (b *Serf) Member(memberID int32) *jocko.ClusterMember {
 	return b.peers[memberID]
 }
 
-// Leave the serf cluster
-func (b *Serf) Leave() error {
+// leave the serf cluster
+func (b *Serf) leave() error {
 	if err := b.serf.Leave(); err != nil {
 		return err
 	}
@@ -196,6 +196,9 @@ func (b *Serf) Leave() error {
 // Shutdown Serf agent
 func (b *Serf) Shutdown() error {
 	close(b.shutdownCh)
+	if err := b.leave(); err != nil {
+		return err
+	}
 	if err := b.serf.Shutdown(); err != nil {
 		return err
 	}

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bmizerany/assert"
 	"github.com/hashicorp/nomad/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/testutil/mocks"
@@ -29,8 +29,6 @@ func TestBroker_Replicate(t *testing.T) {
 		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
 		broker.ReplicatorProxy(mockProxy))
 
-	defer replicator.Close()
-
 	testutil.WaitForResult(func() (bool, error) {
 		commitLog := mockCommitLog.Log()
 		if len(commitLog) < 4 {
@@ -41,4 +39,6 @@ func TestBroker_Replicate(t *testing.T) {
 	}, func(err error) {
 		t.Fatalf("err: %v", err)
 	})
+
+	assert.NoError(t, replicator.Close())
 }

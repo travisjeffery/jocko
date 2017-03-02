@@ -145,7 +145,6 @@ type Serf interface {
 	Cluster() []*ClusterMember
 	Member(memberID int32) *ClusterMember
 	Join(addrs ...string) (int, error)
-	Leave() error
 	Shutdown() error
 	Addr() string
 }
