@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/nomad/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/testutil"
 	"github.com/travisjeffery/jocko/testutil/mocks"
 )
 
