@@ -1,4 +1,4 @@
-package tests
+package serf_test
 
 import (
 	"fmt"

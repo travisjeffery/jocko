@@ -1,4 +1,4 @@
-package tests
+package broker_test
 
 import (
 	"testing"

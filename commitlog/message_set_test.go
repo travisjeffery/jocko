@@ -1,4 +1,4 @@
-package tests
+package commitlog_test
 
 import (
 	"testing"
