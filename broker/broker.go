@@ -3,7 +3,6 @@ package broker
 import (
 	"path"
 	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
@@ -25,13 +24,8 @@ type Broker struct {
 	brokerAddr string
 	logDir     string
 
-	raft      jocko.Raft
-	leaderCh  chan bool
-	commandCh chan jocko.RaftCommand
-
-	serf              jocko.Serf
-	reconcileCh       chan *jocko.ClusterMember
-	reconcileInterval time.Duration
+	raft jocko.Raft
+	serf jocko.Serf
 
 	shutdownCh   chan struct{}
 	shutdown     bool
@@ -43,11 +37,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		replicationManager: newReplicationManager(),
 		id:                 id,
 		topics:             make(map[string][]*jocko.Partition),
-		reconcileCh:        make(chan *jocko.ClusterMember, 32),
-		reconcileInterval:  time.Second * 5,
 		shutdownCh:         make(chan struct{}),
-		leaderCh:           make(chan bool, 1),
-		commandCh:          make(chan jocko.RaftCommand, 16),
 	}
 
 	for _, o := range opts {
@@ -69,19 +59,18 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		RaftPort: raftPort,
 	}
 
-	if err := b.serf.Bootstrap(conn, b.reconcileCh); err != nil {
+	reconcileCh := make(chan *jocko.ClusterMember, 32)
+	if err := b.serf.Bootstrap(conn, reconcileCh); err != nil {
 		b.logger.Info("failed to start serf: %s", err)
 		return nil, err
 	}
 
-	if err := b.raft.Bootstrap(b.serf.Cluster(), b.commandCh, b.leaderCh); err != nil {
+	commandCh := make(chan jocko.RaftCommand, 16)
+	if err := b.raft.Bootstrap(b.serf, reconcileCh, commandCh); err != nil {
 		return nil, err
 	}
 
-	// monitor leadership changes
-	go b.monitorLeadership()
-
-	go b.handleRaftCommmands()
+	go b.handleRaftCommmands(commandCh)
 
 	return b, nil
 }
@@ -98,10 +87,6 @@ func (b *Broker) Cluster() []*jocko.ClusterMember {
 // IsController checks if this broker is the cluster controller
 func (b *Broker) IsController() bool {
 	return b.raft.IsLeader()
-}
-
-func (b *Broker) ControllerID() string {
-	return b.raft.LeaderID()
 }
 
 func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
@@ -236,15 +221,6 @@ func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	return nil
 }
 
-// leave is used to prepare for a graceful shutdown of the server
-func (b *Broker) leave() error {
-	b.logger.Info("broker starting to leave")
-
-	// TODO: handle case if we're the controller/leader
-
-	return nil
-}
-
 func (b *Broker) Shutdown() error {
 	b.logger.Info("shutting down broker")
 	b.shutdownLock.Lock()
@@ -255,9 +231,6 @@ func (b *Broker) Shutdown() error {
 	}
 
 	b.shutdown = true
-	if err := b.leave(); err != nil {
-		return err
-	}
 	close(b.shutdownCh)
 
 	if b.serf != nil {
