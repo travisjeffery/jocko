@@ -38,33 +38,9 @@ func (b *Broker) revokeLeadership() error {
 // leaderLoop runs as long as we are the leader to run maintainence duties
 func (b *Broker) leaderLoop(stopCh chan struct{}) {
 	defer b.revokeLeadership()
-	var reconcileCh chan *jocko.ClusterMember
-	establishedLeader := false
 
-RECONCILE:
-	reconcileCh = nil
 	interval := time.After(b.reconcileInterval)
 
-	if err := b.raft.WaitForBarrier(); err != nil {
-		goto WAIT
-	}
-
-	if !establishedLeader {
-		if err := b.establishLeadership(stopCh); err != nil {
-			b.logger.Info("failed to establish leadership: %v", err)
-			goto WAIT
-		}
-		establishedLeader = true
-	}
-
-	if err := b.reconcile(); err != nil {
-		b.logger.Info("failed to reconcile: %v", err)
-		goto WAIT
-	}
-
-	reconcileCh = b.reconcileCh
-
-WAIT:
 	for {
 		select {
 		case <-stopCh:
@@ -72,8 +48,11 @@ WAIT:
 		case <-b.shutdownCh:
 			return
 		case <-interval:
-			goto RECONCILE
-		case member := <-reconcileCh:
+			if err := b.reconcile(); err != nil {
+				b.logger.Info("failed to reconcile: %v", err)
+				continue
+			}
+		case member := <-b.reconcileCh:
 			if b.IsController() {
 				b.reconcileMember(member)
 			}
@@ -89,6 +68,10 @@ func (b *Broker) establishLeadership(stopCh chan struct{}) error {
 }
 
 func (b *Broker) reconcile() error {
+	if err := b.raft.WaitForBarrier(); err != nil {
+		return err
+	}
+
 	members := b.Cluster()
 	for _, member := range members {
 		if err := b.reconcileMember(member); err != nil {
