@@ -151,10 +151,10 @@ func (idx *index) Sync() error {
 
 func (idx *index) Close() (err error) {
 	if err = idx.Sync(); err != nil {
-		return
+		return err
 	}
 	if err = idx.file.Truncate(idx.position); err != nil {
-		return
+		return err
 	}
 	return idx.file.Close()
 }
