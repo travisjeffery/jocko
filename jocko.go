@@ -146,7 +146,7 @@ type Serf interface {
 	Member(memberID int32) *ClusterMember
 	Join(addrs ...string) (int, error)
 	Shutdown() error
-	Addr() string
+	ID() int32
 }
 
 type RaftCmdType int
@@ -159,13 +159,10 @@ type RaftCommand struct {
 // Raft is the interface that wraps Raft's methods and is used to
 // manage consensus for the Jocko cluster.
 type Raft interface {
-	Bootstrap(peers []*ClusterMember, commandCh chan<- RaftCommand, leaderCh chan<- bool) (err error)
+	Bootstrap(serf Serf, serfEventCh <-chan *ClusterMember, commandCh chan<- RaftCommand) error
 	Apply(cmd RaftCommand) error
 	IsLeader() bool
 	LeaderID() string
-	WaitForBarrier() error
-	AddPeer(addr string) error
-	RemovePeer(addr string) error
 	Shutdown() error
 	Addr() string
 }

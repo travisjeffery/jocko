@@ -30,11 +30,19 @@ type Raft struct {
 	dataDir             string
 	addr                string
 	devDisableBootstrap bool
+
+	serf              jocko.Serf
+	reconcileInterval time.Duration
+	shutdownCh        chan struct{}
 }
 
 // New Raft object
 func New(opts ...OptionFn) (*Raft, error) {
-	r := &Raft{config: raft.DefaultConfig()}
+	r := &Raft{
+		config:            raft.DefaultConfig(),
+		reconcileInterval: time.Second * 5,
+		shutdownCh:        make(chan struct{}),
+	}
 
 	for _, o := range opts {
 		o(r)
@@ -44,9 +52,9 @@ func New(opts ...OptionFn) (*Raft, error) {
 }
 
 // Bootstrap the Raft agent using fsm and connect to peers
-// Updates to leadership are returned on leaderCh channel
 // Commands received by raft are returned on commandCh channel
-func (b *Raft) Bootstrap(peers []*jocko.ClusterMember, commandCh chan<- jocko.RaftCommand, leaderCh chan<- bool) (err error) {
+func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) (err error) {
+	b.serf = serf
 	b.transport, err = raft.NewTCPTransport(b.addr, nil, 3, timeout, os.Stderr)
 	if err != nil {
 		return errors.Wrap(err, "tcp transport failed")
@@ -58,7 +66,7 @@ func (b *Raft) Bootstrap(peers []*jocko.ClusterMember, commandCh chan<- jocko.Ra
 	}
 
 	var peersAddrs []string
-	for _, p := range peers {
+	for _, p := range serf.Cluster() {
 		addr := &net.TCPAddr{IP: net.ParseIP(p.IP), Port: p.RaftPort}
 		peersAddrs = append(peersAddrs, addr.String())
 	}
@@ -78,7 +86,8 @@ func (b *Raft) Bootstrap(peers []*jocko.ClusterMember, commandCh chan<- jocko.Ra
 	}
 	b.store = boltStore
 
-	b.config.NotifyCh = leaderCh
+	raftNotifyCh := make(chan bool, 1)
+	b.config.NotifyCh = raftNotifyCh
 	b.config.StartAsLeader = !b.devDisableBootstrap
 
 	fsm := &fsm{
@@ -93,6 +102,9 @@ func (b *Raft) Bootstrap(peers []*jocko.ClusterMember, commandCh chan<- jocko.Ra
 		return errors.Wrap(err, "raft failed")
 	}
 	b.raft = raft
+
+	// monitor leadership changes
+	go b.monitorLeadership(raftNotifyCh, serfEventCh)
 
 	return nil
 }
@@ -122,8 +134,8 @@ func (b *Raft) LeaderID() string {
 	return b.raft.Leader()
 }
 
-// WaitForBarrier to let fsm finish
-func (b *Raft) WaitForBarrier() error {
+// waitForBarrier to let fsm finish
+func (b *Raft) waitForBarrier() error {
 	barrier := b.raft.Barrier(0)
 	if err := barrier.Error(); err != nil {
 		b.logger.Info("failed to wait for barrier: %v", err)
@@ -132,8 +144,8 @@ func (b *Raft) WaitForBarrier() error {
 	return nil
 }
 
-// AddPeer of given address to raft
-func (b *Raft) AddPeer(addr string) error {
+// addPeer of given address to raft
+func (b *Raft) addPeer(addr string) error {
 	future := b.raft.AddPeer(addr)
 	if err := future.Error(); err != nil && err != raft.ErrKnownPeer {
 		b.logger.Info("failed to add raft peer: %v", err)
@@ -144,8 +156,8 @@ func (b *Raft) AddPeer(addr string) error {
 	return nil
 }
 
-// RemovePeer of given address from raft
-func (b *Raft) RemovePeer(addr string) error {
+// removePeer of given address from raft
+func (b *Raft) removePeer(addr string) error {
 	future := b.raft.RemovePeer(addr)
 	if err := future.Error(); err != nil && err != raft.ErrUnknownPeer {
 		b.logger.Info("failed to remove raft peer: %v", err)
@@ -156,8 +168,23 @@ func (b *Raft) RemovePeer(addr string) error {
 	return nil
 }
 
+// leave is used to prepare for a graceful shutdown of the server
+func (b *Raft) leave() error {
+	b.logger.Info("preparing to leave raft peers")
+
+	// TODO: handle case if we're the controller/leader
+
+	return nil
+}
+
 // Shutdown raft agent
 func (b *Raft) Shutdown() error {
+	close(b.shutdownCh)
+
+	if err := b.leave(); err != nil {
+		return err
+	}
+
 	if err := b.transport.Close(); err != nil {
 		return err
 	}

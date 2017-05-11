@@ -27,10 +27,10 @@ func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 	return s.raft.Apply(c)
 }
 
-func (s *Broker) handleRaftCommmands() {
+func (s *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 	for {
 		select {
-		case cmd := <-s.commandCh:
+		case cmd := <-commandCh:
 			s.apply(cmd)
 		case <-s.shutdownCh:
 			return

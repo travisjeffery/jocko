@@ -20,8 +20,8 @@ type Serf struct {
 	logger      *simplelog.Logger
 	serf        *serf.Serf
 	addr        string
+	nodeID      int32
 	reconcileCh chan<- *jocko.ClusterMember
-	eventCh     chan serf.Event
 	initMembers []string
 	shutdownCh  chan struct{}
 
@@ -33,7 +33,6 @@ type Serf struct {
 func New(opts ...OptionFn) (*Serf, error) {
 	b := &Serf{
 		peers:      make(map[int32]*jocko.ClusterMember),
-		eventCh:    make(chan serf.Event, 256),
 		shutdownCh: make(chan struct{}),
 	}
 
@@ -56,11 +55,13 @@ func (b *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 	if err != nil {
 		return err
 	}
+	b.nodeID = node.ID
+	eventCh := make(chan serf.Event, 256)
 	conf := serf.DefaultConfig()
 	conf.Init()
 	conf.MemberlistConfig.BindAddr = addr
 	conf.MemberlistConfig.BindPort = port
-	conf.EventCh = b.eventCh
+	conf.EventCh = eventCh
 	conf.EnableNameConflictResolution = false
 	conf.NodeName = fmt.Sprintf("jocko-%03d", node.ID)
 	conf.Tags["id"] = strconv.Itoa(int(node.ID))
@@ -78,16 +79,16 @@ func (b *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 	}
 
 	// ingest events for serf
-	go b.serfEventHandler()
+	go b.serfEventHandler(eventCh)
 
 	return nil
 }
 
 // serfEventHandler is used to handle events from the serf cluster
-func (b *Serf) serfEventHandler() {
+func (b *Serf) serfEventHandler(eventCh <-chan serf.Event) {
 	for {
 		select {
-		case e := <-b.eventCh:
+		case e := <-eventCh:
 			switch e.EventType() {
 			case serf.EventMemberJoin:
 				b.nodeJoinEvent(e.(serf.MemberEvent))
@@ -151,6 +152,11 @@ func (b *Serf) localMemberEvent(me serf.MemberEvent) error {
 		b.reconcileCh <- conn
 	}
 	return nil
+}
+
+// ID of this serf node
+func (b *Serf) ID() int32 {
+	return b.nodeID
 }
 
 // Addr of serf agent

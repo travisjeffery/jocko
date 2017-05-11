@@ -1,4 +1,4 @@
-package broker
+package raft
 
 import (
 	"net"
@@ -9,14 +9,14 @@ import (
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
 // leader in the Raft cluster.
-func (b *Broker) monitorLeadership() {
+func (b *Raft) monitorLeadership(raftEventCh <-chan bool, serfEventCh <-chan *jocko.ClusterMember) {
 	var stopCh chan struct{}
 	for {
 		select {
-		case isLeader := <-b.leaderCh:
+		case isLeader := <-raftEventCh:
 			if isLeader {
 				stopCh = make(chan struct{})
-				go b.leaderLoop(stopCh)
+				go b.leaderLoop(stopCh, serfEventCh)
 				b.logger.Info("cluster leadership acquired")
 			} else if stopCh != nil {
 				close(stopCh)
@@ -31,21 +31,21 @@ func (b *Broker) monitorLeadership() {
 
 // revokeLeadership is invoked once we step down as leader.
 // This is used to cleanup any state that may be specific to the leader.
-func (b *Broker) revokeLeadership() error {
+func (b *Raft) revokeLeadership() error {
 	return nil
 }
 
 // leaderLoop runs as long as we are the leader to run maintainence duties
-func (b *Broker) leaderLoop(stopCh chan struct{}) {
+func (b *Raft) leaderLoop(stopCh chan struct{}, serfEventCh <-chan *jocko.ClusterMember) {
 	defer b.revokeLeadership()
-	var reconcileCh chan *jocko.ClusterMember
+	var reconcileCh <-chan *jocko.ClusterMember
 	establishedLeader := false
 
 RECONCILE:
 	reconcileCh = nil
 	interval := time.After(b.reconcileInterval)
 
-	if err := b.raft.WaitForBarrier(); err != nil {
+	if err := b.waitForBarrier(); err != nil {
 		goto WAIT
 	}
 
@@ -62,7 +62,7 @@ RECONCILE:
 		goto WAIT
 	}
 
-	reconcileCh = b.reconcileCh
+	reconcileCh = serfEventCh
 
 WAIT:
 	for {
@@ -74,22 +74,22 @@ WAIT:
 		case <-interval:
 			goto RECONCILE
 		case member := <-reconcileCh:
-			if b.IsController() {
+			if b.IsLeader() {
 				b.reconcileMember(member)
 			}
 		}
 	}
 }
 
-func (b *Broker) establishLeadership(stopCh chan struct{}) error {
+func (b *Raft) establishLeadership(stopCh chan struct{}) error {
 	// start monitoring other brokers
 	// b.periodicDispatcher.SetEnabled(true)
 	// b.periodicDispatcher.Start()
 	return nil
 }
 
-func (b *Broker) reconcile() error {
-	members := b.Cluster()
+func (b *Raft) reconcile() error {
+	members := b.serf.Cluster()
 	for _, member := range members {
 		if err := b.reconcileMember(member); err != nil {
 			return err
@@ -98,9 +98,9 @@ func (b *Broker) reconcile() error {
 	return nil
 }
 
-func (b *Broker) reconcileMember(member *jocko.ClusterMember) error {
+func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	// don't reconcile ourself
-	if member.ID == b.id {
+	if member.ID == b.serf.ID() {
 		return nil
 	}
 	var err error
@@ -110,6 +110,7 @@ func (b *Broker) reconcileMember(member *jocko.ClusterMember) error {
 	case jocko.StatusLeft, jocko.StatusReap:
 		err = b.removeRaftPeer(member)
 	}
+
 	if err != nil {
 		b.logger.Info("failed to reconcile member: %v: %v", member, err)
 		return err
@@ -117,11 +118,11 @@ func (b *Broker) reconcileMember(member *jocko.ClusterMember) error {
 	return nil
 }
 
-func (b *Broker) addRaftPeer(member *jocko.ClusterMember) error {
+func (b *Raft) addRaftPeer(member *jocko.ClusterMember) error {
 	addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
-	return b.raft.AddPeer(addr.String())
+	return b.addPeer(addr.String())
 }
 
-func (b *Broker) removeRaftPeer(member *jocko.ClusterMember) error {
-	return b.raft.RemovePeer(member.IP)
+func (b *Raft) removeRaftPeer(member *jocko.ClusterMember) error {
+	return b.removePeer(member.IP)
 }
