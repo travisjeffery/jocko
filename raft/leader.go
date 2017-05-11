@@ -9,11 +9,11 @@ import (
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
 // leader in the Raft cluster.
-func (b *Raft) monitorLeadership(raftEventCh <-chan bool, serfEventCh <-chan *jocko.ClusterMember) {
+func (b *Raft) monitorLeadership(notifyCh <-chan bool, serfEventCh <-chan *jocko.ClusterMember) {
 	var stopCh chan struct{}
 	for {
 		select {
-		case isLeader := <-raftEventCh:
+		case isLeader := <-notifyCh:
 			if isLeader {
 				stopCh = make(chan struct{})
 				go b.leaderLoop(stopCh, serfEventCh)
@@ -106,9 +106,10 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	var err error
 	switch member.Status {
 	case jocko.StatusAlive:
-		err = b.addRaftPeer(member)
+		addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
+		err = b.addPeer(addr.String())
 	case jocko.StatusLeft, jocko.StatusReap:
-		err = b.removeRaftPeer(member)
+		err = b.removePeer(member.IP)
 	}
 
 	if err != nil {
@@ -116,13 +117,4 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 		return err
 	}
 	return nil
-}
-
-func (b *Raft) addRaftPeer(member *jocko.ClusterMember) error {
-	addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
-	return b.addPeer(addr.String())
-}
-
-func (b *Raft) removeRaftPeer(member *jocko.ClusterMember) error {
-	return b.removePeer(member.IP)
 }

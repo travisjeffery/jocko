@@ -86,8 +86,8 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 	}
 	b.store = boltStore
 
-	raftNotifyCh := make(chan bool, 1)
-	b.config.NotifyCh = raftNotifyCh
+	notifyCh := make(chan bool, 1)
+	b.config.NotifyCh = notifyCh
 	b.config.StartAsLeader = !b.devDisableBootstrap
 
 	fsm := &fsm{
@@ -104,7 +104,7 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 	b.raft = raft
 
 	// monitor leadership changes
-	go b.monitorLeadership(raftNotifyCh, serfEventCh)
+	go b.monitorLeadership(notifyCh, serfEventCh)
 
 	return nil
 }
