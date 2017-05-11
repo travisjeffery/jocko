@@ -49,7 +49,7 @@ func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
 	}
 }*/
 
-func getPortFromAddr(addr string) (int, error) {
+func addrPort(addr string) (int, error) {
 	_, strPort, err := net.SplitHostPort(addr)
 	if err != nil {
 		return 0, err

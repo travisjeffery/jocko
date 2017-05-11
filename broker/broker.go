@@ -14,6 +14,7 @@ var (
 	ErrTopicExists = errors.New("topic exists already")
 )
 
+// Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	*replicationManager
 	mu     sync.RWMutex
@@ -32,6 +33,7 @@ type Broker struct {
 	shutdownLock sync.Mutex
 }
 
+// New is used to instantiate a new broker.
 func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	b := &Broker{
 		replicationManager: newReplicationManager(),
@@ -44,11 +46,12 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		o(b)
 	}
 
-	port, err := getPortFromAddr(b.brokerAddr)
+	port, err := addrPort(b.brokerAddr)
 	if err != nil {
 		return nil, err
 	}
-	raftPort, err := getPortFromAddr(b.raft.Addr())
+
+	raftPort, err := addrPort(b.raft.Addr())
 	if err != nil {
 		return nil, err
 	}
@@ -80,15 +83,17 @@ func (b *Broker) ID() int32 {
 	return b.id
 }
 
+// Cluster is used to get a list of members in the cluster.
 func (b *Broker) Cluster() []*jocko.ClusterMember {
 	return b.serf.Cluster()
 }
 
-// IsController checks if this broker is the cluster controller
+// IsController returns true if this broker is the cluster controller.
 func (b *Broker) IsController() bool {
 	return b.raft.IsLeader()
 }
 
+// TopicPartitions is used to get the partitions for the given topic.
 func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -108,14 +113,17 @@ func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, err
 	return nil, errors.New("partition not found")
 }
 
+// AddPartition is used to add a partition across the cluster.
 func (b *Broker) AddPartition(partition *jocko.Partition) error {
 	return b.raftApply(addPartition, partition)
 }
 
+// ClusterMember is used to get a specific member in the cluster.
 func (b *Broker) ClusterMember(id int32) *jocko.ClusterMember {
 	return b.serf.Member(id)
 }
 
+// StartReplica is used to start a replica on this broker, including creating its commit log.
 func (b *Broker) StartReplica(partition *jocko.Partition) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -146,6 +154,7 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 	return nil
 }
 
+// IsLeaderPartitions returns true if the given leader is the leader of the given partition.
 func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -159,6 +168,7 @@ func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 	return result
 }
 
+// Topics returns the list of known topic names.
 func (b *Broker) Topics() []string {
 	topics := []string{}
 	for k := range b.topics {
@@ -167,13 +177,13 @@ func (b *Broker) Topics() []string {
 	return topics
 }
 
-// Join is used to have the broker join the gossip ring
-// The target address should be another broker listening on the Serf address
+// Join is used to have the broker join the gossip ring.
+// The given address should be another broker listening on the Serf address.
 func (b *Broker) Join(addrs ...string) (int, error) {
 	return b.serf.Join(addrs...)
 }
 
-// CreateTopic creates topic with partitions count.
+// CreateTopic is used to create the topic across the cluster.
 func (b *Broker) CreateTopic(topic string, partitions int32) error {
 	for _, t := range b.Topics() {
 		if t == topic {
@@ -201,10 +211,12 @@ func (b *Broker) CreateTopic(topic string, partitions int32) error {
 	return nil
 }
 
+// DeleteTopic is used to delete the topic across the cluster.
 func (b *Broker) DeleteTopic(topic string) error {
 	return b.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
 }
 
+// deleteTopic is used to delete the topic from this broker.
 func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	partitions, err := b.TopicPartitions(tp.Topic)
 	if err != nil {
@@ -221,6 +233,7 @@ func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	return nil
 }
 
+// Shutdown is used to shutdown the broker, its serf, its raft, and so on.
 func (b *Broker) Shutdown() error {
 	b.logger.Info("shutting down broker")
 	b.shutdownLock.Lock()

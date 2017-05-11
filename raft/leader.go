@@ -35,7 +35,8 @@ func (b *Raft) revokeLeadership() error {
 	return nil
 }
 
-// leaderLoop runs as long as we are the leader to run maintainence duties
+// leaderLoop is ran when this raft instance is the leader of the cluster and is used to
+// perform cluster leadership duties.
 func (b *Raft) leaderLoop(stopCh chan struct{}, serfEventCh <-chan *jocko.ClusterMember) {
 	defer b.revokeLeadership()
 	var reconcileCh <-chan *jocko.ClusterMember

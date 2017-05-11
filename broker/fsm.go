@@ -27,6 +27,7 @@ func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 	return s.raft.Apply(c)
 }
 
+// handleRaftCommands reads commands sent into the given channel to apply them.
 func (s *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 	for {
 		select {
@@ -38,7 +39,7 @@ func (s *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 	}
 }
 
-// apply command received over raft
+// apply applies the given command on this broker.
 func (s *Broker) apply(c jocko.RaftCommand) {
 	defer func() {
 		if r := recover(); r != nil {

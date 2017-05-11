@@ -51,8 +51,8 @@ func New(opts ...OptionFn) (*Raft, error) {
 	return r, nil
 }
 
-// Bootstrap the Raft agent using fsm and connect to peers
-// Commands received by raft are returned on commandCh channel
+// Bootstrap is used to bootstrap the raft instance.
+// Commands received by raft are sent on commandCh channel.
 func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) (err error) {
 	b.serf = serf
 	b.transport, err = raft.NewTCPTransport(b.addr, nil, 3, timeout, os.Stderr)
@@ -103,7 +103,6 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 	}
 	b.raft = raft
 
-	// monitor leadership changes
 	go b.monitorLeadership(notifyCh, serfEventCh)
 
 	return nil
