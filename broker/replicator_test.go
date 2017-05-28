@@ -12,8 +12,8 @@ import (
 )
 
 func TestBroker_Replicate(t *testing.T) {
-	mockCommitLog := mocks.NewCommitLog()
-	mockProxy := mocks.NewProxyForFetchMessages(4)
+	clog := mocks.NewCommitLog()
+	proxy := mocks.NewProxy(4)
 
 	p := &jocko.Partition{
 		Topic:           "test",
@@ -21,20 +21,20 @@ func TestBroker_Replicate(t *testing.T) {
 		Leader:          0,
 		PreferredLeader: 0,
 		Replicas:        []int32{0},
-		CommitLog:       mockCommitLog,
+		CommitLog:       clog,
 	}
 
 	replicator := broker.NewReplicator(p, 0,
 		broker.ReplicatorMinBytes(5),
 		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
-		broker.ReplicatorProxy(mockProxy))
+		broker.ReplicatorProxy(proxy))
 
 	testutil.WaitForResult(func() (bool, error) {
-		commitLog := mockCommitLog.Log()
+		commitLog := clog.Log()
 		if len(commitLog) < 4 {
 			return false, nil
 		}
-		assert.Equal(t, commitLog, mockProxy.MockedMessages(), "unmatched replicated messages")
+		assert.Equal(t, commitLog, proxy.Messages(), "unmatched replicated messages")
 		return true, nil
 	}, func(err error) {
 		t.Fatalf("err: %v", err)
