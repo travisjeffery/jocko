@@ -53,6 +53,11 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 	return s, err
 }
 
+// SetupIndex creates and initializes an index.
+// Initialization is:
+// - Sanity check of the loaded index
+// - Truncates the index (clears it)
+// - Reads the log file from the beginning and re-initializes the index
 func (s *Segment) SetupIndex(path string) (err error) {
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, s.BaseOffset))
 	s.Index, err = newIndex(options{
@@ -62,7 +67,7 @@ func (s *Segment) SetupIndex(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = s.Index.SanityCheck(); err == nil {
+	if err = s.Index.SanityCheck(); err != nil {
 		return err
 	}
 	if err := s.Index.TruncateEntries(0); err != nil {
@@ -94,6 +99,9 @@ func (s *Segment) SetupIndex(path string) (err error) {
 			return err
 		}
 
+		// Reset the buffer to not get an overflow
+		b.Truncate(0)
+
 		err = s.Index.WriteEntry(Entry{
 			Offset:   s.NextOffset,
 			Position: s.Position,
@@ -118,6 +126,8 @@ func (s *Segment) IsFull() bool {
 	return s.Position >= s.maxBytes
 }
 
+// Write writes a byte slice to the log at the current position.
+// It increments the offset as well as sets the position to the new tail.
 func (s *Segment) Write(p []byte) (n int, err error) {
 	s.Lock()
 	defer s.Unlock()

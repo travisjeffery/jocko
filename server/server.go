@@ -137,6 +137,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 		s.logger.Debug("correlation id [%d], request size [%d], key [%d]", header.CorrelationID, size, header.APIKey)
 
 		switch header.APIKey {
+		case protocol.APIVersionsKey:
+			req := &protocol.APIVersionsRequest{}
+			s.decode(header, req, d)
+			if err = s.handleAPIVersions(conn, header, req); err != nil {
+				s.logger.Info("API Versions failed: %s", err)
+			}
 		case protocol.ProduceKey:
 			req := &protocol.ProduceRequest{}
 			s.decode(header, req, d)
@@ -189,6 +195,35 @@ func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d 
 		return err
 	}
 	return nil
+}
+
+func (s *Server) handleAPIVersions(conn net.Conn, header *protocol.RequestHeader, req *protocol.APIVersionsRequest) (err error) {
+	resp := new(protocol.APIVersionsResponse)
+
+	resp.APIVersions = []protocol.APIVersion{
+		{APIKey: protocol.ProduceKey, MinVersion: 2, MaxVersion: 2},
+		{APIKey: protocol.FetchKey},
+		{APIKey: protocol.OffsetsKey},
+		{APIKey: protocol.MetadataKey},
+		{APIKey: protocol.LeaderAndISRKey},
+		{APIKey: protocol.StopReplicaKey},
+		{APIKey: protocol.GroupCoordinatorKey},
+		{APIKey: protocol.JoinGroupKey},
+		{APIKey: protocol.HeartbeatKey},
+		{APIKey: protocol.LeaveGroupKey},
+		{APIKey: protocol.SyncGroupKey},
+		{APIKey: protocol.DescribeGroupsKey},
+		{APIKey: protocol.ListGroupsKey},
+		{APIKey: protocol.APIVersionsKey},
+		{APIKey: protocol.CreateTopicsKey},
+		{APIKey: protocol.DeleteTopicsKey},
+	}
+
+	r := &protocol.Response{
+		CorrelationID: header.CorrelationID,
+		Body:          resp,
+	}
+	return s.write(conn, header, r)
 }
 
 func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
