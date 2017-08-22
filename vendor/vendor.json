@@ -286,7 +286,7 @@
 			"revisionTime": "2016-07-09T07:12:53Z"
 		},
 		{
-			"checksumSHA1": "aVgPDgwY3/t4J/JOw9H3FVMHqh0=",
+			"checksumSHA1": "h81kOzPOGBKUALhTxLN9vk0Ds94=",
 			"path": "golang.org/x/sys/unix",
 			"revision": "c200b10b5d5e122be351b67af224adc6128af5bf",
 			"revisionTime": "2016-10-22T18:22:21Z"
