@@ -111,7 +111,6 @@ func (s *Server) handleRequest(conn net.Conn) {
 			break
 		}
 		if err != nil {
-			// TODO: handle err
 			s.logger.Info("conn read failed: %s", err)
 			break
 		}

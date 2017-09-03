@@ -26,7 +26,7 @@ const (
 )
 
 func TestBroker(t *testing.T) {
-	_, teardown := setup(t)
+	teardown := setup(t)
 	defer teardown()
 
 	t.Run("Sarama", func(t *testing.T) {
@@ -70,15 +70,14 @@ func TestBroker(t *testing.T) {
 }
 
 func BenchmarkBroker(b *testing.B) {
-	_, teardown := setup(b)
+	teardown := setup(b)
 	defer teardown()
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V0_10_0_0
-	config.ChannelBufferSize = 1
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	config.Producer.Retry.Max = 10
+	config.Producer.Retry.Max = 3
 	brokers := []string{"127.0.0.1:8000"}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
@@ -121,7 +120,7 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t assert.TestingT) (*net.TCPConn, func()) {
+func setup(t assert.TestingT) func() {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	assert.NoError(t, err)
 
@@ -155,6 +154,7 @@ func setup(t assert.TestingT) (*net.TCPConn, func()) {
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	proxy := server.NewProxy(conn)
 	_, err = proxy.CreateTopic("testclient", &protocol.CreateTopicRequest{
@@ -170,8 +170,7 @@ func setup(t assert.TestingT) (*net.TCPConn, func()) {
 	})
 	assert.NoError(t, err)
 
-	return conn, func() {
-		conn.Close()
+	return func() {
 		srv.Close()
 		store.Shutdown()
 		os.RemoveAll(dataDir)
