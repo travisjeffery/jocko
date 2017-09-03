@@ -106,7 +106,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			s.logger.Info("read deadline failed: %s", err)
 			continue
 		}
-		n, err := io.ReadFull(conn, p[:])
+		_, err = io.ReadFull(conn, p[:])
 		if err == io.EOF {
 			break
 		}
@@ -115,13 +115,10 @@ func (s *Server) handleRequest(conn net.Conn) {
 			s.logger.Info("conn read failed: %s", err)
 			break
 		}
-		if n == 0 {
-			continue
-		}
 
 		size := protocol.Encoding.Uint32(p)
 		if size == 0 {
-			continue
+			break // TODO: should this even happen?
 		}
 
 		b := make([]byte, size+4) //+4 since we're going to copy the size into b
