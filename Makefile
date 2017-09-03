@@ -9,6 +9,10 @@ deps:
 
 .PHONY: test
 test:
+	govendor test -v -p=1 +local
+
+.PHONY: test-race
+test-race:
 	govendor test -v -race -p=1 +local
 
 
