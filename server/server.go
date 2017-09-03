@@ -134,7 +134,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		d := protocol.NewDecoder(b)
 		header.Decode(d)
-		s.logger.Debug("correlation id [%d], request size [%d], key [%d]", header.CorrelationID, size, header.APIKey)
+		s.logger.Debug("request: correlation id [%d], client id [%s], request size [%d], key [%d]", header.CorrelationID, header.ClientID, size, header.APIKey)
 
 		switch header.APIKey {
 		case protocol.APIVersionsKey:
@@ -401,6 +401,7 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 }
 
 func (s *Server) write(conn net.Conn, header *protocol.RequestHeader, e protocol.Encoder) error {
+	s.logger.Debug("response: correlation id [%d], key [%d]", header.CorrelationID, header.APIKey)
 	b, err := protocol.Encode(e)
 	if err != nil {
 		return err
