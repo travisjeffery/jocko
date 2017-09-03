@@ -103,7 +103,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			s.logger.Info("Read deadline failed: %s", err)
+			s.logger.Info("read deadline failed: %s", err)
 			continue
 		}
 		n, err := io.ReadFull(conn, p[:])
@@ -112,7 +112,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 		if err != nil {
 			// TODO: handle err
-			s.logger.Info("Conn read failed: %s", err)
+			s.logger.Info("conn read failed: %s", err)
 			break
 		}
 		if n == 0 {
@@ -141,49 +141,49 @@ func (s *Server) handleRequest(conn net.Conn) {
 			req := &protocol.APIVersionsRequest{}
 			s.decode(header, req, d)
 			if err = s.handleAPIVersions(conn, header, req); err != nil {
-				s.logger.Info("API Versions failed: %s", err)
+				s.logger.Info("api Versions failed: %s", err)
 			}
 		case protocol.ProduceKey:
 			req := &protocol.ProduceRequest{}
 			s.decode(header, req, d)
 			if err = s.handleProduce(conn, header, req); err != nil {
-				s.logger.Info("Produce failed: %s", err)
+				s.logger.Info("produce failed: %s", err)
 			}
 		case protocol.FetchKey:
 			req := &protocol.FetchRequest{}
 			s.decode(header, req, d)
 			if err = s.handleFetch(conn, header, req); err != nil {
-				s.logger.Info("Fetch failed: %s", err)
+				s.logger.Info("fetch failed: %s", err)
 			}
 		case protocol.OffsetsKey:
 			req := &protocol.OffsetsRequest{}
 			s.decode(header, req, d)
 			if err = s.handleOffsets(conn, header, req); err != nil {
-				s.logger.Info("Offsets failed: %s", err)
+				s.logger.Info("offsets failed: %s", err)
 			}
 		case protocol.MetadataKey:
 			req := &protocol.MetadataRequest{}
 			s.decode(header, req, d)
 			if err = s.handleMetadata(conn, header, req); err != nil {
-				s.logger.Info("Metadata request failed: %s", err)
+				s.logger.Info("metadata request failed: %s", err)
 			}
 		case protocol.CreateTopicsKey:
 			req := &protocol.CreateTopicRequests{}
 			s.decode(header, req, d)
 			if err = s.handleCreateTopic(conn, header, req); err != nil {
-				s.logger.Info("Create topic failed: %s", err)
+				s.logger.Info("create topic failed: %s", err)
 			}
 		case protocol.DeleteTopicsKey:
 			req := &protocol.DeleteTopicsRequest{}
 			s.decode(header, req, d)
 			if err = s.handleDeleteTopics(conn, header, req); err != nil {
-				s.logger.Info("Delete topic failed: %s", err)
+				s.logger.Info("delete topic failed: %s", err)
 			}
 		case protocol.LeaderAndISRKey:
 			req := &protocol.LeaderAndISRRequest{}
 			s.decode(header, req, d)
 			if err = s.handleLeaderAndISR(conn, header, req); err != nil {
-				s.logger.Info("Handle leader and ISR failed: %s", err)
+				s.logger.Info("handle leader and ISR failed: %s", err)
 			}
 		}
 	}
@@ -234,7 +234,7 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 		for i, req := range reqs.Requests {
 			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
 			if err != nil {
-				s.logger.Info("Failed to create topic %s: %v", req.Topic, err)
+				s.logger.Info("failed to create topic %s: %v", req.Topic, err)
 				return
 			}
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
@@ -243,7 +243,7 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 			}
 		}
 	} else {
-		s.logger.Info("Failed to create topic %s: %v", errors.New("broker is not controller"))
+		s.logger.Info("failed to create topic %s: %v", errors.New("broker is not controller"))
 		// cID := s.broker.ControllerID()
 		// send the request to the controller
 		return
@@ -266,7 +266,7 @@ func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeade
 		for i, topic := range reqs.Topics {
 			err = s.broker.DeleteTopic(topic)
 			if err != nil {
-				s.logger.Info("Failed to delete topic %s: %v", topic, err)
+				s.logger.Info("failed to delete topic %s: %v", topic, err)
 				return
 			}
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
@@ -498,17 +498,17 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 			partition, err := s.broker.Partition(topic.Topic, p.Partition)
 			if err != nil {
 				// TODO set err code
-				s.logger.Info("Failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
+				s.logger.Info("failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
 				break
 			}
 			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
-				s.logger.Info("Failed to produce: %v", errors.New("broker is not partition leader"))
+				s.logger.Info("failed to produce: %v", errors.New("broker is not partition leader"))
 				// TODO set err code
 				break
 			}
 			rdr, err := partition.NewReader(p.FetchOffset, p.MaxBytes)
 			if err != nil {
-				s.logger.Info("Failed to read partition: %v", err)
+				s.logger.Info("failed to read partition: %v", err)
 				// TODO set err code
 				break
 			}
@@ -521,7 +521,7 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 				// TODO: copy these bytes to outer bytes
 				nn, err := io.Copy(b, rdr)
 				if err != nil && err != io.EOF {
-					s.logger.Info("Failed to fetch messages: %v", err)
+					s.logger.Info("failed to fetch messages: %v", err)
 					// TODO seT error code
 					break
 				}

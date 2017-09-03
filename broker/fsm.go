@@ -43,12 +43,12 @@ func (s *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 func (s *Broker) apply(c jocko.RaftCommand) {
 	defer func() {
 		if r := recover(); r != nil {
-			s.logger.Info("Error while applying raft command: %v", r)
+			s.logger.Info("error while applying raft command: %v", r)
 			s.Shutdown()
 		}
 	}()
 
-	s.logger.Debug("broker/apply cmd [%d]", c.Cmd)
+	s.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
 	switch c.Cmd {
 	case addPartition:
 		p := new(jocko.Partition)
