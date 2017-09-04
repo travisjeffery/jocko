@@ -36,7 +36,7 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 	p.Leader = command.Leader
 	p.Conn = rm.ClusterMember(p.LeaderID())
 	r := NewReplicator(p, rm.ID(),
-		ReplicatorProxy(server.NewProxy(p.Conn)))
+		ReplicatorLeader(server.NewClient(p.Conn)))
 	rm.replicators[p] = r
 	return nil
 }

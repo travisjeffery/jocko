@@ -13,7 +13,7 @@ import (
 
 func TestBroker_Replicate(t *testing.T) {
 	clog := mocks.NewCommitLog()
-	proxy := mocks.NewProxy(4)
+	leader := mocks.NewClient(4)
 
 	p := &jocko.Partition{
 		Topic:           "test",
@@ -27,14 +27,14 @@ func TestBroker_Replicate(t *testing.T) {
 	replicator := broker.NewReplicator(p, 0,
 		broker.ReplicatorMinBytes(5),
 		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
-		broker.ReplicatorProxy(proxy))
+		broker.ReplicatorLeader(leader))
 
 	testutil.WaitForResult(func() (bool, error) {
 		commitLog := clog.Log()
 		if len(commitLog) < 4 {
 			return false, nil
 		}
-		assert.Equal(t, commitLog, proxy.Messages(), "unmatched replicated messages")
+		assert.Equal(t, commitLog, leader.Messages(), "unmatched replicated messages")
 		return true, nil
 	}, func(err error) {
 		t.Fatalf("err: %v", err)

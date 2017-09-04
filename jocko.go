@@ -20,9 +20,8 @@ type CommitLog interface {
 	Append([]byte) (int64, error)
 }
 
-// Proxy is the interface that wraps Proxy methods for forwarding requests
-// to an existing Jocko server and returning server response to caller
-type Proxy interface {
+// Client is used to request other brokers.
+type Client interface {
 	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
 	CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error)
 	// others

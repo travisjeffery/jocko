@@ -28,9 +28,9 @@ func main() {
 		panic(err)
 	}
 
-	proxy := server.NewProxy(conn)
+	client := server.NewClient(conn)
 
-	_, err = proxy.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
+	_, err = client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
 		Topic:             *topic,
 		NumPartitions:     *partitions,
 		ReplicationFactor: int16(1),

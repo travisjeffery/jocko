@@ -74,9 +74,9 @@ func ReplicatorMaxWaitTime(time int32) ReplicatorFn {
 	}
 }
 
-// ReplicatorProxy is used to set the replicator's proxy which is used to proxy requests from one broker to another.
-func ReplicatorProxy(proxy jocko.Proxy) ReplicatorFn {
+// ReplicatorLeader is used to set the replicator's leader to consume from.
+func ReplicatorLeader(leader jocko.Client) ReplicatorFn {
 	return func(r *Replicator) {
-		r.proxy = proxy
+		r.leader = leader
 	}
 }

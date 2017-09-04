@@ -8,22 +8,21 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// Proxy acts as a proxy for an existing Jocko server
-// It forwards requests to server over provided connection and returns server response to caller
-type Proxy struct {
+// Client is used to connect and request to other brokers, for example, for replication.
+type Client struct {
 	conn io.ReadWriter
 }
 
-// NewProxy creates a new proxy to a Jocko server that can be reached over conn
-func NewProxy(conn io.ReadWriter) *Proxy {
-	return &Proxy{
+// NewClient creates a new client to a Jocko server that can be reached over conn.
+func NewClient(conn io.ReadWriter) *Client {
+	return &Client{
 		conn: conn,
 	}
 }
 
 // makeRequest sends request req to server.
 // Server response is given to decoder to decode it as per request expectations
-func (p *Proxy) makeRequest(req *protocol.Request, decoder protocol.Decoder) error {
+func (p *Client) makeRequest(req *protocol.Request, decoder protocol.Decoder) error {
 	b, err := protocol.Encode(req)
 	if err != nil {
 		return err
@@ -51,7 +50,7 @@ func (p *Proxy) makeRequest(req *protocol.Request, decoder protocol.Decoder) err
 }
 
 // FetchMessages of topics from server as per fetchRequest
-func (p *Proxy) FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error) {
+func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error) {
 	req := &protocol.Request{
 		CorrelationID: rand.Int31(),
 		ClientID:      clientID,
@@ -65,7 +64,7 @@ func (p *Proxy) FetchMessages(clientID string, fetchRequest *protocol.FetchReque
 }
 
 // CreateTopic sends request to server to create a topic as per createRequest
-func (p *Proxy) CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error) {
+func (p *Client) CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error) {
 	body := &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{createRequest},
 	}

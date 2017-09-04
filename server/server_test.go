@@ -156,8 +156,8 @@ func setup(t assert.TestingT) func() {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	proxy := server.NewProxy(conn)
-	_, err = proxy.CreateTopic("testclient", &protocol.CreateTopicRequest{
+	client := server.NewClient(conn)
+	_, err = client.CreateTopic("testclient", &protocol.CreateTopicRequest{
 		Topic:             topic,
 		NumPartitions:     int32(1),
 		ReplicationFactor: int16(1),

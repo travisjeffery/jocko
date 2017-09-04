@@ -20,7 +20,7 @@ type Replicator struct {
 	offset              int64
 	msgs                chan []byte
 	done                chan struct{}
-	proxy               jocko.Proxy
+	leader              jocko.Client
 }
 
 // NewReplicator returns a new replicator object
@@ -60,7 +60,7 @@ func (r *Replicator) fetchMessages() {
 					}},
 				}},
 			}
-			fetchResponse, err := r.proxy.FetchMessages(r.clientID, fetchRequest)
+			fetchResponse, err := r.leader.FetchMessages(r.clientID, fetchRequest)
 			if err != nil {
 				panic(err)
 			}
