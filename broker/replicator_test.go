@@ -1,6 +1,7 @@
 package broker_test
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -34,7 +35,9 @@ func TestBroker_Replicate(t *testing.T) {
 		if len(commitLog) < 4 {
 			return false, nil
 		}
-		assert.Equal(t, commitLog, leader.Messages(), "unmatched replicated messages")
+		for i, m := range leader.Messages() {
+			assert.True(t, bytes.Equal(m, commitLog[i]))
+		}
 		return true, nil
 	}, func(err error) {
 		t.Fatalf("err: %v", err)
