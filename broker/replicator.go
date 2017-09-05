@@ -7,8 +7,7 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// Replicator fetches from the partition's leader and produces to a follower
-// thereby replicating the partition
+// Replicator fetches from the partition's leader producing to itself the follower, thereby replicating the partition.
 type Replicator struct {
 	replicaID           int32
 	partition           *jocko.Partition
@@ -23,7 +22,7 @@ type Replicator struct {
 	leader              jocko.Client
 }
 
-// NewReplicator returns a new replicator object
+// NewReplicator returns a new replicator instance.
 func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *Replicator {
 	r := &Replicator{
 		partition: partition,
@@ -37,7 +36,7 @@ func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...Replicat
 	}
 
 	go r.fetchMessages()
-	go r.writeMessages()
+	go r.appendMessages()
 
 	return r
 }
@@ -78,7 +77,7 @@ func (r *Replicator) fetchMessages() {
 	}
 }
 
-func (r *Replicator) writeMessages() {
+func (r *Replicator) appendMessages() {
 	for {
 		select {
 		case <-r.done:
