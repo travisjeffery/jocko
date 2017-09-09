@@ -239,10 +239,14 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 			}
 		}
 	} else {
-		s.logger.Info("failed to create topic %s: %v", errors.New("broker is not controller"))
-		// cID := s.broker.ControllerID()
-		// send the request to the controller
-		return
+		// TODO: forward req to controller
+		s.logger.Info("failed to create topic(s): %v", errors.New("broker is not controller"))
+		for i, req := range reqs.Requests {
+			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+				Topic:     req.Topic,
+				ErrorCode: protocol.ErrNotController,
+			}
+		}
 	}
 	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,
@@ -360,7 +364,6 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, req *protocol.MetadataRequest) error {
 	brokers := make([]*protocol.Broker, 0, len(s.broker.Cluster()))
-	topics := make([]*protocol.TopicMetadata, len(req.Topics))
 	for _, b := range s.broker.Cluster() {
 		brokers = append(brokers, &protocol.Broker{
 			NodeID: b.ID,
@@ -368,26 +371,43 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 			Port:   int32(b.Port),
 		})
 	}
-	for i, t := range req.Topics {
-		partitions, err := s.broker.TopicPartitions(t)
-		if err != nil {
-			return err
-		}
+	var topicMetadata []*protocol.TopicMetadata
+	topicMetadataFn := func(topic string, partitions []*jocko.Partition, errCode int16) *protocol.TopicMetadata {
 		partitionMetadata := make([]*protocol.PartitionMetadata, len(partitions))
 		for i, p := range partitions {
 			partitionMetadata[i] = &protocol.PartitionMetadata{
 				ParititionID: p.ID,
 			}
 		}
-		topics[i] = &protocol.TopicMetadata{
-			TopicErrorCode:    protocol.ErrNone,
-			Topic:             t,
+		return &protocol.TopicMetadata{
+			TopicErrorCode:    errCode,
+			Topic:             topic,
 			PartitionMetadata: partitionMetadata,
+		}
+	}
+	if len(req.Topics) == 0 {
+		// Respond with metadata for all topics
+		topics := s.broker.Topics()
+		topicMetadata = make([]*protocol.TopicMetadata, len(topics))
+		idx := 0
+		for topic, partitions := range topics {
+			topicMetadata[idx] = topicMetadataFn(topic, partitions, protocol.ErrNone)
+			idx++
+		}
+	} else {
+		topicMetadata = make([]*protocol.TopicMetadata, len(req.Topics))
+		for i, topic := range req.Topics {
+			partitions, err := s.broker.TopicPartitions(topic)
+			errCode := protocol.ErrNone
+			if err != nil {
+				errCode = err.ErrorCode
+			}
+			topicMetadata[i] = topicMetadataFn(topic, partitions, errCode)
 		}
 	}
 	resp := &protocol.MetadataResponse{
 		Brokers:       brokers,
-		TopicMetadata: topics,
+		TopicMetadata: topicMetadata,
 	}
 	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,

@@ -9,6 +9,11 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+type Error struct {
+	error
+	ErrorCode int16
+}
+
 // CommitLog is the interface that wraps the commit log's methods and
 // is used to manage a partition's data.
 type CommitLog interface {
@@ -179,7 +184,8 @@ type Broker interface {
 	BecomeFollower(topic string, id int32, command *protocol.PartitionState) error
 	Join(addr ...string) (int, error)
 	Cluster() []*ClusterMember
-	TopicPartitions(topic string) ([]*Partition, error)
+	TopicPartitions(topic string) ([]*Partition, *Error)
+	Topics() map[string][]*Partition
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
 }
 

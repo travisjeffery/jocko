@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -94,10 +95,19 @@ func (b *Broker) IsController() bool {
 }
 
 // TopicPartitions is used to get the partitions for the given topic.
-func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err error) {
+func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err *jocko.Error) {
+	b.mu.RLock()
+	if p, ok := b.topics[topic]; !ok {
+		return nil, &jocko.Error{ErrorCode: protocol.ErrUnknownTopicOrPartition}
+	} else {
+		return p, nil
+	}
+}
+
+func (b *Broker) Topics() map[string][]*jocko.Partition {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.topics[topic], nil
+	return b.topics
 }
 
 func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, error) {
@@ -168,15 +178,6 @@ func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 	return result
 }
 
-// Topics returns the list of known topic names.
-func (b *Broker) Topics() []string {
-	topics := []string{}
-	for k := range b.topics {
-		topics = append(topics, k)
-	}
-	return topics
-}
-
 // Join is used to have the broker join the gossip ring.
 // The given address should be another broker listening on the Serf address.
 func (b *Broker) Join(addrs ...string) (int, error) {
@@ -185,7 +186,7 @@ func (b *Broker) Join(addrs ...string) (int, error) {
 
 // CreateTopic is used to create the topic across the cluster.
 func (b *Broker) CreateTopic(topic string, partitions int32) error {
-	for _, t := range b.Topics() {
+	for t, _ := range b.Topics() {
 		if t == topic {
 			return ErrTopicExists
 		}
