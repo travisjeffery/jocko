@@ -30,7 +30,7 @@ func main() {
 
 	client := server.NewClient(conn)
 
-	_, err = client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
+	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
 		Topic:             *topic,
 		NumPartitions:     *partitions,
 		ReplicationFactor: int16(1),
@@ -42,5 +42,11 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("created topic successfully")
+	for _, topicErrCode := range resp.TopicErrorCodes {
+		msg := "ok"
+		if topicErrCode.ErrorCode == 41 {
+			msg = "err not controller"
+		}
+		fmt.Printf("create topic %s: %d\n", topicErrCode.Topic, msg)
+	}
 }
