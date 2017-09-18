@@ -175,7 +175,7 @@ type Raft interface {
 type Broker interface {
 	ID() int32
 	IsController() bool
-	CreateTopic(topic string, partitions int32) error
+	CreateTopic(topic string, partitions int32, replicationFactor int16) error
 	StartReplica(*Partition) error
 	DeleteTopic(topic string) error
 	Partition(topic string, id int32) (*Partition, error)

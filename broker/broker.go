@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"math/rand"
 	"path"
 	"sync"
 
@@ -185,7 +186,7 @@ func (b *Broker) Join(addrs ...string) (int, error) {
 }
 
 // CreateTopic is used to create the topic across the cluster.
-func (b *Broker) CreateTopic(topic string, partitions int32) error {
+func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor int16) error {
 	for t, _ := range b.Topics() {
 		if t == topic {
 			return ErrTopicExists
@@ -196,14 +197,23 @@ func (b *Broker) CreateTopic(topic string, partitions int32) error {
 	cLen := int32(len(c))
 
 	for i := int32(0); i < partitions; i++ {
-		// TODO: need to know replica assignment here
 		leader := c[i%cLen].ID
+		replicas := []int32{leader}
+		for replica := rand.Int31n(cLen); len(replicas) < int(replicationFactor); replica++ {
+			if replica != leader {
+				replicas = append(replicas, replica)
+			}
+			if replica+1 == cLen {
+				replica = -1
+			}
+		}
 		partition := &jocko.Partition{
 			Topic:           topic,
 			ID:              i,
 			Leader:          leader,
 			PreferredLeader: leader,
-			Replicas:        []int32{},
+			Replicas:        replicas,
+			ISR:             replicas,
 		}
 		if err := b.AddPartition(partition); err != nil {
 			return err

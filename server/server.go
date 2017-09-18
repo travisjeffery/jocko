@@ -228,7 +228,14 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 	isController := s.broker.IsController()
 	if isController {
 		for i, req := range reqs.Requests {
-			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
+			if req.ReplicationFactor > int16(len(s.broker.Cluster())) {
+				resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+					Topic:     req.Topic,
+					ErrorCode: protocol.ErrInvalidReplicationFactor,
+				}
+				continue
+			}
+			err = s.broker.CreateTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
 			if err != nil {
 				s.logger.Info("failed to create topic %s: %v", req.Topic, err)
 				return
@@ -290,22 +297,17 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 	body := &protocol.LeaderAndISRResponse{}
 	for _, p := range req.PartitionStates {
 		partition, err := s.broker.Partition(p.Topic, p.Partition)
-		broker := s.broker.ClusterMember(p.Leader)
-		if broker == nil {
-			// TODO: error cause we don't know who this broker is
-		}
 		if err != nil {
 			return err
 		}
 		if partition == nil {
 			partition = &jocko.Partition{
-				Topic:           p.Topic,
-				ID:              p.Partition,
-				Replicas:        p.Replicas,
-				ISR:             p.ISR,
-				Leader:          p.Leader,
-				PreferredLeader: p.Leader,
-
+				Topic:                   p.Topic,
+				ID:                      p.Partition,
+				Replicas:                p.Replicas,
+				ISR:                     p.ISR,
+				Leader:                  p.Leader,
+				PreferredLeader:         p.Leader,
 				LeaderAndISRVersionInZK: p.ZKVersion,
 			}
 			if err := s.broker.StartReplica(partition); err != nil {
@@ -324,7 +326,6 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 			}
 		}
 	}
-
 	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,
 		Body:          body,
