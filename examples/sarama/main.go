@@ -143,7 +143,7 @@ func setup() func() {
 	}
 
 	// creating/deleting topic directly since Sarama doesn't support it
-	if err := store.CreateTopic(topic, numPartitions); err != nil && err != broker.ErrTopicExists {
+	if err := store.CreateTopic(topic, numPartitions, 1); err != nil && err != broker.ErrTopicExists {
 		panic(err)
 	}
 
