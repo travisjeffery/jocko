@@ -144,7 +144,7 @@ func setup() func() {
 	}
 
 	// creating/deleting topic directly since Sarama doesn't support it
-	ir err := store.CreateTopic(topic, numPartitions, 1); err != protocol.ErrNone {
+	if err := store.CreateTopic(topic, numPartitions, 1); err != protocol.ErrNone {
 		panic(err)
 	}
 

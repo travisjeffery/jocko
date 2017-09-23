@@ -96,13 +96,13 @@ func (b *Broker) IsController() bool {
 }
 
 // TopicPartitions is used to get the partitions for the given topic.
-func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err *jocko.Error) {
+func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err protocol.Error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if p, ok := b.topics[topic]; !ok {
-		return nil, &jocko.Error{ErrorCode: protocol.ErrUnknownTopicOrPartition}
+		return nil, protocol.ErrUnknownTopicOrPartition
 	} else {
-		return p, nil
+		return p, protocol.ErrNone
 	}
 }
 
@@ -112,17 +112,17 @@ func (b *Broker) Topics() map[string][]*jocko.Partition {
 	return b.topics
 }
 
-func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, error) {
+func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, protocol.Error) {
 	found, err := b.TopicPartitions(topic)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return nil, err
 	}
 	for _, f := range found {
 		if f.ID == partition {
-			return f, nil
+			return f, protocol.ErrNone
 		}
 	}
-	return nil, errors.New("partition not found")
+	return nil, protocol.ErrUnknownTopicOrPartition
 }
 
 // AddPartition is used to add a partition across the cluster.
@@ -187,10 +187,10 @@ func (b *Broker) Join(addrs ...string) (int, error) {
 }
 
 // CreateTopic is used to create the topic across the cluster.
-func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor int16) error {
+func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor int16) protocol.Error {
 	for t, _ := range b.Topics() {
 		if t == topic {
-			return ErrTopicExists
+			return protocol.ErrTopicAlreadyExists
 		}
 	}
 
@@ -217,10 +217,10 @@ func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor i
 			ISR:             replicas,
 		}
 		if err := b.AddPartition(partition); err != nil {
-			return err
+			return protocol.ErrUnknown
 		}
 	}
-	return nil
+	return protocol.ErrNone
 }
 
 // DeleteTopic is used to delete the topic across the cluster.
@@ -231,7 +231,7 @@ func (b *Broker) DeleteTopic(topic string) error {
 // deleteTopic is used to delete the topic from this broker.
 func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	partitions, err := b.TopicPartitions(tp.Topic)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return err
 	}
 	for _, p := range partitions {
