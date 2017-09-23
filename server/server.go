@@ -187,8 +187,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 	}
 }
 
-func (s *Server) decode(header *protocol.RequestHeader, req protocol.Decoder, d protocol.PacketDecoder) error {
-	err := req.Decode(d)
+func (s *Server) decode(header *protocol.RequestHeader, req protocol.VersionedDecoder, d protocol.PacketDecoder) error {
+	err := req.Decode(d, header.APIVersion)
 	if err != nil {
 		return err
 	}
@@ -199,22 +199,22 @@ func (s *Server) handleAPIVersions(conn net.Conn, header *protocol.RequestHeader
 	resp := new(protocol.APIVersionsResponse)
 
 	resp.APIVersions = []protocol.APIVersion{
-		{APIKey: protocol.ProduceKey, MinVersion: 2, MaxVersion: 2},
-		{APIKey: protocol.FetchKey},
-		{APIKey: protocol.OffsetsKey},
-		{APIKey: protocol.MetadataKey},
-		{APIKey: protocol.LeaderAndISRKey},
-		{APIKey: protocol.StopReplicaKey},
-		{APIKey: protocol.GroupCoordinatorKey},
-		{APIKey: protocol.JoinGroupKey},
-		{APIKey: protocol.HeartbeatKey},
-		{APIKey: protocol.LeaveGroupKey},
-		{APIKey: protocol.SyncGroupKey},
-		{APIKey: protocol.DescribeGroupsKey},
-		{APIKey: protocol.ListGroupsKey},
-		{APIKey: protocol.APIVersionsKey},
-		{APIKey: protocol.CreateTopicsKey},
-		{APIKey: protocol.DeleteTopicsKey},
+		{APIKey: protocol.ProduceKey, MinVersion: protocol.ProduceMinVersion, MaxVersion: protocol.ProduceMaxVersion},
+		{APIKey: protocol.FetchKey, MinVersion: protocol.FetchMinVersion, MaxVersion: protocol.FetchMaxVersion},
+		{APIKey: protocol.OffsetsKey, MinVersion: protocol.OffsetsMinVersion, MaxVersion: protocol.OffsetsMaxVersion},
+		{APIKey: protocol.MetadataKey, MinVersion: protocol.MetadataMinVersion, MaxVersion: protocol.MetadataMaxVersion},
+		{APIKey: protocol.LeaderAndISRKey, MinVersion: protocol.LeaderAndISRMinVersion, MaxVersion: protocol.LeaderAndISRMaxVersion},
+		{APIKey: protocol.StopReplicaKey, MinVersion: protocol.StopReplicaMinVersion, MaxVersion: protocol.StopReplicaMaxVersion},
+		{APIKey: protocol.GroupCoordinatorKey, MinVersion: protocol.GroupCoordinatorMinVersion, MaxVersion: protocol.GroupCoordinatorMaxVersion},
+		{APIKey: protocol.JoinGroupKey, MinVersion: protocol.JoinGroupMinVersion, MaxVersion: protocol.JoinGroupMaxVersion},
+		{APIKey: protocol.HeartbeatKey, MinVersion: protocol.HeartbeatMinVersion, MaxVersion: protocol.HeartbeatMaxVersion},
+		{APIKey: protocol.LeaveGroupKey, MinVersion: protocol.LeaveGroupMinVersion, MaxVersion: protocol.LeaveGroupMaxVersion},
+		{APIKey: protocol.SyncGroupKey, MinVersion: protocol.SyncGroupMinVersion, MaxVersion: protocol.SyncGroupMaxVersion},
+		{APIKey: protocol.DescribeGroupsKey, MinVersion: protocol.DescribeGroupsMinVersion, MaxVersion: protocol.DescribeGroupsMaxVersion},
+		{APIKey: protocol.ListGroupsKey, MinVersion: protocol.ListGroupsMinVersion, MaxVersion: protocol.ListGroupsMaxVersion},
+		{APIKey: protocol.APIVersionsKey, MinVersion: protocol.APIVersionsMinVersion, MaxVersion: protocol.APIVersionsMaxVersion},
+		{APIKey: protocol.CreateTopicsKey, MinVersion: protocol.CreateTopicsMinVersion, MaxVersion: protocol.CreateTopicsMaxVersion},
+		{APIKey: protocol.DeleteTopicsKey, MinVersion: protocol.DeleteTopicsMinVersion, MaxVersion: protocol.DeleteTopicsMaxVersion},
 	}
 
 	r := &protocol.Response{

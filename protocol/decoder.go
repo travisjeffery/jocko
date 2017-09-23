@@ -31,6 +31,10 @@ type Decoder interface {
 	Decode(d PacketDecoder) error
 }
 
+type VersionedDecoder interface {
+	Decode(d PacketDecoder, version int16) error
+}
+
 type PushDecoder interface {
 	SaveOffset(in int)
 	ReserveSize() int
@@ -40,6 +44,11 @@ type PushDecoder interface {
 func Decode(b []byte, in Decoder) error {
 	d := NewDecoder(b)
 	return in.Decode(d)
+}
+
+func VersionedDecode(b []byte, in VersionedDecoder, version int16) error {
+	d := NewDecoder(b)
+	return in.Decode(d, version)
 }
 
 type ByteDecoder struct {
