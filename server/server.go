@@ -18,6 +18,8 @@ import (
 	"github.com/travisjeffery/simplelog"
 )
 
+// Server is used to handle the TCP connections, decode requests,
+// defer to the broker, and encode the responses.
 type Server struct {
 	addr       string
 	ln         *net.TCPListener
@@ -27,6 +29,7 @@ type Server struct {
 	shutdownCh chan struct{}
 }
 
+// New creates a new Server instance.
 func New(addr string, broker jocko.Broker, logger *simplelog.Logger) *Server {
 	return &Server{
 		addr:       addr,

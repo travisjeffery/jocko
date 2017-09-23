@@ -8,7 +8,7 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// Client is used to connect and request to other brokers, for example, for replication.
+// Client is used to connect and request to other brokers, for example for replication.
 type Client struct {
 	conn io.ReadWriter
 }
