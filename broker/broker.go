@@ -98,6 +98,7 @@ func (b *Broker) IsController() bool {
 // TopicPartitions is used to get the partitions for the given topic.
 func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err *jocko.Error) {
 	b.mu.RLock()
+	defer b.mu.RUnlock()
 	if p, ok := b.topics[topic]; !ok {
 		return nil, &jocko.Error{ErrorCode: protocol.ErrUnknownTopicOrPartition}
 	} else {

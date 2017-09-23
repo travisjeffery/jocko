@@ -19,7 +19,7 @@ func newReplicationManager() *replicationManager {
 
 func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *protocol.PartitionState) error {
 	p, err := rm.Partition(topic, pid)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return err
 	}
 	// stop replicator to current leader
@@ -43,7 +43,7 @@ func (rm *replicationManager) BecomeFollower(topic string, pid int32, command *p
 
 func (rm *replicationManager) BecomeLeader(topic string, pid int32, command *protocol.PartitionState) error {
 	p, err := rm.Partition(topic, pid)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return err
 	}
 	if r, ok := rm.replicators[p]; ok {
