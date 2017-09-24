@@ -3,63 +3,63 @@ package protocol
 // See https://kafka.apache.org/protocol#protocol_error_codes - for details.
 
 var (
-	ErrUnknown                            = Error{-1, "unknown"}
-	ErrNone                               = Error{0, "none"}
-	ErrOffsetOutOfRange                   = Error{1, "offset out of range"}
-	ErrCorruptMessage                     = Error{2, "corrupt message"}
-	ErrUnknownTopicOrPartition            = Error{3, "unknown topic or partition"}
-	ErrInvalidFetchSize                   = Error{4, "invalid fetch size"}
-	ErrLeaderNotAvailable                 = Error{5, "leader not available"}
-	ErrNotLeaderForPartition              = Error{6, "not leader for partition"}
-	ErrRequestTimedOut                    = Error{7, "request timed out"}
-	ErrBrokerNotAvailable                 = Error{8, "broker not available"}
-	ErrReplicaNotAvailable                = Error{9, "replica not available"}
-	ErrMessageTooLarge                    = Error{10, "message too large"}
-	ErrStaleControllerEpoch               = Error{11, "stale controller epoch"}
-	ErrOffsetMetadataTooLarge             = Error{12, "offset metadata too large"}
-	ErrNetworkException                   = Error{13, "network exception"}
-	ErrCoordinatorLoadInProgress          = Error{14, "coordinator load in progress"}
-	ErrCoordinatorNotAvailable            = Error{15, "coordinator not available"}
-	ErrNotCoordinator                     = Error{16, "not coordinator"}
-	ErrInvalidTopicException              = Error{17, "invalid topic exception"}
-	ErrRecordListTooLarge                 = Error{18, "record list too large"}
-	ErrNotEnoughReplicas                  = Error{19, "not enough replicas"}
-	ErrNotEnoughReplicasAfterAppend       = Error{20, "not enough replicas after append"}
-	ErrInvalidRequiredAcks                = Error{21, "invalid required acks"}
-	ErrIllegalGeneration                  = Error{22, "illegal generation"}
-	ErrInconsistentGroupProtocol          = Error{23, "inconsistent group protocol"}
-	ErrInvalidGroupId                     = Error{24, "invalid group id"}
-	ErrUnknownMemberId                    = Error{25, "unknown member id"}
-	ErrInvalidSessionTimeout              = Error{26, "invalid session timeout"}
-	ErrRebalanceInProgress                = Error{27, "rebalance in progress"}
-	ErrInvalidCommitOffsetSize            = Error{28, "invalid commit offset size"}
-	ErrTopicAuthorizationFailed           = Error{29, "topic authorization failed"}
-	ErrGroupAuthorizationFailed           = Error{30, "group authorization failed"}
-	ErrClusterAuthorizationFailed         = Error{31, "cluster authorization failed"}
-	ErrInvalidTimestamp                   = Error{32, "invalid timestamp"}
-	ErrUnsupportedSaslMechanism           = Error{33, "unsupported sasl mechanism"}
-	ErrIllegalSaslState                   = Error{34, "illegal sasl state"}
-	ErrUnsupportedVersion                 = Error{35, "unsupported version"}
-	ErrTopicAlreadyExists                 = Error{36, "topic already exists"}
-	ErrInvalidPartitions                  = Error{37, "invalid partitions"}
-	ErrInvalidReplicationFactor           = Error{38, "invalid replication factor"}
-	ErrInvalidReplicaAssignment           = Error{39, "invalid replica assignment"}
-	ErrInvalidConfig                      = Error{40, "invalid config"}
-	ErrNotController                      = Error{41, "not controller"}
-	ErrInvalidRequest                     = Error{42, "invalid request"}
-	ErrUnsupportedForMessageFormat        = Error{43, "unsupported for message format"}
-	ErrPolicyViolation                    = Error{44, "policy violation"}
-	ErrOutOfOrderSequenceNumber           = Error{45, "out of order sequence number"}
-	ErrDuplicateSequenceNumber            = Error{46, "duplicate sequence number"}
-	ErrInvalidProducerEpoch               = Error{47, "invalid producer epoch"}
-	ErrInvalidTxnState                    = Error{48, "invalid txn state"}
-	ErrInvalidProducerIdMapping           = Error{49, "invalid producer id mapping"}
-	ErrInvalidTransactionTimeout          = Error{50, "invalid transaction timeout"}
-	ErrConcurrentTransactions             = Error{51, "concurrent transactions"}
-	ErrTransactionCoordinatorFenced       = Error{52, "transaction coordinator fenced"}
-	ErrTransactionalIdAuthorizationFailed = Error{53, "transactional id authorization failed"}
-	ErrSecurityDisabled                   = Error{54, "security disabled"}
-	ErrOperationNotAttempted              = Error{55, "operation not attempted"}
+	ErrUnknown                            = Error{code: -1, msg: "unknown"}
+	ErrNone                               = Error{code: 0, msg: "none"}
+	ErrOffsetOutOfRange                   = Error{code: 1, msg: "offset out of range"}
+	ErrCorruptMessage                     = Error{code: 2, msg: "corrupt message"}
+	ErrUnknownTopicOrPartition            = Error{code: 3, msg: "unknown topic or partition"}
+	ErrInvalidFetchSize                   = Error{code: 4, msg: "invalid fetch size"}
+	ErrLeaderNotAvailable                 = Error{code: 5, msg: "leader not available"}
+	ErrNotLeaderForPartition              = Error{code: 6, msg: "not leader for partition"}
+	ErrRequestTimedOut                    = Error{code: 7, msg: "request timed out"}
+	ErrBrokerNotAvailable                 = Error{code: 8, msg: "broker not available"}
+	ErrReplicaNotAvailable                = Error{code: 9, msg: "replica not available"}
+	ErrMessageTooLarge                    = Error{code: 10, msg: "message too large"}
+	ErrStaleControllerEpoch               = Error{code: 11, msg: "stale controller epoch"}
+	ErrOffsetMetadataTooLarge             = Error{code: 12, msg: "offset metadata too large"}
+	ErrNetworkException                   = Error{code: 13, msg: "network exception"}
+	ErrCoordinatorLoadInProgress          = Error{code: 14, msg: "coordinator load in progress"}
+	ErrCoordinatorNotAvailable            = Error{code: 15, msg: "coordinator not available"}
+	ErrNotCoordinator                     = Error{code: 16, msg: "not coordinator"}
+	ErrInvalidTopicException              = Error{code: 17, msg: "invalid topic exception"}
+	ErrRecordListTooLarge                 = Error{code: 18, msg: "record list too large"}
+	ErrNotEnoughReplicas                  = Error{code: 19, msg: "not enough replicas"}
+	ErrNotEnoughReplicasAfterAppend       = Error{code: 20, msg: "not enough replicas after append"}
+	ErrInvalidRequiredAcks                = Error{code: 21, msg: "invalid required acks"}
+	ErrIllegalGeneration                  = Error{code: 22, msg: "illegal generation"}
+	ErrInconsistentGroupProtocol          = Error{code: 23, msg: "inconsistent group protocol"}
+	ErrInvalidGroupId                     = Error{code: 24, msg: "invalid group id"}
+	ErrUnknownMemberId                    = Error{code: 25, msg: "unknown member id"}
+	ErrInvalidSessionTimeout              = Error{code: 26, msg: "invalid session timeout"}
+	ErrRebalanceInProgress                = Error{code: 27, msg: "rebalance in progress"}
+	ErrInvalidCommitOffsetSize            = Error{code: 28, msg: "invalid commit offset size"}
+	ErrTopicAuthorizationFailed           = Error{code: 29, msg: "topic authorization failed"}
+	ErrGroupAuthorizationFailed           = Error{code: 30, msg: "group authorization failed"}
+	ErrClusterAuthorizationFailed         = Error{code: 31, msg: "cluster authorization failed"}
+	ErrInvalidTimestamp                   = Error{code: 32, msg: "invalid timestamp"}
+	ErrUnsupportedSaslMechanism           = Error{code: 33, msg: "unsupported sasl mechanism"}
+	ErrIllegalSaslState                   = Error{code: 34, msg: "illegal sasl state"}
+	ErrUnsupportedVersion                 = Error{code: 35, msg: "unsupported version"}
+	ErrTopicAlreadyExists                 = Error{code: 36, msg: "topic already exists"}
+	ErrInvalidPartitions                  = Error{code: 37, msg: "invalid partitions"}
+	ErrInvalidReplicationFactor           = Error{code: 38, msg: "invalid replication factor"}
+	ErrInvalidReplicaAssignment           = Error{code: 39, msg: "invalid replica assignment"}
+	ErrInvalidConfig                      = Error{code: 40, msg: "invalid config"}
+	ErrNotController                      = Error{code: 41, msg: "not controller"}
+	ErrInvalidRequest                     = Error{code: 42, msg: "invalid request"}
+	ErrUnsupportedForMessageFormat        = Error{code: 43, msg: "unsupported for message format"}
+	ErrPolicyViolation                    = Error{code: 44, msg: "policy violation"}
+	ErrOutOfOrderSequenceNumber           = Error{code: 45, msg: "out of order sequence number"}
+	ErrDuplicateSequenceNumber            = Error{code: 46, msg: "duplicate sequence number"}
+	ErrInvalidProducerEpoch               = Error{code: 47, msg: "invalid producer epoch"}
+	ErrInvalidTxnState                    = Error{code: 48, msg: "invalid txn state"}
+	ErrInvalidProducerIdMapping           = Error{code: 49, msg: "invalid producer id mapping"}
+	ErrInvalidTransactionTimeout          = Error{code: 50, msg: "invalid transaction timeout"}
+	ErrConcurrentTransactions             = Error{code: 51, msg: "concurrent transactions"}
+	ErrTransactionCoordinatorFenced       = Error{code: 52, msg: "transaction coordinator fenced"}
+	ErrTransactionalIdAuthorizationFailed = Error{code: 53, msg: "transactional id authorization failed"}
+	ErrSecurityDisabled                   = Error{code: 54, msg: "security disabled"}
+	ErrOperationNotAttempted              = Error{code: 55, msg: "operation not attempted"}
 )
 
 // Error represents a protocol err. It makes it so the errors can have their
@@ -67,6 +67,7 @@ var (
 type Error struct {
 	code int16
 	msg  string
+	err  error
 }
 
 func (e Error) Code() int16 {
@@ -78,5 +79,12 @@ func (e Error) String() string {
 }
 
 func (e Error) Error() string {
+	if e.err != nil {
+		return e.msg + ": " + e.err.Error()
+	}
 	return e.msg
+}
+
+func (e Error) WithErr(err error) Error {
+	return Error{code: e.code, msg: e.msg, err: err}
 }

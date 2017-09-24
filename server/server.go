@@ -228,31 +228,25 @@ func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := s.broker.IsController()
-	if isController {
-		for i, req := range reqs.Requests {
-			if req.ReplicationFactor > int16(len(s.broker.Cluster())) {
-				resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
-					Topic:     req.Topic,
-					ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
-				}
-				continue
-			}
-			err := s.broker.CreateTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
-			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
-				Topic:     req.Topic,
-				ErrorCode: err.Code(),
-			}
-		}
-	} else {
-		// TODO: forward req to controller
-		s.logger.Info("failed to create topic(s): %s", protocol.ErrNotController)
-		// TODO: could have these topic error code structs have protocol.Error
-		// set as the field instead of the code directly
-		for i, req := range reqs.Requests {
+	for i, req := range reqs.Requests {
+		if !isController {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrNotController.Code(),
 			}
+			continue
+		}
+		if req.ReplicationFactor > int16(len(s.broker.Cluster())) {
+			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+				Topic:     req.Topic,
+				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
+			}
+			continue
+		}
+		err := s.broker.CreateTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
+		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+			Topic:     req.Topic,
+			ErrorCode: err.Code(),
 		}
 	}
 	r := &protocol.Response{
@@ -292,11 +286,22 @@ func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeade
 }
 
 func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) (err error) {
-	body := &protocol.LeaderAndISRResponse{}
-	for _, p := range req.PartitionStates {
+	body := &protocol.LeaderAndISRResponse{
+		Partitions: make([]*protocol.LeaderAndISRPartition, len(req.PartitionStates)),
+	}
+	setErr := func(i int, p *protocol.PartitionState, err protocol.Error) {
+		body.Partitions[i] = &protocol.LeaderAndISRPartition{
+			ErrorCode: err.Code(),
+			Partition: p.Partition,
+			Topic:     p.Topic,
+		}
+	}
+	for i, p := range req.PartitionStates {
 		partition, err := s.broker.Partition(p.Topic, p.Partition)
+		// TODO: seems ok to have protocol.ErrUnknownTopicOrPartition here?
 		if err != protocol.ErrNone {
-			return err
+			setErr(i, p, err)
+			continue
 		}
 		if partition == nil {
 			partition = &jocko.Partition{
@@ -308,19 +313,22 @@ func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeade
 				PreferredLeader:         p.Leader,
 				LeaderAndISRVersionInZK: p.ZKVersion,
 			}
-			if err := s.broker.StartReplica(partition); err != nil {
-				return err
+			if err := s.broker.StartReplica(partition); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		}
 		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
-			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != nil {
-				return err
+			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {
 			// is command asking this broker to follow leader who it isn't a leader of already
-			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != nil {
-				return err
+			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		}
 	}
@@ -355,7 +363,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// TODO: change join to take a broker
-	if _, err := s.broker.Join(b.IP); err != nil {
+	if err := s.broker.Join(b.IP); err != protocol.ErrNone {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

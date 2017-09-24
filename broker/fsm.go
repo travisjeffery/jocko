@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 const (
@@ -54,15 +55,17 @@ func (s *Broker) apply(c jocko.RaftCommand) {
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
 			s.logger.Info("received malformed raft command: %v", err)
+			// TODO: should panic?
 			return
 		}
-		if err := s.StartReplica(p); err != nil {
-			panic(errors.Wrap(err, "start replica failed"))
+		if err := s.StartReplica(p); err != protocol.ErrNone {
+			panic(err)
 		}
 	case deleteTopic:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
 			s.logger.Info("received malformed raft command: %v", err)
+			// TODO: should panic?
 			return
 		}
 		if err := s.deleteTopic(p); err != nil {

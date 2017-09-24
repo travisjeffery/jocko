@@ -136,7 +136,7 @@ func (b *Broker) ClusterMember(id int32) *jocko.ClusterMember {
 }
 
 // StartReplica is used to start a replica on this broker, including creating its commit log.
-func (b *Broker) StartReplica(partition *jocko.Partition) error {
+func (b *Broker) StartReplica(partition *jocko.Partition) protocol.Error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if v, ok := b.topics[partition.Topic]; ok {
@@ -158,12 +158,12 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 			MaxLogBytes:     -1,
 		})
 		if err != nil {
-			return err
+			return protocol.ErrUnknown.WithErr(err)
 		}
 		partition.CommitLog = commitLog
 		partition.Conn = b.serf.Member(partition.LeaderID())
 	}
-	return nil
+	return protocol.ErrNone
 }
 
 // IsLeaderPartitions returns true if the given leader is the leader of the given partition.
@@ -182,8 +182,11 @@ func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 
 // Join is used to have the broker join the gossip ring.
 // The given address should be another broker listening on the Serf address.
-func (b *Broker) Join(addrs ...string) (int, error) {
-	return b.serf.Join(addrs...)
+func (b *Broker) Join(addrs ...string) protocol.Error {
+	if _, err := b.serf.Join(addrs...); err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	return protocol.ErrNone
 }
 
 // CreateTopic is used to create the topic across the cluster.
@@ -217,15 +220,18 @@ func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor i
 			ISR:             replicas,
 		}
 		if err := b.AddPartition(partition); err != nil {
-			return protocol.ErrUnknown
+			return protocol.ErrUnknown.WithErr(err)
 		}
 	}
 	return protocol.ErrNone
 }
 
 // DeleteTopic is used to delete the topic across the cluster.
-func (b *Broker) DeleteTopic(topic string) error {
-	return b.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
+func (b *Broker) DeleteTopic(topic string) protocol.Error {
+	if err := b.raftApply(deleteTopic, &jocko.Partition{Topic: topic}); err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	return protocol.ErrNone
 }
 
 // deleteTopic is used to delete the topic from this broker.
