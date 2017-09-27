@@ -36,3 +36,7 @@ $ ./jocko --debug \
           --serfmembers=127.0.0.1:9003 \
           --id=3
 ```
+
+## docker-compose cluster
+
+To start a [docker compose](https://docs.docker.com/compose/) cluster node use the provided `/docker-compose.yml`.
