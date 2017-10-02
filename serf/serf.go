@@ -21,6 +21,7 @@ type Serf struct {
 	serf        *serf.Serf
 	addr        string
 	nodeID      int32
+	eventCh     chan serf.Event
 	reconcileCh chan<- *jocko.ClusterMember
 	initMembers []string
 	shutdownCh  chan struct{}
@@ -33,6 +34,7 @@ type Serf struct {
 func New(opts ...OptionFn) (*Serf, error) {
 	b := &Serf{
 		peers:      make(map[int32]*jocko.ClusterMember),
+		eventCh:    make(chan serf.Event),
 		shutdownCh: make(chan struct{}),
 	}
 
@@ -43,43 +45,58 @@ func New(opts ...OptionFn) (*Serf, error) {
 	return b, nil
 }
 
+// Configure builds a default serf.Config for a jocko.Serf and
+// jocko.ClusterMember pair on a given event channel.
+func (s *Serf) Configure(node *jocko.ClusterMember) (*serf.Config, error) {
+	config := serf.DefaultConfig()
+	config.Init()
+
+	config.EventCh = s.eventCh
+
+	config.NodeName = fmt.Sprintf("jocko-%03d", node.ID)
+
+	config.EnableNameConflictResolution = false
+
+	// setup serf communication address
+	memberAddr, memberPort, err := s.HostPort()
+	if err != nil {
+		return nil, err
+	}
+	config.MemberlistConfig.BindAddr = memberAddr
+	config.MemberlistConfig.BindPort = memberPort
+
+	// add metadata for query filtering
+	config.Tags["id"] = strconv.Itoa(int(node.ID))
+	config.Tags["port"] = strconv.Itoa(node.Port)
+	config.Tags["raft_port"] = strconv.Itoa(node.RaftPort)
+
+	return config, nil
+}
+
 // Bootstrap saves the node metadata and starts the serf agent
 // Info of node updates is returned on reconcileCh channel
 func (b *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
-	addr, strPort, err := net.SplitHostPort(b.addr)
+	config, err := b.Configure(node)
 	if err != nil {
 		return err
 	}
 
-	port, err := strconv.Atoi(strPort)
-	if err != nil {
-		return err
-	}
-	b.nodeID = node.ID
-	eventCh := make(chan serf.Event, 256)
-	conf := serf.DefaultConfig()
-	conf.Init()
-	conf.MemberlistConfig.BindAddr = addr
-	conf.MemberlistConfig.BindPort = port
-	conf.EventCh = eventCh
-	conf.EnableNameConflictResolution = false
-	conf.NodeName = fmt.Sprintf("jocko-%03d", node.ID)
-	conf.Tags["id"] = strconv.Itoa(int(node.ID))
-	conf.Tags["port"] = strconv.Itoa(node.Port)
-	conf.Tags["raft_port"] = strconv.Itoa(node.RaftPort)
-	s, err := serf.Create(conf)
+	s, err := serf.Create(config)
 	if err != nil {
 		return err
 	}
 	b.serf = s
+
+	b.nodeID = node.ID
 	b.reconcileCh = reconcileCh
+
 	if _, err := b.Join(b.initMembers...); err != nil {
 		// b.Shutdown()
 		return err
 	}
 
 	// ingest events for serf
-	go b.serfEventHandler(eventCh)
+	go b.serfEventHandler(b.eventCh)
 
 	return nil
 }
@@ -88,7 +105,7 @@ func (b *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 func (b *Serf) serfEventHandler(eventCh <-chan serf.Event) {
 	for {
 		select {
-		case e := <-eventCh:
+		case e := <-b.eventCh:
 			switch e.EventType() {
 			case serf.EventMemberJoin:
 				b.nodeJoinEvent(e.(serf.MemberEvent))
@@ -256,4 +273,18 @@ func status(s serf.MemberStatus) jocko.MemberStatus {
 	default:
 		return jocko.StatusNone
 	}
+}
+
+func (s *Serf) HostPort() (string, int, error) {
+	addr, strPort, err := net.SplitHostPort(s.addr)
+	if err != nil {
+		return "", 0, err
+	}
+
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return addr, port, nil
 }

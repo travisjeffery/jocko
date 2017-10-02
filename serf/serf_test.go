@@ -1,32 +1,64 @@
 package serf_test
 
 import (
-	"fmt"
-	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
-	"github.com/travisjeffery/simplelog"
 )
 
-var (
-	logger   *simplelog.Logger
-	serfPort int
-)
+func TestNew(t *testing.T) {
+	t.Run("returns serf instance", func(t *testing.T) {
+		assert.IsType(t, &serf.Serf{}, testutil.NewTestSerf(t))
+	})
 
-func init() {
-	logger = simplelog.New(os.Stdout, simplelog.INFO, "jocko/serf_test")
-	serfPort = 7946
+	t.Run("yields instance to OptionFns", func(t *testing.T) {
+		opt1 := func(s *serf.Serf) {
+			assert.IsType(t, &serf.Serf{}, s)
+		}
+
+		opt2 := func(s *serf.Serf) {
+			assert.IsType(t, &serf.Serf{}, s)
+		}
+
+		testutil.NewTestSerf(t, opt1, opt2)
+	})
 }
 
-func Test_Membership(t *testing.T) {
-	s0, err := getSerf(0)
-	assert.NoError(t, err)
-	s1, err := getSerf(1)
-	assert.NoError(t, err)
+func TestConfigure(t *testing.T) {
+	t.Run("adds Broker metadata", func(t *testing.T) {
+		s := testutil.NewTestSerf(t)
+		m, c := testutil.NewTestSerfConfig(t, s)
+
+		assert.Equal(t, c.Tags["id"], strconv.Itoa(int(m.ID)))
+		assert.Equal(t, c.Tags["port"], strconv.Itoa(int(m.Port)))
+		assert.Equal(t, c.Tags["raft_port"], strconv.Itoa(int(m.RaftPort)))
+	})
+
+	t.Run("assigns serf port and address", func(t *testing.T) {
+		s := testutil.NewTestSerf(t)
+		_, c := testutil.NewTestSerfConfig(t, s)
+
+		addr, port, err := jocko.SplitHostPort(s.GetAddr())
+		assert.NoError(t, err)
+
+		assert.Equal(t, c.MemberlistConfig.BindAddr, addr)
+		assert.Equal(t, c.MemberlistConfig.BindPort, port)
+	})
+}
+
+func TestBootstrap(t *testing.T) {
+	t.Run("Handles Serf events", func(t *testing.T) {
+		t.Skip()
+	})
+}
+
+func TestMembership(t *testing.T) {
+	s0 := testutil.NewBootstrappedTestSerf(t, 0)
+	s1 := testutil.NewBootstrappedTestSerf(t, 1)
 
 	t.Run("Join Peer", func(t *testing.T) {
 		testJoin(t, s0, s1)
@@ -58,28 +90,6 @@ func Test_Membership(t *testing.T) {
 	})
 
 	assert.NoError(t, s0.Shutdown())
-}
-
-func getSerf(id int32) (*serf.Serf, error) {
-	s, err := serf.New(
-		serf.Logger(logger),
-		serf.Addr(getSerfAddr()),
-	)
-	if err != nil {
-		return nil, err
-	}
-	member := &jocko.ClusterMember{
-		ID: id,
-	}
-	if err := s.Bootstrap(member, make(chan *jocko.ClusterMember, 32)); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func getSerfAddr() string {
-	serfPort++
-	return fmt.Sprintf("0.0.0.0:%d", serfPort)
 }
 
 func testJoin(t *testing.T, s0 *serf.Serf, other ...*serf.Serf) {
