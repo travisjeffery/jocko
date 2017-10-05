@@ -21,12 +21,12 @@ var (
 	logDir    = cli.Flag("logdir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
 	debugLogs = cli.Flag("debug", "Enable debug logs").Default("false").Bool()
 
-	brokers            = cli.Command("brokers", "Operations on brokers")
-	brokersRaftAddr    = brokers.Flag("raftaddr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
-	brokersBrokerAddr  = brokers.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
-	brokersSerfAddr    = brokers.Flag("serfaddr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
-	brokersSerfMembers = brokers.Flag("serfmembers", "List of existing Serf members").Strings()
-	brokersBrokerID    = brokers.Flag("id", "Broker ID").Int32()
+	brokerCmd            = cli.Command("broker", "Operations on brokers")
+	brokerCmdRaftAddr    = brokerCmd.Flag("raftaddr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
+	brokerCmdBrokerAddr  = brokerCmd.Flag("brokeraddr", "Address for broker to bind on").Default("0.0.0.0:9092").String()
+	brokerCmdSerfAddr    = brokerCmd.Flag("serfaddr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
+	brokerCmdSerfMembers = brokerCmd.Flag("serfmembers", "List of existing Serf members").Strings()
+	brokerCmdBrokerID    = brokerCmd.Flag("id", "Broker ID").Int32()
 
 	topic                  = cli.Command("topic", "Operations on topics")
 	topicBrokerAddr        = topic.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
@@ -43,7 +43,7 @@ func main() {
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
 	switch kingpin.MustParse(cli.Parse(os.Args[1:])) {
-	case brokers.FullCommand():
+	case brokerCmd.FullCommand():
 		os.Exit(CmdBrokers(logger))
 
 	case topic.FullCommand():
@@ -54,20 +54,20 @@ func main() {
 func CmdBrokers(logger *simplelog.Logger) int {
 	serf, err := serf.New(
 		serf.Logger(logger),
-		serf.Addr(*brokersSerfAddr),
-		serf.InitMembers(*brokersSerfMembers),
+		serf.Addr(*brokerCmdSerfAddr),
+		serf.InitMembers(*brokerCmdSerfMembers),
 	)
 
 	raft, err := raft.New(
 		raft.Logger(logger),
 		raft.DataDir(*logDir),
-		raft.Addr(*brokersRaftAddr),
+		raft.Addr(*brokerCmdRaftAddr),
 	)
 
-	store, err := broker.New(*brokersBrokerID,
+	store, err := broker.New(*brokerCmdBrokerID,
 		broker.LogDir(*logDir),
 		broker.Logger(logger),
-		broker.Addr(*brokersBrokerAddr),
+		broker.Addr(*brokerCmdBrokerAddr),
 		broker.Serf(serf),
 		broker.Raft(raft),
 	)
@@ -75,7 +75,7 @@ func CmdBrokers(logger *simplelog.Logger) int {
 		fmt.Fprintf(os.Stderr, "Error with new broker: %s\n", err)
 		os.Exit(1)
 	}
-	srv := server.New(*brokersBrokerAddr, store, logger)
+	srv := server.New(*brokerCmdBrokerAddr, store, logger)
 	if err := srv.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
