@@ -13,7 +13,7 @@ $ go build
 ## Start the nodes
 
 ```bash
-$ ./jocko brokers \
+$ ./jocko broker \
           --debug \
           --logdir="/tmp/jocko1" \
           --brokeraddr=127.0.0.1:9001 \
@@ -21,7 +21,7 @@ $ ./jocko brokers \
           --serfaddr=127.0.0.1:9003 \
           --id=1
 
-$ ./jocko brokers \
+$ ./jocko broker \
           --debug \
           --logdir="/tmp/jocko2" \
           --brokeraddr=127.0.0.1:9101 \
@@ -30,7 +30,7 @@ $ ./jocko brokers \
           --serfmembers=127.0.0.1:9003 \
           --id=2
 
-$ ./jocko brokers \
+$ ./jocko broker \
           --debug \
           --logdir="/tmp/jocko3" \
           --brokeraddr=127.0.0.1:9201 \
