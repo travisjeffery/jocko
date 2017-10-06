@@ -6,6 +6,10 @@ import (
 	"os"
 	"time"
 
+	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/protocol"
@@ -33,6 +37,9 @@ var (
 	topicTopic             = topic.Flag("topic", "Name of topic to create").String()
 	topicPartitions        = topic.Flag("partitions", "Number of partitions").Default("1").Int32()
 	topicReplicationFactor = topic.Flag("replication-factor", "Replication factor").Default("1").Int16()
+
+	promMetrics = kingpin.Flag("prommetrics", "Enable Prometheus metrics").Default("true").Bool()
+	promAddr    = kingpin.Flag("promaddr", "Address for Prometheus to serve metrics").Default(":9095").String()
 )
 
 func main() {
@@ -83,10 +90,20 @@ func CmdBrokers(logger *simplelog.Logger) int {
 		fmt.Fprintf(os.Stderr, "Error starting broker: %s\n", err)
 		os.Exit(1)
 	}
-	srv := server.New(*brokerCmdBrokerAddr, store, logger)
+
+	var r prometheus.Registerer = nil
+	if *promMetrics {
+		r = prometheus.DefaultRegisterer
+	}
+	srv := server.New(*brokerCmdBrokerAddr, store, logger, r)
 	if err := srv.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
+	}
+
+	if r != nil {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(*promAddr, nil)
 	}
 
 	defer srv.Close()

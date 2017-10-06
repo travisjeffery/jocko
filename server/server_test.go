@@ -145,7 +145,7 @@ func setup(t assert.TestingT) func() {
 	_, err = store.WaitForLeader(10 * time.Second)
 	assert.NoError(t, err)
 
-	srv := server.New(":8000", store, logger)
+	srv := server.New(":8000", store, logger, nil)
 	assert.NotNil(t, srv)
 	assert.NoError(t, srv.Start())
 

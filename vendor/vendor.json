@@ -249,6 +249,60 @@
 			"revisionTime": "2016-06-11T13:12:34Z"
 		},
 		{
+			"checksumSHA1": "8oKQtUZLRuxPAQ9bHKqPkOda0hM=",
+			"path": "github.com/prometheus/client_golang/prometheus",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "NSP9xOC+gAoQXDveDdSdeGmEYIA=",
+			"path": "github.com/prometheus/client_golang/prometheus/promhttp",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "DvwvOlPNAgRntBzt3b3OSRMS2N4=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/client_model/go",
+			"path": "github.com/prometheus/client_model/go",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "xfnn0THnqNwjwimeTClsxahYrIo=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/common/expfmt",
+			"path": "github.com/prometheus/common/expfmt",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "GWlM3d2vPYyNATtTFgftS10/A9w=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg",
+			"path": "github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "3VoqH7TFfzA6Ds0zFzIbKCUvBmw=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/common/model",
+			"path": "github.com/prometheus/common/model",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "ihxJIjxtbEYdQKwA0D0nRipj95I=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/procfs",
+			"path": "github.com/prometheus/procfs",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
+			"checksumSHA1": "xCiFAAwVTrjsfZT1BIJQ3DgeNCY=",
+			"origin": "github.com/prometheus/client_golang/vendor/github.com/prometheus/procfs/xfs",
+			"path": "github.com/prometheus/procfs/xfs",
+			"revision": "de4d4ffe63b9eff7f27484fdef6e421597e6abb4",
+			"revisionTime": "2017-06-06T10:22:53Z"
+		},
+		{
 			"checksumSHA1": "GiX6yRUzizn1C+ckgj1xLFLoz8g=",
 			"path": "github.com/rcrowley/go-metrics",
 			"revision": "ab2277b1c5d15c3cba104e9cbddbdfc622df5ad8",

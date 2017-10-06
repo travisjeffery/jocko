@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
@@ -26,16 +27,38 @@ type Server struct {
 	logger     *simplelog.Logger
 	broker     jocko.Broker
 	shutdownCh chan struct{}
+	metrics    *serverMetrics
 }
 
-// New creates a new Server instance.
-func New(addr string, broker jocko.Broker, logger *simplelog.Logger) *Server {
-	return &Server{
+type serverMetrics struct {
+	requestsHandled prometheus.Counter
+}
+
+func newServerMetrics(r prometheus.Registerer) *serverMetrics {
+	m := &serverMetrics{}
+
+	m.requestsHandled = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "requests_handled",
+		Help: "Number of requests handled by the server.",
+	})
+
+	if r != nil {
+		r.MustRegister(
+			m.requestsHandled,
+		)
+	}
+	return m
+}
+
+func New(addr string, broker jocko.Broker, logger *simplelog.Logger, r prometheus.Registerer) *Server {
+	s := &Server{
 		addr:       addr,
 		broker:     broker,
 		logger:     logger,
 		shutdownCh: make(chan struct{}),
 	}
+	s.metrics = newServerMetrics(r)
+	return s
 }
 
 // Start starts the service.
@@ -97,6 +120,7 @@ func (s *Server) Close() {
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
+	s.metrics.requestsHandled.Inc()
 	defer conn.Close()
 
 	header := new(protocol.RequestHeader)
