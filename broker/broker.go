@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"math/rand"
 	"path"
 	"sync"
 
@@ -95,12 +96,13 @@ func (b *Broker) IsController() bool {
 }
 
 // TopicPartitions is used to get the partitions for the given topic.
-func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err *jocko.Error) {
+func (b *Broker) TopicPartitions(topic string) (found []*jocko.Partition, err protocol.Error) {
 	b.mu.RLock()
+	defer b.mu.RUnlock()
 	if p, ok := b.topics[topic]; !ok {
-		return nil, &jocko.Error{ErrorCode: protocol.ErrUnknownTopicOrPartition}
+		return nil, protocol.ErrUnknownTopicOrPartition
 	} else {
-		return p, nil
+		return p, protocol.ErrNone
 	}
 }
 
@@ -110,17 +112,17 @@ func (b *Broker) Topics() map[string][]*jocko.Partition {
 	return b.topics
 }
 
-func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, error) {
+func (b *Broker) Partition(topic string, partition int32) (*jocko.Partition, protocol.Error) {
 	found, err := b.TopicPartitions(topic)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return nil, err
 	}
 	for _, f := range found {
 		if f.ID == partition {
-			return f, nil
+			return f, protocol.ErrNone
 		}
 	}
-	return nil, errors.New("partition not found")
+	return nil, protocol.ErrUnknownTopicOrPartition
 }
 
 // AddPartition is used to add a partition across the cluster.
@@ -134,7 +136,7 @@ func (b *Broker) ClusterMember(id int32) *jocko.ClusterMember {
 }
 
 // StartReplica is used to start a replica on this broker, including creating its commit log.
-func (b *Broker) StartReplica(partition *jocko.Partition) error {
+func (b *Broker) StartReplica(partition *jocko.Partition) protocol.Error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if v, ok := b.topics[partition.Topic]; ok {
@@ -156,12 +158,12 @@ func (b *Broker) StartReplica(partition *jocko.Partition) error {
 			MaxLogBytes:     -1,
 		})
 		if err != nil {
-			return err
+			return protocol.ErrUnknown.WithErr(err)
 		}
 		partition.CommitLog = commitLog
 		partition.Conn = b.serf.Member(partition.LeaderID())
 	}
-	return nil
+	return protocol.ErrNone
 }
 
 // IsLeaderPartitions returns true if the given leader is the leader of the given partition.
@@ -180,15 +182,18 @@ func (b *Broker) IsLeaderOfPartition(topic string, pid int32, lid int32) bool {
 
 // Join is used to have the broker join the gossip ring.
 // The given address should be another broker listening on the Serf address.
-func (b *Broker) Join(addrs ...string) (int, error) {
-	return b.serf.Join(addrs...)
+func (b *Broker) Join(addrs ...string) protocol.Error {
+	if _, err := b.serf.Join(addrs...); err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	return protocol.ErrNone
 }
 
 // CreateTopic is used to create the topic across the cluster.
-func (b *Broker) CreateTopic(topic string, partitions int32) error {
+func (b *Broker) CreateTopic(topic string, partitions int32, replicationFactor int16) protocol.Error {
 	for t, _ := range b.Topics() {
 		if t == topic {
-			return ErrTopicExists
+			return protocol.ErrTopicAlreadyExists
 		}
 	}
 
@@ -196,31 +201,43 @@ func (b *Broker) CreateTopic(topic string, partitions int32) error {
 	cLen := int32(len(c))
 
 	for i := int32(0); i < partitions; i++ {
-		// TODO: need to know replica assignment here
 		leader := c[i%cLen].ID
+		replicas := []int32{leader}
+		for replica := rand.Int31n(cLen); len(replicas) < int(replicationFactor); replica++ {
+			if replica != leader {
+				replicas = append(replicas, replica)
+			}
+			if replica+1 == cLen {
+				replica = -1
+			}
+		}
 		partition := &jocko.Partition{
 			Topic:           topic,
 			ID:              i,
 			Leader:          leader,
 			PreferredLeader: leader,
-			Replicas:        []int32{},
+			Replicas:        replicas,
+			ISR:             replicas,
 		}
 		if err := b.AddPartition(partition); err != nil {
-			return err
+			return protocol.ErrUnknown.WithErr(err)
 		}
 	}
-	return nil
+	return protocol.ErrNone
 }
 
 // DeleteTopic is used to delete the topic across the cluster.
-func (b *Broker) DeleteTopic(topic string) error {
-	return b.raftApply(deleteTopic, &jocko.Partition{Topic: topic})
+func (b *Broker) DeleteTopic(topic string) protocol.Error {
+	if err := b.raftApply(deleteTopic, &jocko.Partition{Topic: topic}); err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	return protocol.ErrNone
 }
 
 // deleteTopic is used to delete the topic from this broker.
 func (b *Broker) deleteTopic(tp *jocko.Partition) error {
 	partitions, err := b.TopicPartitions(tp.Topic)
-	if err != nil {
+	if err != protocol.ErrNone {
 		return err
 	}
 	for _, p := range partitions {

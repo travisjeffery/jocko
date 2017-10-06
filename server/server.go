@@ -12,13 +12,14 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Server is used to handle the TCP connections, decode requests,
+// defer to the broker, and encode the responses.
 type Server struct {
 	addr       string
 	ln         *net.TCPListener
@@ -49,6 +50,7 @@ func newServerMetrics(r prometheus.Registerer) *serverMetrics {
 	return m
 }
 
+// New creates a new Server instance.
 func New(addr string, broker jocko.Broker, logger *simplelog.Logger, r prometheus.Registerer) *Server {
 	s := &Server{
 		addr:       addr,
@@ -247,30 +249,29 @@ func (s *Server) handleAPIVersions(conn net.Conn, header *protocol.RequestHeader
 	return s.write(conn, header, r)
 }
 
-func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) (err error) {
+func (s *Server) handleCreateTopic(conn net.Conn, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) error {
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := s.broker.IsController()
-	if isController {
-		for i, req := range reqs.Requests {
-			err = s.broker.CreateTopic(req.Topic, req.NumPartitions)
-			if err != nil {
-				s.logger.Info("failed to create topic %s: %v", req.Topic, err)
-				return
-			}
+	for i, req := range reqs.Requests {
+		if !isController {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
-				ErrorCode: protocol.ErrNone,
+				ErrorCode: protocol.ErrNotController.Code(),
 			}
+			continue
 		}
-	} else {
-		// TODO: forward req to controller
-		s.logger.Info("failed to create topic(s): %v", errors.New("broker is not controller"))
-		for i, req := range reqs.Requests {
+		if req.ReplicationFactor > int16(len(s.broker.Cluster())) {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
-				ErrorCode: protocol.ErrNotController,
+				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
 			}
+			continue
+		}
+		err := s.broker.CreateTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
+		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+			Topic:     req.Topic,
+			ErrorCode: err.Code(),
 		}
 	}
 	r := &protocol.Response{
@@ -284,25 +285,23 @@ func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeade
 	resp := new(protocol.DeleteTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Topics))
 	isController := s.broker.IsController()
-	if err != nil {
-		return err
-	}
-	if isController {
-		for i, topic := range reqs.Topics {
-			err = s.broker.DeleteTopic(topic)
-			if err != nil {
-				s.logger.Info("failed to delete topic %s: %v", topic, err)
-				return
-			}
+	for i, topic := range reqs.Topics {
+		if !isController {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     topic,
-				ErrorCode: protocol.ErrNone,
+				ErrorCode: protocol.ErrNotController.Code(),
 			}
+			continue
 		}
-	} else {
-		// cID := s.broker.ControllerID()
-		// send the request to the controller
-		return
+		err = s.broker.DeleteTopic(topic)
+		if err != nil {
+			s.logger.Info("failed to delete topic %s: %v", topic, err)
+			return
+		}
+		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+			Topic:     topic,
+			ErrorCode: protocol.ErrNone.Code(),
+		}
 	}
 	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,
@@ -312,44 +311,52 @@ func (s *Server) handleDeleteTopics(conn net.Conn, header *protocol.RequestHeade
 }
 
 func (s *Server) handleLeaderAndISR(conn net.Conn, header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) (err error) {
-	body := &protocol.LeaderAndISRResponse{}
-	for _, p := range req.PartitionStates {
-		partition, err := s.broker.Partition(p.Topic, p.Partition)
-		broker := s.broker.ClusterMember(p.Leader)
-		if broker == nil {
-			// TODO: error cause we don't know who this broker is
+	body := &protocol.LeaderAndISRResponse{
+		Partitions: make([]*protocol.LeaderAndISRPartition, len(req.PartitionStates)),
+	}
+	setErr := func(i int, p *protocol.PartitionState, err protocol.Error) {
+		body.Partitions[i] = &protocol.LeaderAndISRPartition{
+			ErrorCode: err.Code(),
+			Partition: p.Partition,
+			Topic:     p.Topic,
 		}
-		if err != nil {
-			return err
+	}
+	for i, p := range req.PartitionStates {
+		partition, err := s.broker.Partition(p.Topic, p.Partition)
+		// TODO: seems ok to have protocol.ErrUnknownTopicOrPartition here?
+		if err != protocol.ErrNone {
+			setErr(i, p, err)
+			continue
 		}
 		if partition == nil {
 			partition = &jocko.Partition{
-				Topic:           p.Topic,
-				ID:              p.Partition,
-				Replicas:        p.Replicas,
-				ISR:             p.ISR,
-				Leader:          p.Leader,
-				PreferredLeader: p.Leader,
-
+				Topic:                   p.Topic,
+				ID:                      p.Partition,
+				Replicas:                p.Replicas,
+				ISR:                     p.ISR,
+				Leader:                  p.Leader,
+				PreferredLeader:         p.Leader,
 				LeaderAndISRVersionInZK: p.ZKVersion,
 			}
-			if err := s.broker.StartReplica(partition); err != nil {
-				return err
+			if err := s.broker.StartReplica(partition); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		}
 		if p.Leader == s.broker.ID() && !partition.IsLeader(s.broker.ID()) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
-			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != nil {
-				return err
+			if err := s.broker.BecomeLeader(partition.Topic, partition.ID, p); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		} else if contains(p.Replicas, s.broker.ID()) && !partition.IsFollowing(p.Leader) {
 			// is command asking this broker to follow leader who it isn't a leader of already
-			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != nil {
-				return err
+			if err := s.broker.BecomeFollower(partition.Topic, partition.ID, p); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
 			}
 		}
 	}
-
 	r := &protocol.Response{
 		CorrelationID: header.CorrelationID,
 		Body:          body,
@@ -381,7 +388,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// TODO: change join to take a broker
-	if _, err := s.broker.Join(b.IP); err != nil {
+	if err := s.broker.Join(b.IP); err != protocol.ErrNone {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -397,7 +404,7 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
-	topicMetadataFn := func(topic string, partitions []*jocko.Partition, errCode int16) *protocol.TopicMetadata {
+	topicMetadataFn := func(topic string, partitions []*jocko.Partition, err protocol.Error) *protocol.TopicMetadata {
 		partitionMetadata := make([]*protocol.PartitionMetadata, len(partitions))
 		for i, p := range partitions {
 			partitionMetadata[i] = &protocol.PartitionMetadata{
@@ -405,7 +412,7 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 			}
 		}
 		return &protocol.TopicMetadata{
-			TopicErrorCode:    errCode,
+			TopicErrorCode:    err.Code(),
 			Topic:             topic,
 			PartitionMetadata: partitionMetadata,
 		}
@@ -423,11 +430,7 @@ func (s *Server) handleMetadata(conn net.Conn, header *protocol.RequestHeader, r
 		topicMetadata = make([]*protocol.TopicMetadata, len(req.Topics))
 		for i, topic := range req.Topics {
 			partitions, err := s.broker.TopicPartitions(topic)
-			errCode := protocol.ErrNone
-			if err != nil {
-				errCode = err.ErrorCode
-			}
-			topicMetadata[i] = topicMetadataFn(topic, partitions, errCode)
+			topicMetadata[i] = topicMetadataFn(topic, partitions, err)
 		}
 	}
 	resp := &protocol.MetadataResponse{
@@ -463,12 +466,12 @@ func (s *Server) handleOffsets(conn net.Conn, header *protocol.RequestHeader, re
 			pResp.Partition = p.Partition
 
 			partition, err := s.broker.Partition(t.Topic, p.Partition)
-
-			var offset int64
-			if err != nil {
-				pResp.ErrorCode = protocol.ErrUnknown
+			if err != protocol.ErrNone {
+				pResp.ErrorCode = err.Code()
 				continue
 			}
+
+			var offset int64
 			if p.Timestamp == -2 {
 				offset = partition.LowWatermark()
 			} else {
@@ -495,17 +498,17 @@ func (s *Server) handleProduce(conn net.Conn, header *protocol.RequestHeader, re
 			partition := jocko.NewPartition(td.Topic, p.Partition)
 			presp := &protocol.ProducePartitionResponse{}
 			partition, err := s.broker.Partition(td.Topic, p.Partition)
-			if err != nil {
-				presp.ErrorCode = protocol.ErrUnknownTopicOrPartition
+			if err != protocol.ErrNone {
+				presp.ErrorCode = err.Code()
 			}
 			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
-				presp.ErrorCode = protocol.ErrNotLeaderForPartition
+				presp.ErrorCode = protocol.ErrNotLeaderForPartition.Code()
 				// break ?
 			}
-			offset, err := partition.Append(p.RecordSet)
-			if err != nil {
+			offset, appendErr := partition.Append(p.RecordSet)
+			if appendErr != nil {
 				s.logger.Info("commitlog/append failed: %s", err)
-				presp.ErrorCode = protocol.ErrUnknown
+				presp.ErrorCode = protocol.ErrUnknown.Code()
 			}
 			presp.Partition = p.Partition
 			presp.BaseOffset = offset
@@ -538,21 +541,27 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 
 		for j, p := range topic.Partitions {
 			partition, err := s.broker.Partition(topic.Topic, p.Partition)
-			if err != nil {
-				// TODO set err code
-				s.logger.Info("failed to find partition: %v (%s/%d)", err, topic.Topic, p.Partition)
-				break
+			if err != protocol.ErrNone {
+				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+					Partition: p.Partition,
+					ErrorCode: err.Code(),
+				}
+				continue
 			}
 			if !s.broker.IsLeaderOfPartition(partition.Topic, partition.ID, partition.LeaderID()) {
-				s.logger.Info("failed to produce: %v", errors.New("broker is not partition leader"))
-				// TODO set err code
-				break
+				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+					Partition: p.Partition,
+					ErrorCode: protocol.ErrNotLeaderForPartition.Code(),
+				}
+				continue
 			}
-			rdr, err := partition.NewReader(p.FetchOffset, p.MaxBytes)
-			if err != nil {
-				s.logger.Info("failed to read partition: %v", err)
-				// TODO set err code
-				break
+			rdr, rdrErr := partition.NewReader(p.FetchOffset, p.MaxBytes)
+			if rdrErr != nil {
+				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+					Partition: p.Partition,
+					ErrorCode: protocol.ErrUnknown.Code(),
+				}
+				continue
 			}
 			b := new(bytes.Buffer)
 			var n int32
@@ -563,8 +572,10 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 				// TODO: copy these bytes to outer bytes
 				nn, err := io.Copy(b, rdr)
 				if err != nil && err != io.EOF {
-					s.logger.Info("failed to fetch messages: %v", err)
-					// TODO seT error code
+					fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+						Partition: p.Partition,
+						ErrorCode: protocol.ErrUnknown.Code(),
+					}
 					break
 				}
 				n += int32(nn)
@@ -575,7 +586,7 @@ func (s *Server) handleFetch(conn net.Conn, header *protocol.RequestHeader, r *p
 
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
-				ErrorCode:     protocol.ErrNone,
+				ErrorCode:     protocol.ErrNone.Code(),
 				HighWatermark: partition.HighWatermark(),
 				RecordSet:     b.Bytes(),
 			}

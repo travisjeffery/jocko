@@ -60,6 +60,7 @@ func (r *Replicator) fetchMessages() {
 				}},
 			}
 			fetchResponse, err := r.leader.FetchMessages(r.clientID, fetchRequest)
+			// TODO: probably shouldn't panic. just let this replica fall out of ISR.
 			if err != nil {
 				panic(err)
 			}

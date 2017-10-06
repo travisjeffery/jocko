@@ -9,11 +9,6 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type Error struct {
-	error
-	ErrorCode int16
-}
-
 // CommitLog is the interface that wraps the commit log's methods and
 // is used to manage a partition's data.
 type CommitLog interface {
@@ -175,16 +170,16 @@ type Raft interface {
 type Broker interface {
 	ID() int32
 	IsController() bool
-	CreateTopic(topic string, partitions int32) error
-	StartReplica(*Partition) error
-	DeleteTopic(topic string) error
-	Partition(topic string, id int32) (*Partition, error)
+	CreateTopic(topic string, partitions int32, replicationFactor int16) protocol.Error
+	StartReplica(*Partition) protocol.Error
+	DeleteTopic(topic string) protocol.Error
+	Partition(topic string, id int32) (*Partition, protocol.Error)
 	ClusterMember(brokerID int32) *ClusterMember
-	BecomeLeader(topic string, id int32, command *protocol.PartitionState) error
-	BecomeFollower(topic string, id int32, command *protocol.PartitionState) error
-	Join(addr ...string) (int, error)
+	BecomeLeader(topic string, id int32, command *protocol.PartitionState) protocol.Error
+	BecomeFollower(topic string, id int32, command *protocol.PartitionState) protocol.Error
+	Join(addr ...string) protocol.Error
 	Cluster() []*ClusterMember
-	TopicPartitions(topic string) ([]*Partition, *Error)
+	TopicPartitions(topic string) ([]*Partition, protocol.Error)
 	Topics() map[string][]*Partition
 	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
 }
