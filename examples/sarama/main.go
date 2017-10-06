@@ -8,6 +8,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
@@ -153,7 +154,7 @@ func setup() func() {
 	}
 
 	// creating/deleting topic directly since Sarama doesn't support it
-	if err := store.CreateTopic(topic, numPartitions); err != nil && err != broker.ErrTopicExists {
+	if err := store.CreateTopic(topic, numPartitions, 1); err != protocol.ErrNone {
 		panic(err)
 	}
 

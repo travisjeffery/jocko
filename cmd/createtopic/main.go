@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	brokerAddr = kingpin.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
-	topic      = kingpin.Flag("topic", "Name of topic to create").String()
-	partitions = kingpin.Flag("partitions", "Number of partitions").Default("1").Int32()
+	brokerAddr        = kingpin.Flag("brokeraddr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
+	topic             = kingpin.Flag("topic", "Name of topic to create").String()
+	partitions        = kingpin.Flag("partitions", "Number of partitions").Default("1").Int32()
+	replicationFactor = kingpin.Flag("replicationfactor", "Replication factor").Default("1").Int16()
 )
 
 func main() {
@@ -33,7 +34,7 @@ func main() {
 	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
 		Topic:             *topic,
 		NumPartitions:     *partitions,
-		ReplicationFactor: int16(1),
+		ReplicationFactor: *replicationFactor,
 		ReplicaAssignment: nil,
 		Configs:           nil,
 	})
@@ -47,6 +48,6 @@ func main() {
 		if topicErrCode.ErrorCode == 41 {
 			msg = "err not controller"
 		}
-		fmt.Printf("create topic %s: %d\n", topicErrCode.Topic, msg)
+		fmt.Printf("create topic %s: %s\n", topicErrCode.Topic, msg)
 	}
 }
