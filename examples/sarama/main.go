@@ -12,6 +12,9 @@ import (
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/simplelog"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 )
 
 type check struct {
@@ -28,6 +31,7 @@ const (
 	brokerAddr    = "127.0.0.1:9092"
 	raftAddr      = "127.0.0.1:9093"
 	serfAddr      = "127.0.0.1:9094"
+	promAddr      = "127.0.0.1:9095"
 	logDir        = "logdir"
 	brokerID      = 0
 )
@@ -132,10 +136,16 @@ func setup() func() {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
 	}
-	server := server.New(brokerAddr, store, logger)
+	r := prometheus.DefaultRegisterer
+	server := server.New(brokerAddr, store, logger, r)
 	if err := server.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
+	}
+
+	if r != nil {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(promAddr, nil)
 	}
 
 	if _, err := store.WaitForLeader(10 * time.Second); err != nil {
