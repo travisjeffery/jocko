@@ -2,8 +2,6 @@ package broker
 
 import (
 	"encoding/json"
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -48,19 +46,6 @@ func (s *Broker) WaitForLeader(timeout time.Duration) (string, error) {
 		}
 	}
 }*/
-
-func addrPort(addr string) (int, error) {
-	_, strPort, err := net.SplitHostPort(addr)
-	if err != nil {
-		return 0, err
-	}
-
-	port, err := strconv.Atoi(strPort)
-	if err != nil {
-		return 0, err
-	}
-	return port, nil
-}
 
 func unmarshalData(data *json.RawMessage, p interface{}) error {
 	b, err := data.MarshalJSON()

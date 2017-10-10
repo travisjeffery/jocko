@@ -48,12 +48,12 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		o(b)
 	}
 
-	port, err := addrPort(b.brokerAddr)
+	_, port, err := jocko.SplitHostPort(b.brokerAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	raftPort, err := addrPort(b.raft.Addr())
+	_, raftPort, err := jocko.SplitHostPort(b.raft.Addr())
 	if err != nil {
 		return nil, err
 	}
