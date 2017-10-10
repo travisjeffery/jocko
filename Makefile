@@ -4,15 +4,14 @@ all: deps test
 
 .PHONY: deps
 deps:
-	go get -u github.com/kardianos/govendor
-	govendor sync 
+	dep ensure
 
 .PHONY: test
 test:
-	govendor test -v -p=1 +local
+	go test -v ./...
 
 .PHONY: test-race
 test-race:
-	govendor test -v -race -p=1 +local
+	go test -v -race -p=1 ./...
 
 

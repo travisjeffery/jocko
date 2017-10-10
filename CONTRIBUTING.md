@@ -15,9 +15,9 @@ When creating a pull-request you should:
 
 - **Get the deps**:
     ```
-    govendor sync
+    dep ensure
     ``` 
-    (If you don't have govendor, run: `go get -u github.com/kardianos/govendor`)
+    (If you don't have dep, run: `go get -u github.com/golang/dep/cmd/dep`)
 
 - **Check the tests pass**:
     ```
