@@ -16,4 +16,4 @@ services:
     build:
       context: .
     image: jocko
-    command: jocko broker --serf-members=jocko_c:9094
+    command: jocko broker --serf-members=jocko_a:9094
