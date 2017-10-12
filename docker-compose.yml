@@ -1,14 +1,19 @@
 version: '3'
 
 services:
-
-  jocko_main:
+  jocko_a:
     build:
       context: .
     image: jocko
 
-  jocko_cluster:
+  jocko_b:
     build:
       context: .
     image: jocko
-    command: jocko --serfmembers=jocko_main:9094
+    command: jocko broker --serf-members=jocko_a:9094
+
+  jocko_c:
+    build:
+      context: .
+    image: jocko
+    command: jocko broker --serf-members=jocko_c:9094
