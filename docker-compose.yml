@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+
+  jocko_main:
+    build:
+      context: .
+    image: jocko
+
+  jocko_cluster:
+    build:
+      context: .
+    image: jocko
+    command: jocko --serfmembers=jocko_main:9094
