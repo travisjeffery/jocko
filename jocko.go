@@ -38,7 +38,7 @@ type Partition struct {
 
 	LeaderAndISRVersionInZK int32     `json:"-"`
 	CommitLog               CommitLog `json:"-"`
-
+	// Conn is a connection to the broker that is this partition's leader, used for replication.
 	Conn io.ReadWriter `json:"-"`
 }
 

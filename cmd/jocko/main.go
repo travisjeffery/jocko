@@ -144,10 +144,10 @@ func CmdTopic(logger *simplelog.Logger) int {
 		fmt.Fprintf(os.Stderr, "Error with request to broker: %s\n", err)
 		os.Exit(1)
 	}
-
 	for _, topicErrCode := range resp.TopicErrorCodes {
 		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
-			fmt.Fprintf(os.Stderr, "Error code: %s\n", topicErrCode.ErrorCode)
+			err := protocol.Errs[topicErrCode.ErrorCode]
+			fmt.Fprintf(os.Stderr, "Error code: %s\n", err)
 			os.Exit(1)
 		}
 	}
