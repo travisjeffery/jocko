@@ -19,6 +19,7 @@ $ ./jocko broker \
           --broker-addr=127.0.0.1:9001 \
           --raft-addr=127.0.0.1:9002 \
           --serf-addr=127.0.0.1:9003 \
+          --prometheus-addr=127.0.0.1:9004 \
           --id=1
 
 $ ./jocko broker \
@@ -27,6 +28,7 @@ $ ./jocko broker \
           --broker-addr=127.0.0.1:9101 \
           --raft-addr=127.0.0.1:9102 \
           --serf-addr=127.0.0.1:9103 \
+          --prometheus-addr=127.0.0.1:9104 \
           --serf-members=127.0.0.1:9003 \
           --id=2
 
@@ -36,6 +38,7 @@ $ ./jocko broker \
           --broker-addr=127.0.0.1:9201 \
           --raft-addr=127.0.0.1:9202 \
           --serf-addr=127.0.0.1:9203 \
+          --prometheus-addr=127.0.0.1:9204 \
           --serf-members=127.0.0.1:9003 \
           --id=3
 ```
