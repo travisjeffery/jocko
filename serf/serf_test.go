@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
@@ -24,9 +24,9 @@ func init() {
 
 func Test_Membership(t *testing.T) {
 	s0, err := getSerf(0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	s1, err := getSerf(1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	t.Run("Join Peer", func(t *testing.T) {
 		testJoin(t, s0, s1)
@@ -45,7 +45,7 @@ func Test_Membership(t *testing.T) {
 	})
 
 	t.Run("Remove Peer", func(t *testing.T) {
-		assert.NoError(t, s1.Shutdown())
+		require.NoError(t, s1.Shutdown())
 
 		testutil.WaitForResult(func() (bool, error) {
 			if len(s0.Cluster()) != 1 {
@@ -57,7 +57,7 @@ func Test_Membership(t *testing.T) {
 		})
 	})
 
-	assert.NoError(t, s0.Shutdown())
+	require.NoError(t, s0.Shutdown())
 }
 
 func getSerf(id int32) (*serf.Serf, error) {
@@ -85,7 +85,7 @@ func getSerfAddr() string {
 func testJoin(t *testing.T, s0 *serf.Serf, other ...*serf.Serf) {
 	for ind, s1 := range other {
 		num, err := s1.Join(s0.Addr())
-		assert.NoError(t, err)
-		assert.Equal(t, ind+1, num)
+		require.NoError(t, err)
+		require.Equal(t, ind+1, num)
 	}
 }

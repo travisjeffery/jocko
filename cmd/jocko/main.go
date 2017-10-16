@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -91,7 +92,7 @@ func CmdBrokers(logger *simplelog.Logger) int {
 
 	prom := prometheus.DefaultRegisterer
 	srv := server.New(*brokerCmdBrokerAddr, store, logger, prom)
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
 	}

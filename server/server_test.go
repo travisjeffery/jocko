@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
@@ -49,22 +50,22 @@ func TestBroker(t *testing.T) {
 			Topic: topic,
 			Value: msgValue,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		consumer, err := sarama.NewConsumer(brokers, config)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		cPartition, err := consumer.ConsumePartition(topic, pPartition, 0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		select {
 		case msg := <-cPartition.Messages():
-			assert.Equal(t, msg.Offset, offset)
-			assert.Equal(t, pPartition, msg.Partition)
-			assert.Equal(t, topic, msg.Topic)
-			assert.Equal(t, 0, bytes.Compare(bValue, msg.Value))
+			require.Equal(t, msg.Offset, offset)
+			require.Equal(t, pPartition, msg.Partition)
+			require.Equal(t, topic, msg.Topic)
+			require.Equal(t, 0, bytes.Compare(bValue, msg.Value))
 		case err := <-cPartition.Errors():
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 	})
 }
@@ -98,31 +99,31 @@ func BenchmarkBroker(b *testing.B) {
 				Topic: topic,
 				Value: msgValue,
 			})
-			assert.NoError(b, err)
+			require.NoError(b, err)
 		}
 	})
 
 	b.Run("Sarama_Consume", func(b *testing.B) {
 		consumer, err := sarama.NewConsumer(brokers, config)
-		assert.NoError(b, err)
+		require.NoError(b, err)
 
 		cPartition, err := consumer.ConsumePartition(topic, 0, 0)
-		assert.NoError(b, err)
+		require.NoError(b, err)
 
 		for i := 0; i < msgCount; i++ {
 			select {
 			case msg := <-cPartition.Messages():
-				assert.Equal(b, topic, msg.Topic)
+				require.Equal(b, topic, msg.Topic)
 			case err := <-cPartition.Errors():
-				assert.NoError(b, err)
+				require.NoError(b, err)
 			}
 		}
 	})
 }
 
-func setup(t assert.TestingT) func() {
+func setup(t require.TestingT) func() {
 	dataDir, err := ioutil.TempDir("", "server_test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
 	serf, err := serf.New(
@@ -140,20 +141,20 @@ func setup(t assert.TestingT) func() {
 		broker.Raft(raft),
 		broker.Serf(serf),
 		broker.Logger(logger))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = store.WaitForLeader(10 * time.Second)
-	assert.NoError(t, err)
-
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel((context.Background()))
 	srv := server.New(":8000", store, logger, nil)
-	assert.NotNil(t, srv)
-	assert.NoError(t, srv.Start())
+	require.NotNil(t, srv)
+	require.NoError(t, srv.Start(ctx))
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", ":8000")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer conn.Close()
 
 	client := server.NewClient(conn)
@@ -168,9 +169,10 @@ func setup(t assert.TestingT) func() {
 			"config_key": "config_val",
 		},
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return func() {
+		cancel()
 		srv.Close()
 		store.Shutdown()
 		os.RemoveAll(dataDir)
