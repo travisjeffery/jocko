@@ -99,34 +99,25 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, respons
 			switch req := request.Request.(type) {
 			case *protocol.APIVersionsRequest:
 				resp = b.handleAPIVersions(header, req)
-				goto respond
 			case *protocol.ProduceRequest:
 				resp = b.handleProduce(header, req)
-				goto respond
 			case *protocol.FetchRequest:
 				resp = b.handleFetch(header, req)
-				goto respond
 			case *protocol.OffsetsRequest:
 				resp = b.handleOffsets(header, req)
-				goto respond
 			case *protocol.MetadataRequest:
 				resp = b.handleMetadata(header, req)
-				goto respond
 			case *protocol.CreateTopicRequests:
 				resp = b.handleCreateTopic(header, req)
-				goto respond
 			case *protocol.DeleteTopicsRequest:
 				resp = b.handleDeleteTopics(header, req)
-				goto respond
 			case *protocol.LeaderAndISRRequest:
 				resp = b.handleLeaderAndISR(header, req)
-				goto respond
 			}
 		case <-ctx.Done():
 			return
 		}
 
-	respond:
 		responsec <- jocko.Response{Conn: conn, Header: header, Response: &protocol.Response{
 			CorrelationID: header.CorrelationID,
 			Body:          resp,
