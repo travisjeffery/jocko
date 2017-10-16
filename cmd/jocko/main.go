@@ -7,10 +7,6 @@ import (
 	"os"
 	"time"
 
-	"net/http"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/protocol"
@@ -25,14 +21,14 @@ var (
 	cli       = kingpin.New("jocko", "Jocko, Go implementation of Kafka")
 	debugLogs = cli.Flag("debug", "Enable debug logs").Default("false").Bool()
 
-	brokerCmd               = cli.Command("broker", "Run a Jocko broker")
-	brokerCmdRaftAddr       = brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
-	brokerCmdLogDir         = brokerCmd.Flag("log-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
-	brokerCmdBrokerAddr     = brokerCmd.Flag("broker-addr", "Address for broker to bind on").Default("0.0.0.0:9092").String()
-	brokerCmdSerfAddr       = brokerCmd.Flag("serf-addr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
-	brokerCmdPrometheusAddr = brokerCmd.Flag("prometheus-addr", "Address for Prometheus to serve metrics on").Default(":9095").String()
-	brokerCmdSerfMembers    = brokerCmd.Flag("serf-members", "List of existing Serf members").Strings()
-	brokerCmdBrokerID       = brokerCmd.Flag("id", "Broker ID").Int32()
+	brokerCmd            = cli.Command("broker", "Run a Jocko broker")
+	brokerCmdRaftAddr    = brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
+	brokerCmdLogDir      = brokerCmd.Flag("log-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
+	brokerCmdBrokerAddr  = brokerCmd.Flag("broker-addr", "Address for broker to bind on").Default("0.0.0.0:9092").String()
+	brokerCmdSerfAddr    = brokerCmd.Flag("serf-addr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
+	brokerCmdHTTPAddr    = brokerCmd.Flag("http-addr", "Address for HTTP handlers to serve metrics on, like Prometheus").Default(":9095").String()
+	brokerCmdSerfMembers = brokerCmd.Flag("serf-members", "List of existing Serf members").Strings()
+	brokerCmdBrokerID    = brokerCmd.Flag("id", "Broker ID").Int32()
 
 	topic                  = cli.Command("topic", "Manage topics")
 	topicBrokerAddr        = topic.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
@@ -90,19 +86,11 @@ func CmdBrokers(logger *simplelog.Logger) int {
 		os.Exit(1)
 	}
 
-	prom := prometheus.DefaultRegisterer
-	srv := server.New(*brokerCmdBrokerAddr, store, logger, prom)
+	srv := server.New(*brokerCmdBrokerAddr, store, *brokerCmdHTTPAddr, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
 	}
-
-	http.Handle("/metrics", promhttp.Handler())
-	go func() {
-		err := http.ListenAndServe(*brokerCmdPrometheusAddr, nil)
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
-	}()
 
 	defer srv.Close()
 

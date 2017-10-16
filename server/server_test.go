@@ -146,7 +146,7 @@ func setup(t require.TestingT) func() {
 	_, err = store.WaitForLeader(10 * time.Second)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(":8000", store, logger, nil)
+	srv := server.New(":8000", store, ":8003", logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 

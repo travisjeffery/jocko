@@ -4,16 +4,16 @@ services:
   jocko_a:
     build:
       context: .
-    image: jocko
+    image: travisjeffery:jocko
 
   jocko_b:
     build:
       context: .
-    image: jocko
+    image: travisjeffery:jocko
     command: jocko broker --serf-members=jocko_a:9094
 
   jocko_c:
     build:
       context: .
-    image: jocko
+    image: travisjeffery:jocko
     command: jocko broker --serf-members=jocko_a:9094

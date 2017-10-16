@@ -7,11 +7,7 @@ import (
 	"os"
 	"time"
 
-	"net/http"
-
 	"github.com/Shopify/sarama"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
@@ -34,7 +30,7 @@ const (
 	brokerAddr    = "127.0.0.1:9092"
 	raftAddr      = "127.0.0.1:9093"
 	serfAddr      = "127.0.0.1:9094"
-	promAddr      = "127.0.0.1:9095"
+	httpAddr      = "127.0.0.1:9095"
 	logDir        = "logdir"
 	brokerID      = 0
 )
@@ -139,16 +135,10 @@ func setup() func() {
 		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
 		os.Exit(1)
 	}
-	r := prometheus.DefaultRegisterer
-	server := server.New(brokerAddr, store, logger, r)
+	server := server.New(brokerAddr, store, httpAddr, logger)
 	if err := server.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
 		os.Exit(1)
-	}
-
-	if r != nil {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(promAddr, nil)
 	}
 
 	if _, err := store.WaitForLeader(10 * time.Second); err != nil {
