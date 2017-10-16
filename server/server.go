@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/simplelog"
@@ -21,50 +22,60 @@ import (
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	addr      string
-	ln        *net.TCPListener
-	mu        sync.Mutex
-	logger    *simplelog.Logger
-	broker    jocko.Broker
-	shutdownc chan struct{}
-	metrics   *serverMetrics
-	requestc  chan jocko.Request
-	responsec chan jocko.Response
+	protocolAddr string
+	protocolLn   *net.TCPListener
+	httpAddr     string
+	httpLn       *net.TCPListener
+	mu           sync.Mutex
+	logger       *simplelog.Logger
+	broker       jocko.Broker
+	shutdownc    chan struct{}
+	metrics      *metrics
+	requestc     chan jocko.Request
+	responsec    chan jocko.Response
 }
 
-func New(addr string, broker jocko.Broker, logger *simplelog.Logger, r prometheus.Registerer) *Server {
+func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simplelog.Logger) *Server {
 	s := &Server{
-		addr:      addr,
-		broker:    broker,
-		logger:    logger,
-		shutdownc: make(chan struct{}),
-		requestc:  make(chan jocko.Request, 32),
-		responsec: make(chan jocko.Response, 32),
+		protocolAddr: protocolAddr,
+		httpAddr:     httpAddr,
+		broker:       broker,
+		logger:       logger,
+		shutdownc:    make(chan struct{}),
+		requestc:     make(chan jocko.Request, 32),
+		responsec:    make(chan jocko.Response, 32),
 	}
-	s.metrics = newServerMetrics(r)
+	s.metrics = newMetrics(prometheus.DefaultRegisterer)
 	return s
 }
 
 // Start starts the service.
 func (s *Server) Start(ctx context.Context) error {
-	addr, err := net.ResolveTCPAddr("tcp", s.addr)
-	if err != nil {
-		panic(err)
-	}
-
-	ln, err := net.ListenTCP("tcp", addr)
+	protocolAddr, err := net.ResolveTCPAddr("tcp", s.protocolAddr)
 	if err != nil {
 		return err
 	}
-	s.ln = ln
+	if s.protocolLn, err = net.ListenTCP("tcp", protocolAddr); err != nil {
+		return err
+	}
 
+	httpAddr, err := net.ResolveTCPAddr("tcp", s.httpAddr)
+	if err != nil {
+		return err
+	}
+	if s.httpLn, err = net.ListenTCP("tcp", httpAddr); err != nil {
+		return err
+	}
+
+	// TODO: clean this up. setup metrics via dependency injection or use them
+	// through a channel or something.
 	r := mux.NewRouter()
-	r.Methods("POST").Path("/join").HandlerFunc(s.handleJoin)
+	r.Path("/join").Methods("POST").HandlerFunc(s.handleJoin)
+	r.Handle("/metrics", promhttp.Handler())
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
 	http.Handle("/", r)
 
 	loggedRouter := handlers.LoggingHandler(os.Stdout, r)
-
 	server := http.Server{
 		Handler: loggedRouter,
 	}
@@ -77,7 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.shutdownc:
 				break
 			default:
-				conn, err := s.ln.Accept()
+				conn, err := s.protocolLn.Accept()
 				if err != nil {
 					s.logger.Debug("listener accept failed: %v", err)
 					continue
@@ -106,7 +117,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go s.broker.Run(ctx, s.requestc, s.responsec)
 
 	go func() {
-		err := server.Serve(s.ln)
+		err := server.Serve(s.httpLn)
 		if err != nil {
 			s.logger.Info("serve failed: %v", err)
 		}
@@ -118,7 +129,7 @@ func (s *Server) Start(ctx context.Context) error {
 // Close closes the service.
 func (s *Server) Close() {
 	close(s.shutdownc)
-	s.ln.Close()
+	s.protocolLn.Close()
 	return
 }
 
@@ -227,7 +238,7 @@ func (s *Server) write(resp jocko.Response) error {
 
 // Addr returns the address on which the Server is listening
 func (s *Server) Addr() net.Addr {
-	return s.ln.Addr()
+	return s.protocolLn.Addr()
 }
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
