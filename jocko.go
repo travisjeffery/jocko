@@ -1,6 +1,7 @@
 package jocko
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -166,8 +167,21 @@ type Raft interface {
 	Addr() string
 }
 
+type Request struct {
+	Conn    io.ReadWriter
+	Header  *protocol.RequestHeader
+	Request interface{}
+}
+
+type Response struct {
+	Conn     io.ReadWriter
+	Header   *protocol.RequestHeader
+	Response interface{}
+}
+
 // Broker is the interface that wraps the Broker's methods.
 type Broker interface {
+	Run(context.Context, <-chan Request, chan<- Response)
 	ID() int32
 	IsController() bool
 	CreateTopic(topic string, partitions int32, replicationFactor int16) protocol.Error
