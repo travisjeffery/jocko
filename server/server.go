@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -26,13 +25,12 @@ type Server struct {
 	protocolLn   *net.TCPListener
 	httpAddr     string
 	httpLn       *net.TCPListener
-	mu           sync.Mutex
 	logger       *simplelog.Logger
 	broker       jocko.Broker
-	shutdownc    chan struct{}
+	shutdownCh   chan struct{}
 	metrics      *metrics
-	requestc     chan jocko.Request
-	responsec    chan jocko.Response
+	requestCh    chan jocko.Request
+	responseCh   chan jocko.Response
 }
 
 func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simplelog.Logger) *Server {
@@ -41,9 +39,9 @@ func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simp
 		httpAddr:     httpAddr,
 		broker:       broker,
 		logger:       logger,
-		shutdownc:    make(chan struct{}),
-		requestc:     make(chan jocko.Request, 32),
-		responsec:    make(chan jocko.Response, 32),
+		shutdownCh:   make(chan struct{}),
+		requestCh:    make(chan jocko.Request, 32),
+		responseCh:   make(chan jocko.Response, 32),
 	}
 	s.metrics = newMetrics(prometheus.DefaultRegisterer)
 	return s
@@ -85,7 +83,7 @@ func (s *Server) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				break
-			case <-s.shutdownc:
+			case <-s.shutdownCh:
 				break
 			default:
 				conn, err := s.protocolLn.Accept()
@@ -104,9 +102,9 @@ func (s *Server) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				break
-			case <-s.shutdownc:
+			case <-s.shutdownCh:
 				break
-			case resp := <-s.responsec:
+			case resp := <-s.responseCh:
 				if err := s.write(resp); err != nil {
 					s.logger.Info("failed to write response: %v", err)
 				}
@@ -114,7 +112,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}()
 
-	go s.broker.Run(ctx, s.requestc, s.responsec)
+	go s.broker.Run(ctx, s.requestCh, s.responseCh)
 
 	go func() {
 		err := server.Serve(s.httpLn)
@@ -128,7 +126,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Close closes the service.
 func (s *Server) Close() {
-	close(s.shutdownc)
+	close(s.shutdownCh)
 	s.protocolLn.Close()
 	return
 }
@@ -203,7 +201,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			panic(err)
 		}
 
-		s.requestc <- jocko.Request{
+		s.requestCh <- jocko.Request{
 			Header:  header,
 			Request: req,
 			Conn:    conn,
