@@ -96,7 +96,7 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.shutdownc:
 				break
 			case resp := <-s.responsec:
-				if err := s.write(resp.Conn, resp.Header, resp.Response.(protocol.Encoder)); err != nil {
+				if err := s.write(resp); err != nil {
 					s.logger.Info("failed to write response: %v", err)
 				}
 			}
@@ -215,13 +215,13 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) write(conn io.ReadWriter, header *protocol.RequestHeader, e protocol.Encoder) error {
-	s.logger.Debug("response: correlation id [%d], key [%d]", header.CorrelationID, header.APIKey)
-	b, err := protocol.Encode(e)
+func (s *Server) write(resp jocko.Response) error {
+	s.logger.Debug("response: correlation id [%d], key [%d]", resp.Header.CorrelationID, resp.Header.APIKey)
+	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write(b)
+	_, err = resp.Conn.Write(b)
 	return err
 }
 
