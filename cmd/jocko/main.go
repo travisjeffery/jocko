@@ -30,11 +30,12 @@ var (
 	brokerCmdSerfMembers = brokerCmd.Flag("serf-members", "List of existing Serf members").Strings()
 	brokerCmdBrokerID    = brokerCmd.Flag("id", "Broker ID").Int32()
 
-	topic                  = cli.Command("topic", "Manage topics")
-	topicBrokerAddr        = topic.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
-	topicTopic             = topic.Flag("topic", "Name of topic to create").String()
-	topicPartitions        = topic.Flag("partitions", "Number of partitions").Default("1").Int32()
-	topicReplicationFactor = topic.Flag("replication-factor", "Replication factor").Default("1").Int16()
+	topicCmd                     = cli.Command("topic", "Manage topics")
+	createTopicCmd               = topicCmd.Command("create", "Create a topic")
+	createTopicBrokerAddr        = createTopicCmd.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
+	createTopicTopic             = createTopicCmd.Flag("topic", "Name of topic to create").String()
+	createTopicPartitions        = createTopicCmd.Flag("partitions", "Number of partitions").Default("1").Int32()
+	createTopicReplicationFactor = createTopicCmd.Flag("replication-factor", "Replication factor").Default("1").Int16()
 )
 
 func main() {
@@ -46,21 +47,20 @@ func main() {
 
 	switch kingpin.MustParse(cli.Parse(os.Args[1:])) {
 	case brokerCmd.FullCommand():
-		os.Exit(CmdBrokers(logger))
-
-	case topic.FullCommand():
-		os.Exit(CmdTopic(logger))
+		os.Exit(cmdBrokers(logger))
+	case createTopicCmd.FullCommand():
+		os.Exit(cmdCreateTopic(logger))
 	}
 }
 
-func CmdBrokers(logger *simplelog.Logger) int {
+func cmdBrokers(logger *simplelog.Logger) int {
 	serf, err := serf.New(
 		serf.Logger(logger),
 		serf.Addr(*brokerCmdSerfAddr),
 		serf.InitMembers(*brokerCmdSerfMembers),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting serf: %s", err)
+		fmt.Fprintf(os.Stderr, "error starting serf: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -70,7 +70,7 @@ func CmdBrokers(logger *simplelog.Logger) int {
 		raft.Addr(*brokerCmdRaftAddr),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting raft: %s", err)
+		fmt.Fprintf(os.Stderr, "error starting raft: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -82,13 +82,13 @@ func CmdBrokers(logger *simplelog.Logger) int {
 		broker.Raft(raft),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting broker: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
 		os.Exit(1)
 	}
 
 	srv := server.New(*brokerCmdBrokerAddr, store, *brokerCmdHTTPAddr, logger)
 	if err := srv.Start(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -98,49 +98,49 @@ func CmdBrokers(logger *simplelog.Logger) int {
 	gracefully.Shutdown()
 
 	if err := store.Shutdown(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error shutting down store: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
 		os.Exit(1)
 	}
 
 	return 0
 }
 
-func CmdTopic(logger *simplelog.Logger) int {
-	fmt.Fprintf(os.Stdout, "Creating topic: %s", *topicTopic)
+func cmdCreateTopic(logger *simplelog.Logger) int {
+	fmt.Fprintf(os.Stdout, "Creating topic: %v\n", *createTopicTopic)
 
-	addr, err := net.ResolveTCPAddr("tcp", *topicBrokerAddr)
+	addr, err := net.ResolveTCPAddr("tcp", *createTopicBrokerAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error shutting down store: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
 		os.Exit(1)
 	}
 
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to broker: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
 		os.Exit(1)
 	}
 
 	client := server.NewClient(conn)
 	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
-		Topic:             *topicTopic,
-		NumPartitions:     *topicPartitions,
-		ReplicationFactor: *topicReplicationFactor,
+		Topic:             *createTopicTopic,
+		NumPartitions:     *createTopicPartitions,
+		ReplicationFactor: *createTopicReplicationFactor,
 		ReplicaAssignment: nil,
 		Configs:           nil,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error with request to broker: %s\n", err)
+		fmt.Fprintf(os.Stderr, "error with request to broker: %v\n", err)
 		os.Exit(1)
 	}
 	for _, topicErrCode := range resp.TopicErrorCodes {
 		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
 			err := protocol.Errs[topicErrCode.ErrorCode]
-			fmt.Fprintf(os.Stderr, "Error code: %s\n", err)
+			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
-	fmt.Printf("Created topic: %s\n", *topicTopic)
+	fmt.Printf("Created topic: %v\n", *createTopicTopic)
 
 	return 0
 }
