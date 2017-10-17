@@ -58,7 +58,7 @@ func (s *Broker) apply(c jocko.RaftCommand) {
 			// TODO: should panic?
 			return
 		}
-		if err := s.StartReplica(p); err != protocol.ErrNone {
+		if err := s.startReplica(p); err != protocol.ErrNone {
 			panic(err)
 		}
 	case deleteTopic:
@@ -68,7 +68,7 @@ func (s *Broker) apply(c jocko.RaftCommand) {
 			// TODO: should panic?
 			return
 		}
-		if err := s.deleteTopic(p); err != nil {
+		if err := s.deletePartitions(p); err != nil {
 			panic(errors.Wrap(err, "topic delete failed"))
 		}
 	}

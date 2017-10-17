@@ -13,9 +13,9 @@ import (
 // CommitLog is the interface that wraps the commit log's methods and
 // is used to manage a partition's data.
 type CommitLog interface {
-	DeleteAll() error
+	Delete() error
 	NewReader(offset int64, maxBytes int32) (io.Reader, error)
-	TruncateTo(int64) error
+	Truncate(int64) error
 	NewestOffset() int64
 	OldestOffset() int64
 	Append([]byte) (int64, error)
@@ -53,7 +53,7 @@ func NewPartition(topic string, id int32) *Partition {
 
 // Delete is used to delete the partition's data/commitlog.
 func (p *Partition) Delete() error {
-	return p.CommitLog.DeleteAll()
+	return p.CommitLog.Delete()
 }
 
 // NewReader is used to create a reader at the given offset and will
@@ -100,9 +100,9 @@ func (p *Partition) LowWatermark() int64 {
 	return p.CommitLog.OldestOffset()
 }
 
-// TruncateTo is used to truncate the partition's logs before the given offset.
-func (p *Partition) TruncateTo(offset int64) error {
-	return p.CommitLog.TruncateTo(offset)
+// Truncate is used to truncate the partition's logs before the given offset.
+func (p *Partition) Truncate(offset int64) error {
+	return p.CommitLog.Truncate(offset)
 }
 
 // Write is used to directly write the given bytes to the partition's leader.
@@ -182,20 +182,8 @@ type Response struct {
 // Broker is the interface that wraps the Broker's methods.
 type Broker interface {
 	Run(context.Context, <-chan Request, chan<- Response)
-	ID() int32
-	IsController() bool
-	CreateTopic(topic string, partitions int32, replicationFactor int16) protocol.Error
-	StartReplica(*Partition) protocol.Error
-	DeleteTopic(topic string) protocol.Error
-	Partition(topic string, id int32) (*Partition, protocol.Error)
-	ClusterMember(brokerID int32) *ClusterMember
-	BecomeLeader(topic string, id int32, command *protocol.PartitionState) protocol.Error
-	BecomeFollower(topic string, id int32, command *protocol.PartitionState) protocol.Error
 	Join(addr ...string) protocol.Error
-	Cluster() []*ClusterMember
-	TopicPartitions(topic string) ([]*Partition, protocol.Error)
-	Topics() map[string][]*Partition
-	IsLeaderOfPartition(topic string, id int32, leaderID int32) bool
+	Shutdown() error
 }
 
 // ClusterMember is used as a wrapper around a broker's info and a

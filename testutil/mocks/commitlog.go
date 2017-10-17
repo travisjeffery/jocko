@@ -29,7 +29,7 @@ func (c *CommitLog) Append(b []byte) (int64, error) {
 	return 0, nil
 }
 
-func (c *CommitLog) DeleteAll() error {
+func (c *CommitLog) Delete() error {
 	return nil
 }
 
@@ -37,7 +37,7 @@ func (c *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
 	return nil, nil
 }
 
-func (c *CommitLog) TruncateTo(int64) error {
+func (c *CommitLog) Truncate(int64) error {
 	return nil
 }
 

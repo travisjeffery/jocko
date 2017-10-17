@@ -121,7 +121,6 @@ func CmdTopic(logger *simplelog.Logger) int {
 	}
 
 	client := server.NewClient(conn)
-
 	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
 		Topic:             *topicTopic,
 		NumPartitions:     *topicPartitions,

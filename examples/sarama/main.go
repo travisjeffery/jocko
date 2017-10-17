@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"time"
 
@@ -132,12 +133,12 @@ func setup() func() {
 		broker.Raft(raft),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening raft store: %s\n", err)
+		fmt.Fprintf(os.Stderr, "failed opening raft store: %v\n", err)
 		os.Exit(1)
 	}
-	server := server.New(brokerAddr, store, httpAddr, logger)
-	if err := server.Start(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting server: %s\n", err)
+	srv := server.New(brokerAddr, store, httpAddr, logger)
+	if err := srv.Start(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "failed starting server: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -145,9 +146,35 @@ func setup() func() {
 		panic(err)
 	}
 
-	// creating/deleting topic directly since Sarama doesn't support it
-	if err := store.CreateTopic(topic, numPartitions, 1); err != protocol.ErrNone {
-		panic(err)
+	addr, err := net.ResolveTCPAddr("tcp", brokerAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to resolve addr: %v\n", err)
+		os.Exit(1)
+	}
+	conn, err := net.DialTCP("tcp", nil, addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to connect to broker: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := server.NewClient(conn)
+	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
+		Topic:             topic,
+		NumPartitions:     numPartitions,
+		ReplicationFactor: 1,
+		ReplicaAssignment: nil,
+		Configs:           nil,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed with request to broker: %v\n", err)
+		os.Exit(1)
+	}
+	for _, topicErrCode := range resp.TopicErrorCodes {
+		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
+			err := protocol.Errs[topicErrCode.ErrorCode]
+			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	return func() {

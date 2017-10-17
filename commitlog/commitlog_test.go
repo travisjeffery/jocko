@@ -70,7 +70,7 @@ func BenchmarkCommitLog(b *testing.B) {
 	}
 }
 
-func TestTruncateTo(t *testing.T) {
+func TestTruncate(t *testing.T) {
 	var err error
 	l := setup(t)
 	defer cleanup(t)
@@ -82,7 +82,7 @@ func TestTruncateTo(t *testing.T) {
 	assert.Equal(t, int64(2), l.NewestOffset())
 	assert.Equal(t, 2, len(l.Segments()))
 
-	err = l.TruncateTo(int64(1))
+	err = l.Truncate(int64(1))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(l.Segments()))
 

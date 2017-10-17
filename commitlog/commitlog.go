@@ -164,14 +164,14 @@ func (l *CommitLog) Close() error {
 	return nil
 }
 
-func (l *CommitLog) DeleteAll() error {
+func (l *CommitLog) Delete() error {
 	if err := l.Close(); err != nil {
 		return err
 	}
 	return os.RemoveAll(l.Path)
 }
 
-func (l *CommitLog) TruncateTo(offset int64) error {
+func (l *CommitLog) Truncate(offset int64) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var segments []*Segment
