@@ -106,8 +106,6 @@ func cmdBrokers(logger *simplelog.Logger) int {
 }
 
 func cmdCreateTopic(logger *simplelog.Logger) int {
-	fmt.Fprintf(os.Stdout, "Creating topic: %v\n", *createTopicTopic)
-
 	addr, err := net.ResolveTCPAddr("tcp", *createTopicBrokerAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
@@ -140,7 +138,7 @@ func cmdCreateTopic(logger *simplelog.Logger) int {
 		}
 	}
 
-	fmt.Printf("Created topic: %v\n", *createTopicTopic)
+	fmt.Printf("created topic: %v\n", *createTopicTopic)
 
 	return 0
 }
