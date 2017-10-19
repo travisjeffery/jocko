@@ -508,12 +508,23 @@ func TestBroker_clusterMembers(t *testing.T) {
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
+	members := []*jocko.ClusterMember{{ID: 1}}
 	tests := []struct {
 		name   string
 		fields fields
 		want   []*jocko.ClusterMember
 	}{
-	// TODO: Add test cases.
+		{
+			name: "found members ok",
+			fields: fields{
+				serf: &mock.Serf{
+					ClusterFn: func() []*jocko.ClusterMember {
+						return members
+					},
+				},
+			},
+			want: members,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
