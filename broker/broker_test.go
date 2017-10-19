@@ -934,13 +934,31 @@ func TestBroker_startReplica(t *testing.T) {
 	type args struct {
 		partition *jocko.Partition
 	}
+	partition := &jocko.Partition{
+		Topic: "the-topic",
+		ID:    1,
+	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		{
+			name: "started replica",
+			fields: fields{
+				topicMap: make(map[string][]*jocko.Partition),
+				serf: &mock.Serf{
+					MemberFn: func(id int32) *jocko.ClusterMember {
+						return nil
+					},
+				},
+			},
+			args: args{
+				partition: partition,
+			},
+			want: protocol.ErrNone,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -958,6 +976,13 @@ func TestBroker_startReplica(t *testing.T) {
 			}
 			if got := b.startReplica(tt.args.partition); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.startReplica() = %v, want %v", got, tt.want)
+			}
+			got, err := b.partition(partition.Topic, partition.ID)
+			if !reflect.DeepEqual(got, partition) {
+				t.Errorf("Broker.partition() = %v, want %v", got, partition)
+			}
+			if err != protocol.ErrNone {
+				t.Errorf("Broker.partition() err = %v, want %v", err, protocol.ErrNone)
 			}
 		})
 	}
