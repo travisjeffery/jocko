@@ -9,12 +9,12 @@ import (
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/testutil"
-	"github.com/travisjeffery/jocko/testutil/mocks"
+	"github.com/travisjeffery/jocko/testutil/mock"
 )
 
 func TestBroker_Replicate(t *testing.T) {
-	clog := mocks.NewCommitLog()
-	leader := mocks.NewClient(4)
+	clog := mock.NewCommitLog()
+	leader := mock.NewClient(4)
 
 	p := &jocko.Partition{
 		Topic:           "test",

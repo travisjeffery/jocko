@@ -7,7 +7,7 @@ import (
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil/mocks"
+	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -557,7 +557,7 @@ func TestBroker_isController(t *testing.T) {
 		{
 			name: "is leader",
 			fields: fields{
-				raft: &mocks.Raft{
+				raft: &mock.Raft{
 					IsLeaderFn: func() bool {
 						return true
 					},
