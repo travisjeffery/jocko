@@ -458,10 +458,10 @@ func (b *Broker) isController() bool {
 func (b *Broker) topicPartitions(topic string) (found []*jocko.Partition, err protocol.Error) {
 	b.RLock()
 	defer b.RUnlock()
-	if p, ok := b.topicMap[topic]; !ok {
-		return nil, protocol.ErrUnknownTopicOrPartition
-	} else {
+	if p, ok := b.topicMap[topic]; ok {
 		return p, protocol.ErrNone
+	} else {
+		return nil, protocol.ErrUnknownTopicOrPartition
 	}
 }
 
@@ -486,7 +486,7 @@ func (b *Broker) partition(topic string, partition int32) (*jocko.Partition, pro
 
 // createPartition is used to add a partition across the cluster.
 func (b *Broker) createPartition(partition *jocko.Partition) error {
-	return b.raftApply(addPartition, partition)
+	return b.raftApply(createPartition, partition)
 }
 
 // clusterMember is used to get a specific member in the cluster.
