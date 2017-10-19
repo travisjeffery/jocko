@@ -7,6 +7,7 @@ import (
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/testutil/mocks"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -553,7 +554,17 @@ func TestBroker_isController(t *testing.T) {
 		fields fields
 		want   bool
 	}{
-	// TODO: Add test cases.
+		{
+			name: "is leader",
+			fields: fields{
+				raft: &mocks.Raft{
+					IsLeaderFn: func() bool {
+						return true
+					},
+				},
+			},
+			want: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
