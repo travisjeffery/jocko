@@ -9,66 +9,66 @@ import (
 )
 
 const (
-	addPartition jocko.RaftCmdType = iota
+	createPartition jocko.RaftCmdType = iota
 	deleteTopic
 	// others
 )
 
-func (s *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
-	var b []byte
-	b, err := json.Marshal(data)
+func (b *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
+	var bb []byte
+	bb, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	r := json.RawMessage(b)
+	r := json.RawMessage(bb)
 	c := jocko.RaftCommand{
 		Cmd:  cmd,
 		Data: &r,
 	}
-	return s.raft.Apply(c)
+	return b.raft.Apply(c)
 }
 
 // handleRaftCommands reads commands sent into the given channel to apply them.
-func (s *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
+func (b *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 	for {
 		select {
 		case cmd := <-commandCh:
-			s.apply(cmd)
-		case <-s.shutdownCh:
+			b.apply(cmd)
+		case <-b.shutdownCh:
 			return
 		}
 	}
 }
 
 // apply applies the given command on this broker.
-func (s *Broker) apply(c jocko.RaftCommand) {
+func (b *Broker) apply(c jocko.RaftCommand) {
 	defer func() {
 		if r := recover(); r != nil {
-			s.logger.Info("error while applying raft command: %v", r)
-			s.Shutdown()
+			b.logger.Info("error while applying raft command: %v", r)
+			b.Shutdown()
 		}
 	}()
 
-	s.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
+	b.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
 	switch c.Cmd {
-	case addPartition:
+	case createPartition:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			s.logger.Info("received malformed raft command: %v", err)
+			b.logger.Info("received malformed raft command: %v", err)
 			// TODO: should panic?
 			return
 		}
-		if err := s.startReplica(p); err != protocol.ErrNone {
+		if err := b.startReplica(p); err != protocol.ErrNone {
 			panic(err)
 		}
 	case deleteTopic:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			s.logger.Info("received malformed raft command: %v", err)
+			b.logger.Info("received malformed raft command: %v", err)
 			// TODO: should panic?
 			return
 		}
-		if err := s.deletePartitions(p); err != nil {
+		if err := b.deletePartitions(p); err != nil {
 			panic(errors.Wrap(err, "topic delete failed"))
 		}
 	}
