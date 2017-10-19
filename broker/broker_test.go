@@ -867,6 +867,15 @@ func TestBroker_clusterMember(t *testing.T) {
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
+	member := &jocko.ClusterMember{ID: 1}
+	serf := &mock.Serf{
+		MemberFn: func(id int32) *jocko.ClusterMember {
+			if id != member.ID {
+				t.Errorf("serf.Member() id = %v, want %v", id, member.ID)
+			}
+			return member
+		},
+	}
 	type args struct {
 		id int32
 	}
@@ -876,7 +885,14 @@ func TestBroker_clusterMember(t *testing.T) {
 		args   args
 		want   *jocko.ClusterMember
 	}{
-	// TODO: Add test cases.
+		{
+			name: "found member",
+			fields: fields{
+				serf: serf,
+			},
+			args: args{id: 1},
+			want: member,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -894,6 +910,9 @@ func TestBroker_clusterMember(t *testing.T) {
 			}
 			if got := b.clusterMember(tt.args.id); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.clusterMember() = %v, want %v", got, tt.want)
+			}
+			if !serf.MemberInvoked {
+				t.Errorf("serf.MemberInvoked = %v, want %v", serf.MemberInvoked, true)
 			}
 		})
 	}
