@@ -39,13 +39,15 @@ var (
 )
 
 func main() {
+	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
+
 	logLevel := simplelog.INFO
 	if *debugLogs {
 		logLevel = simplelog.DEBUG
 	}
 	logger := simplelog.New(os.Stdout, logLevel, "jocko")
 
-	switch kingpin.MustParse(cli.Parse(os.Args[1:])) {
+	switch cmd {
 	case brokerCmd.FullCommand():
 		os.Exit(cmdBrokers(logger))
 	case createTopicCmd.FullCommand():

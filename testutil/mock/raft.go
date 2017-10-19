@@ -1,6 +1,8 @@
 package mock
 
-import "github.com/travisjeffery/jocko"
+import (
+	"github.com/travisjeffery/jocko"
+)
 
 type Raft struct {
 	BootstrapFn      func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error
