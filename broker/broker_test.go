@@ -807,13 +807,28 @@ func TestBroker_createPartition(t *testing.T) {
 	type args struct {
 		partition *jocko.Partition
 	}
+	raft := &mock.Raft{
+		ApplyFn: func(c jocko.RaftCommand) error {
+			if c.Cmd != createPartition {
+				t.Errorf("Broker.createPartition() c.Cmd = %v, want %v", c.Cmd, createPartition)
+			}
+			return nil
+		},
+	}
 	tests := []struct {
 		name    string
 		fields  fields
 		args    args
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		{
+			name: "called apply",
+			fields: fields{
+				raft: raft,
+			},
+			args:    args{partition: &jocko.Partition{ID: 1}},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -831,6 +846,9 @@ func TestBroker_createPartition(t *testing.T) {
 			}
 			if err := b.createPartition(tt.args.partition); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.createPartition() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !raft.ApplyInvoked {
+				t.Errorf("Broker.createPartition() raft.ApplyInvoked = %v, want %v", raft.ApplyInvoked, true)
 			}
 		})
 	}
