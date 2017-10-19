@@ -731,14 +731,40 @@ func TestBroker_partition(t *testing.T) {
 		topic     string
 		partition int32
 	}
+	topicMap := map[string][]*jocko.Partition{
+		"the-topic": []*jocko.Partition{{ID: 1}},
+	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *jocko.Partition
-		want1  protocol.Error
+		name    string
+		fields  fields
+		args    args
+		want    *jocko.Partition
+		wanterr protocol.Error
 	}{
-	// TODO: Add test cases.
+		{
+			name: "found partitions",
+			fields: fields{
+				topicMap: topicMap,
+			},
+			args: args{
+				topic:     "the-topic",
+				partition: 1,
+			},
+			want:    topicMap["the-topic"][0],
+			wanterr: protocol.ErrNone,
+		},
+		{
+			name: "no partitions",
+			fields: fields{
+				topicMap: topicMap,
+			},
+			args: args{
+				topic:     "not-the-topic",
+				partition: 1,
+			},
+			want:    nil,
+			wanterr: protocol.ErrUnknownTopicOrPartition,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -754,12 +780,12 @@ func TestBroker_partition(t *testing.T) {
 				shutdownCh:  tt.fields.shutdownCh,
 				shutdown:    tt.fields.shutdown,
 			}
-			got, got1 := b.partition(tt.args.topic, tt.args.partition)
+			got, goterr := b.partition(tt.args.topic, tt.args.partition)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.partition() got = %v, want %v", got, tt.want)
 			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("Broker.partition() got1 = %v, want %v", got1, tt.want1)
+			if !reflect.DeepEqual(goterr, tt.wanterr) {
+				t.Errorf("Broker.partition() goterr = %v, want %v", goterr, tt.wanterr)
 			}
 		})
 	}
