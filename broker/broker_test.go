@@ -16,23 +16,43 @@ func TestNew(t *testing.T) {
 		id   int32
 		opts []BrokerFn
 	}
+	serf := &mock.Serf{
+		BootstrapFn: func(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
+			return nil
+		},
+	}
+	raft := &mock.Raft{
+		BootstrapFn: func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error {
+			return nil
+		},
+		AddrFn: func() string {
+			return "localhost:9093"
+		},
+	}
 	tests := []struct {
 		name    string
 		args    args
 		want    *Broker
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		{
+			name:    "bootstrap raft and serf",
+			args:    args{id: 1, opts: []BrokerFn{Addr("localhost:9092"), Serf(serf), Raft(raft)}},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := New(tt.args.id, tt.args.opts...)
+			_, err := New(tt.args.id, tt.args.opts...)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+			if !serf.BootstrapInvoked {
+				t.Error("expected serf bootstrap invoked; did not")
+			}
+			if !raft.BootstrapInvoked {
+				t.Error("expected raft bootstrap invoked; did not")
 			}
 		})
 	}
