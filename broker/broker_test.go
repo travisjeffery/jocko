@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"io"
 	"reflect"
 	"testing"
 
@@ -49,15 +50,37 @@ func TestNew(t *testing.T) {
 func TestBroker_Run(t *testing.T) {
 	type args struct {
 		ctx       context.Context
-		requestc  <-chan jocko.Request
-		responsec chan<- jocko.Response
+		requestc  chan jocko.Request
+		responsec chan jocko.Response
+	}
+	type chans struct {
+		request  jocko.Request
+		response jocko.Response
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
+		chans  chans
 	}{
-	// TODO: Add test cases.
+		{
+			name:   "api verions",
+			fields: newFields(),
+			args: args{
+				requestc:  make(chan jocko.Request, 2),
+				responsec: make(chan jocko.Response, 2),
+			},
+			chans: chans{
+				request: jocko.Request{
+					Header:  &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.APIVersionsRequest{},
+				},
+				response: jocko.Response{
+					Header:   &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: (&Broker{}).handleAPIVersions(nil, nil)},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -73,7 +96,14 @@ func TestBroker_Run(t *testing.T) {
 				shutdownCh:  tt.fields.shutdownCh,
 				shutdown:    tt.fields.shutdown,
 			}
-			b.Run(tt.args.ctx, tt.args.requestc, tt.args.responsec)
+			ctx, cancel := context.WithCancel(context.Background())
+			go b.Run(ctx, tt.args.requestc, tt.args.responsec)
+			tt.args.requestc <- tt.chans.request
+			response := <-tt.args.responsec
+			if !reflect.DeepEqual(response.Response, tt.chans.response.Response) {
+				t.Errorf("got %v, want: %v", response.Response, tt.chans.response.Response)
+			}
+			cancel()
 		})
 	}
 }
@@ -1311,3 +1341,9 @@ func newFields() fields {
 		id:   1,
 	}
 }
+
+type nopReaderWriter struct{}
+
+func (nopReaderWriter) Read(b []byte) (int, error)  { return 0, nil }
+func (nopReaderWriter) Write(b []byte) (int, error) { return 0, nil }
+func newNopReaderWriter() io.ReadWriter             { return nopReaderWriter{} }
