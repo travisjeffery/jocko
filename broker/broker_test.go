@@ -16,42 +16,30 @@ func TestNew(t *testing.T) {
 		id   int32
 		opts []BrokerFn
 	}
-	serf := &mock.Serf{
-		BootstrapFn: func(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
-			return nil
-		},
-	}
-	raft := &mock.Raft{
-		BootstrapFn: func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error {
-			return nil
-		},
-		AddrFn: func() string {
-			return "localhost:9093"
-		},
-	}
 	tests := []struct {
 		name    string
 		args    args
+		fields  fields
 		want    *Broker
 		wantErr bool
 	}{
 		{
 			name:    "bootstrap raft and serf",
-			args:    args{id: 1, opts: []BrokerFn{Addr("localhost:9092"), Serf(serf), Raft(raft)}},
 			wantErr: false,
+			fields:  newFields(),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := New(tt.args.id, tt.args.opts...)
+			_, err := New(tt.fields.id, Addr(tt.fields.addr), Serf(tt.fields.serf), Raft(tt.fields.raft))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !serf.BootstrapInvoked {
+			if !tt.fields.serf.BootstrapInvoked {
 				t.Error("expected serf bootstrap invoked; did not")
 			}
-			if !raft.BootstrapInvoked {
+			if !tt.fields.raft.BootstrapInvoked {
 				t.Error("expected raft bootstrap invoked; did not")
 			}
 		})
@@ -59,18 +47,6 @@ func TestNew(t *testing.T) {
 }
 
 func TestBroker_Run(t *testing.T) {
-	type fields struct {
-		logger      *simplelog.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
 	type args struct {
 		ctx       context.Context
 		requestc  <-chan jocko.Request
@@ -103,18 +79,6 @@ func TestBroker_Run(t *testing.T) {
 }
 
 func TestBroker_Join(t *testing.T) {
-	type fields struct {
-		logger      *simplelog.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
 	type args struct {
 		addrs []string
 	}
@@ -124,7 +88,12 @@ func TestBroker_Join(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		{
+			name:   "joins with serf",
+			fields: newFields(),
+			args:   args{addrs: []string{"localhost:9082"}},
+			want:   protocol.ErrNone,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,6 +111,9 @@ func TestBroker_Join(t *testing.T) {
 			}
 			if got := b.Join(tt.args.addrs...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.Join() = %v, want %v", got, tt.want)
+			}
+			if !tt.fields.serf.JoinInvoked {
+				t.Error("expected serf join invoked; did not")
 			}
 		})
 	}
@@ -1298,5 +1270,44 @@ func Test_contains(t *testing.T) {
 				t.Errorf("contains() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+type fields struct {
+	id          int32
+	serf        *mock.Serf
+	raft        *mock.Raft
+	addr        string
+	logger      *simplelog.Logger
+	topicMap    map[string][]*jocko.Partition
+	replicators map[*jocko.Partition]*Replicator
+	brokerAddr  string
+	logDir      string
+	shutdownCh  chan struct{}
+	shutdown    bool
+}
+
+func newFields() fields {
+	serf := &mock.Serf{
+		JoinFn: func(addrs ...string) (int, error) {
+			return 1, nil
+		},
+		BootstrapFn: func(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
+			return nil
+		},
+	}
+	raft := &mock.Raft{
+		BootstrapFn: func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error {
+			return nil
+		},
+		AddrFn: func() string {
+			return "localhost:9093"
+		},
+	}
+	return fields{
+		serf: serf,
+		raft: raft,
+		addr: "localhost:9092",
+		id:   1,
 	}
 }
