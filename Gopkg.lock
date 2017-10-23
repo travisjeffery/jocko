@@ -223,7 +223,7 @@
 
 [[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert","require"]
+  packages = ["assert"]
   revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
   version = "v1.1.4"
 
@@ -231,12 +231,6 @@
   name = "github.com/tj/go-gracefully"
   packages = ["."]
   revision = "005c1d102f1bf3158f9ba29c12d68a73ac15f321"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/travisjeffery/jocko"
-  packages = [".","broker","commitlog","protocol","raft","serf","server","testutil","testutil/mock"]
-  revision = "b89b3d6c4d6c64c29babb60fe83d2753aa327d0c"
 
 [[projects]]
   branch = "master"
@@ -265,6 +259,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "776fb05d9c7c519d312031a9e118ceb4360f2b3601d1fa8cd7c9752c0028d2c7"
+  inputs-digest = "207318d4768ea560c5221d179969e5d2a023e7289f762c7d2eae4ede33f5a0bf"
   solver-name = "gps-cdcl"
   solver-version = 1
