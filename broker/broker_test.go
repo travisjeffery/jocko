@@ -52,16 +52,13 @@ func TestBroker_Run(t *testing.T) {
 		ctx       context.Context
 		requestc  chan jocko.Request
 		responsec chan jocko.Response
-	}
-	type chans struct {
-		request  jocko.Request
-		response jocko.Response
+		request   jocko.Request
+		response  jocko.Response
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
-		chans  chans
 	}{
 		{
 			name:   "api verions",
@@ -69,8 +66,6 @@ func TestBroker_Run(t *testing.T) {
 			args: args{
 				requestc:  make(chan jocko.Request, 2),
 				responsec: make(chan jocko.Response, 2),
-			},
-			chans: chans{
 				request: jocko.Request{
 					Header:  &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.APIVersionsRequest{},
@@ -98,10 +93,10 @@ func TestBroker_Run(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			go b.Run(ctx, tt.args.requestc, tt.args.responsec)
-			tt.args.requestc <- tt.chans.request
+			tt.args.requestc <- tt.args.request
 			response := <-tt.args.responsec
-			if !reflect.DeepEqual(response.Response, tt.chans.response.Response) {
-				t.Errorf("got %v, want: %v", response.Response, tt.chans.response.Response)
+			if !reflect.DeepEqual(response.Response, tt.args.response.Response) {
+				t.Errorf("got %v, want: %v", response.Response, tt.args.response.Response)
 			}
 			cancel()
 		})
