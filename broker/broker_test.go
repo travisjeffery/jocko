@@ -989,6 +989,9 @@ func newFields() fields {
 			}
 			return nil
 		},
+		JoinFn: func(addrs ...string) (int, error) {
+			return 1, nil
+		},
 	}
 	raft := &mock.Raft{
 		AddrFn: func() string {
