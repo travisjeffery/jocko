@@ -1,10 +1,12 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil/mock"
@@ -16,17 +18,168 @@ func TestNew(t *testing.T) {
 		id   int32
 		opts []BrokerFn
 	}
+	id := int32(1)
+	logger := simplelog.New(bytes.NewBuffer([]byte{}), simplelog.DEBUG, "TestNew")
+	logDir := "./test/logs"
+	brokerAddr := "172.0.0.1:1721"
+	raftAddr := "172.0.0.1:1722"
+	serf := mock.Serf{
+		BootstrapFn: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
+			if n == nil {
+				return errors.New("*jocko.ClusterMember is nil")
+			}
+			if rCh == nil {
+				return errors.New("chan<- *jocko.ClusterMember is nil")
+			}
+			return nil
+		},
+	}
+	raft := mock.Raft{
+		AddrFn: func() string {
+			return raftAddr
+		},
+		BootstrapFn: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+			if s == nil {
+				return errors.New("jocko.Serf is nil")
+			}
+			if sCh == nil {
+				return errors.New("<-chan *jocko.ClusterMember is nil")
+			}
+			if cCh == nil {
+				return errors.New("chan<- jocko.RaftCommand is nil")
+			}
+			return nil
+		},
+	}
 	tests := []struct {
 		name    string
 		args    args
 		want    *Broker
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		{
+			name: "new broker ok",
+			args: args{
+				id: id,
+				opts: []BrokerFn{
+					func(b *Broker) {
+						b.brokerAddr = brokerAddr
+					},
+					func(b *Broker) {
+						b.logDir = logDir
+					},
+					func(b *Broker) {
+						b.logger = logger
+					},
+					func(b *Broker) {
+						b.raft = &raft
+					},
+					func(b *Broker) {
+						b.serf = &serf
+					},
+				},
+			},
+			want: &Broker{
+				id:          id,
+				logger:      logger,
+				logDir:      logDir,
+				topicMap:    make(map[string][]*jocko.Partition),
+				replicators: make(map[*jocko.Partition]*Replicator),
+				brokerAddr:  brokerAddr,
+				raft:        &raft,
+				serf:        &serf,
+				shutdownCh:  make(chan struct{}),
+				shutdown:    false,
+			},
+		},
+		{
+			name:    "new broker port error",
+			wantErr: true,
+			args:    args{},
+		},
+		{
+			name:    "new broker raft port error",
+			wantErr: true,
+			args: args{
+				opts: []BrokerFn{
+					func(b *Broker) {
+						b.brokerAddr = brokerAddr
+					},
+					func(b *Broker) {
+						b.raft = &mock.Raft{
+							AddrFn: func() string {
+								return ""
+							},
+						}
+					},
+				},
+			},
+		},
+		{
+			// TODO: Possible bug. If a logger is not set with logger option,
+			//   line will fail if serf.Bootstrap returns error
+			name:    "new broker serf bootstrap error",
+			wantErr: true,
+			args: args{
+				opts: []BrokerFn{
+					func(b *Broker) {
+						b.brokerAddr = brokerAddr
+					},
+					func(b *Broker) {
+						b.logger = logger
+					},
+					func(b *Broker) {
+						b.raft = &raft
+					},
+					func(b *Broker) {
+						b.serf = &mock.Serf{
+							BootstrapFn: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
+								return errors.New("mock serf bootstrap error")
+							},
+						}
+					},
+				},
+			},
+		},
+		{
+			name:    "new broker raft bootstrap error",
+			wantErr: true,
+			args: args{
+				opts: []BrokerFn{
+					func(b *Broker) {
+						b.brokerAddr = brokerAddr
+					},
+					func(b *Broker) {
+						b.logger = logger
+					},
+					func(b *Broker) {
+						b.raft = &raft
+					},
+					func(b *Broker) {
+						b.serf = &serf
+					},
+					func(b *Broker) {
+						b.raft = &mock.Raft{
+							AddrFn: func() string {
+								return raftAddr
+							},
+							BootstrapFn: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+								return errors.New("mock raft bootstrap error")
+							},
+						}
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := New(tt.args.id, tt.args.opts...)
+			if got != nil && got.shutdownCh == nil {
+				t.Errorf("got.shutdownCh is nil")
+			} else if got != nil {
+				tt.want.shutdownCh = got.shutdownCh
+			}
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
