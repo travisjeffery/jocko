@@ -1,9 +1,12 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"testing"
+
+	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
