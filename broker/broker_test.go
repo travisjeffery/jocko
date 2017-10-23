@@ -7,7 +7,10 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+<<<<<<< HEAD
 
+=======
+>>>>>>> 90684504e1878a33a715282f9aea2ad3e7338099
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil/mock"

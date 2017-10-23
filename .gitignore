@@ -3,3 +3,4 @@ store.db
 vendor/*
 !vendor/vendor.json
 .idea
+broker/the-topic/*
