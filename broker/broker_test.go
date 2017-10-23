@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := New(tt.fields.id, Addr(tt.fields.addr), Serf(tt.fields.serf), Raft(tt.fields.raft))
+			_, err := New(tt.fields.id, Addr(tt.fields.addr), Serf(tt.fields.serf), Raft(tt.fields.raft), LogDir(tt.fields.logDir))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -737,24 +737,13 @@ func TestBroker_topics(t *testing.T) {
 }
 
 func TestBroker_partition(t *testing.T) {
-	type fields struct {
-		logger      *simplelog.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
+	f := newFields()
+	f.topicMap = map[string][]*jocko.Partition{
+		"the-topic": []*jocko.Partition{{ID: 1}},
 	}
 	type args struct {
 		topic     string
 		partition int32
-	}
-	topicMap := map[string][]*jocko.Partition{
-		"the-topic": []*jocko.Partition{{ID: 1}},
 	}
 	tests := []struct {
 		name    string
@@ -764,22 +753,18 @@ func TestBroker_partition(t *testing.T) {
 		wanterr protocol.Error
 	}{
 		{
-			name: "found partitions",
-			fields: fields{
-				topicMap: topicMap,
-			},
+			name:   "found partitions",
+			fields: f,
 			args: args{
 				topic:     "the-topic",
 				partition: 1,
 			},
-			want:    topicMap["the-topic"][0],
+			want:    f.topicMap["the-topic"][0],
 			wanterr: protocol.ErrNone,
 		},
 		{
-			name: "no partitions",
-			fields: fields{
-				topicMap: topicMap,
-			},
+			name:   "no partitions",
+			fields: f,
 			args: args{
 				topic:     "not-the-topic",
 				partition: 1,
@@ -941,18 +926,7 @@ func TestBroker_clusterMember(t *testing.T) {
 }
 
 func TestBroker_startReplica(t *testing.T) {
-	type fields struct {
-		logger      *simplelog.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
+	f := newFields()
 	type args struct {
 		partition *jocko.Partition
 	}
@@ -967,15 +941,8 @@ func TestBroker_startReplica(t *testing.T) {
 		want   protocol.Error
 	}{
 		{
-			name: "started replica",
-			fields: fields{
-				topicMap: make(map[string][]*jocko.Partition),
-				serf: &mock.Serf{
-					MemberFn: func(id int32) *jocko.ClusterMember {
-						return nil
-					},
-				},
-			},
+			name:   "started replica",
+			fields: f,
 			args: args{
 				partition: partition,
 			},
@@ -1325,6 +1292,9 @@ func newFields() fields {
 		BootstrapFn: func(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
 			return nil
 		},
+		MemberFn: func(id int32) *jocko.ClusterMember {
+			return nil
+		},
 	}
 	raft := &mock.Raft{
 		BootstrapFn: func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error {
@@ -1335,10 +1305,12 @@ func newFields() fields {
 		},
 	}
 	return fields{
-		serf: serf,
-		raft: raft,
-		addr: "localhost:9092",
-		id:   1,
+		topicMap: make(map[string][]*jocko.Partition),
+		serf:     serf,
+		raft:     raft,
+		addr:     "localhost:9092",
+		logDir:   "/tmp/jocko",
+		id:       1,
 	}
 }
 
