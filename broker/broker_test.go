@@ -175,11 +175,13 @@ func TestBroker_Join(t *testing.T) {
 	type args struct {
 		addrs []string
 	}
+	err := errors.New("mock serf join error")
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
+		name        string
+		fields      fields
+		alterFields func(f *fields)
+		args        args
+		want        protocol.Error
 	}{
 		{
 			name:   "joins with serf",
@@ -187,9 +189,23 @@ func TestBroker_Join(t *testing.T) {
 			args:   args{addrs: []string{"localhost:9082"}},
 			want:   protocol.ErrNone,
 		},
+		{
+			name:   "join with serf error",
+			fields: newFields(),
+			alterFields: func(f *fields) {
+				f.serf.JoinFn = func(addrs ...string) (int, error) {
+					return -1, err
+				}
+			},
+			args: args{addrs: []string{"localhost:9082"}},
+			want: protocol.ErrUnknown.WithErr(err),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.alterFields != nil {
+				tt.alterFields(&tt.fields)
+			}
 			b := &Broker{
 				logger:      tt.fields.logger,
 				id:          tt.fields.id,
@@ -434,7 +450,8 @@ func TestBroker_topics(t *testing.T) {
 func TestBroker_partition(t *testing.T) {
 	f := newFields()
 	f.topicMap = map[string][]*jocko.Partition{
-		"the-topic": []*jocko.Partition{{ID: 1}},
+		"the-topic":   []*jocko.Partition{{ID: 1}},
+		"empty-topic": []*jocko.Partition{},
 	}
 	type args struct {
 		topic     string
@@ -462,6 +479,16 @@ func TestBroker_partition(t *testing.T) {
 			fields: f,
 			args: args{
 				topic:     "not-the-topic",
+				partition: 1,
+			},
+			want:    nil,
+			wanterr: protocol.ErrUnknownTopicOrPartition,
+		},
+		{
+			name:   "empty partitions",
+			fields: f,
+			args: args{
+				topic:     "empty-topic",
 				partition: 1,
 			},
 			want:    nil,
@@ -621,30 +648,82 @@ func TestBroker_clusterMember(t *testing.T) {
 }
 
 func TestBroker_startReplica(t *testing.T) {
-	f := newFields()
 	type args struct {
 		partition *jocko.Partition
 	}
 	partition := &jocko.Partition{
-		Topic: "the-topic",
-		ID:    1,
+		Topic:  "the-topic",
+		ID:     1,
+		Leader: 1,
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
+		name        string
+		fields      fields
+		alterFields func(f *fields)
+		args        args
+		want        protocol.Error
 	}{
 		{
-			name:   "started replica",
-			fields: f,
+			name: "started replica as leader",
 			args: args{
 				partition: partition,
 			},
 			want: protocol.ErrNone,
 		},
+		{
+			name: "started replica as follower",
+			args: args{
+				partition: &jocko.Partition{
+					ID:       1,
+					Topic:    "replica-topic",
+					Replicas: []int32{1},
+					Leader:   2,
+				},
+			},
+			want: protocol.ErrNone,
+		},
+		{
+			name: "started replica with existing topic",
+			alterFields: func(f *fields) {
+				f.topicMap["existing-topic"] = []*jocko.Partition{
+					{
+						ID:    1,
+						Topic: "existing-topic",
+					},
+				}
+			},
+			args: args{
+				partition: &jocko.Partition{ID: 2, Topic: "existing-topic"},
+			},
+			want: protocol.ErrNone,
+		},
+		// TODO: Possible bug. If a duplicate partition is added,
+		//   the partition will be appended to the partitions as a duplicate.
+		// {
+		// 	name:   "started replica with dupe partition",
+		// 	fields: f,
+		// 	args: args{
+		// 		partition: &jocko.Partition{ID: 1, Topic: "existing-topic"},
+		// 	},
+		// 	want: protocol.ErrNone,
+		// },
+		{
+			name: "started replica with commitlog error",
+			alterFields: func(f *fields) {
+				f.logDir = ""
+			},
+			args: args{
+				partition: &jocko.Partition{Leader: 1},
+			},
+			want: protocol.ErrUnknown.WithErr(errors.New("mkdir failed: mkdir /0: permission denied")),
+		},
 	}
 	for _, tt := range tests {
+		fields := newFields()
+		if tt.alterFields != nil {
+			tt.alterFields(&fields)
+		}
+		tt.fields = fields
 		t.Run(tt.name, func(t *testing.T) {
 			b := &Broker{
 				logger:      tt.fields.logger,
@@ -658,12 +737,19 @@ func TestBroker_startReplica(t *testing.T) {
 				shutdownCh:  tt.fields.shutdownCh,
 				shutdown:    tt.fields.shutdown,
 			}
-			if got := b.startReplica(tt.args.partition); !reflect.DeepEqual(got, tt.want) {
+			if got := b.startReplica(tt.args.partition); got.Error() != tt.want.Error() {
 				t.Errorf("Broker.startReplica() = %v, want %v", got, tt.want)
 			}
-			got, err := b.partition(partition.Topic, partition.ID)
-			if !reflect.DeepEqual(got, partition) {
+			got, err := b.partition(tt.args.partition.Topic, tt.args.partition.ID)
+			if !reflect.DeepEqual(got, tt.args.partition) {
 				t.Errorf("Broker.partition() = %v, want %v", got, partition)
+			}
+			parts := map[int32]*jocko.Partition{}
+			for _, p := range b.topicMap[tt.args.partition.Topic] {
+				if _, ok := parts[p.ID]; ok {
+					t.Errorf("Broker.topicPartition contains dupes, dupe %v", p)
+				}
+				parts[p.ID] = p
 			}
 			if err != protocol.ErrNone {
 				t.Errorf("Broker.partition() err = %v, want %v", err, protocol.ErrNone)
@@ -991,6 +1077,9 @@ func newFields() fields {
 		},
 		JoinFn: func(addrs ...string) (int, error) {
 			return 1, nil
+		},
+		MemberFn: func(memberID int32) *jocko.ClusterMember {
+			return &jocko.ClusterMember{ID: 2}
 		},
 	}
 	raft := &mock.Raft{
