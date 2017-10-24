@@ -18,7 +18,8 @@ import (
 )
 
 var (
-	ErrTopicExists = errors.New("topic exists already")
+	ErrTopicExists     = errors.New("topic exists already")
+	ErrInvalidArgument = errors.New("no logger set")
 )
 
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
@@ -51,6 +52,10 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 
 	for _, o := range opts {
 		o(b)
+	}
+
+	if b.logger == nil {
+		return nil, ErrInvalidArgument
 	}
 
 	port, err := addrPort(b.brokerAddr)
