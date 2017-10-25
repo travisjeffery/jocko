@@ -2,6 +2,9 @@ language: go
 go:
   - 1.9.x
 
+before_install:
+  - make deps
+
 script:
   - ./testutil/test.sh
 
