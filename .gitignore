@@ -3,3 +3,6 @@ store.db
 vendor/*
 !vendor/vendor.json
 .idea
+broker/**/*.log
+broker/**/*.index
+
