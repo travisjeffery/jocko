@@ -128,7 +128,7 @@ func (p *Partition) LeaderID() int32 {
 // MemberStatus is the state that a member is in.
 type MemberStatus int
 
-// Different possible states of serf member
+// Different possible states of serf member.
 const (
 	StatusNone MemberStatus = iota
 	StatusAlive
@@ -167,12 +167,14 @@ type Raft interface {
 	Addr() string
 }
 
+// Request represents an API request.
 type Request struct {
 	Conn    io.ReadWriter
 	Header  *protocol.RequestHeader
 	Request interface{}
 }
 
+// Request represents an API request.
 type Response struct {
 	Conn     io.ReadWriter
 	Header   *protocol.RequestHeader
