@@ -227,6 +227,7 @@ func (b *ClusterMember) Read(p []byte) (int, error) {
 	return b.conn.Read(p)
 }
 
+// connect opens a tcp connection to the cluster member.
 func (b *ClusterMember) connect() error {
 	addr := &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
 	conn, err := net.DialTCP("tcp", nil, addr)
