@@ -302,6 +302,68 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
+			name:   "fetch",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+							Topic:             "the-topic",
+							NumPartitions:     1,
+							ReplicationFactor: 1,
+						}}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+							Topic: "the-topic",
+							Data: []*protocol.Data{{
+								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+					},
+					{
+						Header:  &protocol.RequestHeader{CorrelationID: 3},
+						Request: &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
+					},
+				},
+				responses: []jocko.Response{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+							Responses: []*protocol.ProduceResponse{
+								{
+									Topic:              "the-topic",
+									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+								},
+							},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 3},
+						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FetchResponses{
+							Responses: []*protocol.FetchResponse{{
+								Topic: "the-topic",
+								PartitionResponses: []*protocol.FetchPartitionResponse{{
+									Partition:     0,
+									ErrorCode:     protocol.ErrNone.Code(),
+									HighWatermark: 1,
+									RecordSet:     mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}}),
+								}},
+							}}},
+						},
+					},
+				},
+			},
+		},
+		{
 			name:   "metadata",
 			fields: newFields(),
 			args: args{
