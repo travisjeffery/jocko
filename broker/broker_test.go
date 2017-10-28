@@ -162,6 +162,50 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
+			name:   "create topic ok",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+					}}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}},
+				}},
+			},
+		},
+		{
+			name:   "create topic invalid replication factor error",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 2,
+					}}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
+					}},
+				}},
+			},
+		},
+		{
 			name:   "produce version 2 ok",
 			fields: newFields(),
 			args: args{
@@ -196,7 +240,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "produce err topic/partition doesn't exist",
+			name:   "produce topic/partition doesn't exist error",
 			fields: newFields(),
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
