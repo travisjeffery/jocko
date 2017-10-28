@@ -206,6 +206,34 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
+			name:   "delete topic",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+					}}}}, {
+					Header:  &protocol.RequestHeader{CorrelationID: 2},
+					Request: &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}},
+				}, {
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.DeleteTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}}}},
+			},
+		},
+		{
 			name:   "produce version 2 ok",
 			fields: newFields(),
 			args: args{
