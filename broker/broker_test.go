@@ -302,6 +302,64 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
+			name:   "metadata",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+							Topic:             "the-topic",
+							NumPartitions:     1,
+							ReplicationFactor: 1,
+						}}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+							Topic: "the-topic",
+							Data: []*protocol.Data{{
+								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+					},
+					{
+						Header:  &protocol.RequestHeader{CorrelationID: 3},
+						Request: &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
+					},
+				},
+				responses: []jocko.Response{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+							Responses: []*protocol.ProduceResponse{
+								{
+									Topic:              "the-topic",
+									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+								},
+							},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 3},
+						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
+							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
+							TopicMetadata: []*protocol.TopicMetadata{
+								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), ParititionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
+								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
+							},
+						}},
+					},
+				},
+			},
+		},
+		{
 			name:   "produce topic/partition doesn't exist error",
 			fields: newFields(),
 			args: args{
