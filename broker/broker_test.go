@@ -162,7 +162,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "produce version 2",
+			name:   "produce version 2 ok",
 			fields: newFields(),
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
@@ -191,6 +191,29 @@ func TestBroker_Run(t *testing.T) {
 						Responses: []*protocol.ProduceResponse{{
 							Topic:              "the-topic",
 							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					}}}},
+			},
+		},
+		{
+			name:   "produce err topic/partition doesn't exist",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+						Topic: "another-topic",
+						Data: []*protocol.Data{{
+							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+						Responses: []*protocol.ProduceResponse{{
+							Topic:              "another-topic",
+							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrUnknownTopicOrPartition.Code()}},
 						}},
 					}}}},
 			},
@@ -226,6 +249,9 @@ func TestBroker_Run(t *testing.T) {
 				case *protocol.ProduceResponses:
 					for _, response := range res.Responses {
 						for _, pr := range response.PartitionResponses {
+							if pr.ErrorCode != protocol.ErrNone.Code() {
+								break
+							}
 							if pr.Timestamp == 0 {
 								t.Error("expected timestamp not to be 0")
 							}
