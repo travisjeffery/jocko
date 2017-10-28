@@ -29,6 +29,7 @@ Kafka/distributed commit log service in Go.
     - [x] Delete Topics    
     - [ ] Consumer group
 - [x] Discovery
+- [ ] API versioning
 - [ ] Replication [current task]
 
 ## Reading
@@ -39,19 +40,19 @@ Kafka/distributed commit log service in Go.
 ## Project Layout
 
 ```
-├── broker........broker subsystem
-├── cmd...........commands
-│   └── jocko.....command to run a Jocko broker and manage topics
-├── commitlog.....low-level commit log implementation
-├── examples......examples running/using Jocko
-│   ├── cluster...example booting up a 3-broker Jocko cluster
-│   └── sarama....example producing/consuming with Sarama
-├── protocol......golang implementation of Kafka's protocol
-├── raft..........wrapper around Hashicorp's Raft lib to handle consensus
-├── serf..........wrapper around Hashicorp's Serf lib to handle service discovery
-├── server........API subsystem
-└── testutil......test utils
-    └── mock......mocks of the various subsystems
+├── broker        broker subsystem
+├── cmd           commands
+│   └── jocko     command to run a Jocko broker and manage topics
+├── commitlog     low-level commit log implementation
+├── examples      examples running/using Jocko
+│   ├── cluster   example booting up a 3-broker Jocko cluster
+│   └── sarama    example producing/consuming with Sarama
+├── protocol      golang implementation of Kafka's protocol
+├── raft          wrapper around Hashicorp's Raft lib to handle consensus
+├── serf          wrapper around Hashicorp's Serf lib to handle service discovery
+├── server        API subsystem
+└── testutil      test utils
+    └── mock      mocks of the various subsystems
 ```
 
 ## License
