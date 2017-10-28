@@ -162,7 +162,51 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "produce version 2 ok",
+			name:   "create topic ok",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+					}}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}},
+				}},
+			},
+		},
+		{
+			name:   "create topic invalid replication factor error",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 2,
+					}}}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
+					}},
+				}},
+			},
+		},
+		{
+			name:   "delete topic",
 			fields: newFields(),
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
@@ -174,11 +218,8 @@ func TestBroker_Run(t *testing.T) {
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 					}}}}, {
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
-						Topic: "the-topic",
-						Data: []*protocol.Data{{
-							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
+					Header:  &protocol.RequestHeader{CorrelationID: 2},
+					Request: &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
 				},
 				responses: []jocko.Response{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
@@ -187,16 +228,139 @@ func TestBroker_Run(t *testing.T) {
 					}},
 				}, {
 					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
-						Responses: []*protocol.ProduceResponse{{
-							Topic:              "the-topic",
-							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrNone.Code()}},
-						}},
+					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.DeleteTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
 					}}}},
 			},
 		},
 		{
-			name:   "produce err topic/partition doesn't exist",
+			name:   "offsets",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+							Topic:             "the-topic",
+							NumPartitions:     1,
+							ReplicationFactor: 1,
+						}}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+							Topic: "the-topic",
+							Data: []*protocol.Data{{
+								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+					},
+					{
+						Header:  &protocol.RequestHeader{CorrelationID: 3},
+						Request: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -1}}}}},
+					},
+					{
+						Header:  &protocol.RequestHeader{CorrelationID: 4},
+						Request: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
+					},
+				},
+				responses: []jocko.Response{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+							Responses: []*protocol.ProduceResponse{{
+								Topic:              "the-topic",
+								PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+							}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 3},
+						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.OffsetsResponse{
+							Responses: []*protocol.OffsetResponse{{
+								Topic:              "the-topic",
+								PartitionResponses: []*protocol.PartitionResponse{{Partition: 0, Offsets: []int64{1}, ErrorCode: protocol.ErrNone.Code()}},
+							}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 4},
+						Response: &protocol.Response{CorrelationID: 4, Body: &protocol.OffsetsResponse{
+							Responses: []*protocol.OffsetResponse{{
+								Topic:              "the-topic",
+								PartitionResponses: []*protocol.PartitionResponse{{Partition: 0, Offsets: []int64{0}, ErrorCode: protocol.ErrNone.Code()}},
+							}},
+						}},
+					},
+				},
+			},
+		},
+		{
+			name:   "metadata",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+							Topic:             "the-topic",
+							NumPartitions:     1,
+							ReplicationFactor: 1,
+						}}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+							Topic: "the-topic",
+							Data: []*protocol.Data{{
+								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+					},
+					{
+						Header:  &protocol.RequestHeader{CorrelationID: 3},
+						Request: &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
+					},
+				},
+				responses: []jocko.Response{
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 1},
+						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 2},
+						Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+							Responses: []*protocol.ProduceResponse{
+								{
+									Topic:              "the-topic",
+									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+								},
+							},
+						}},
+					},
+					{
+						Header: &protocol.RequestHeader{CorrelationID: 3},
+						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
+							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
+							TopicMetadata: []*protocol.TopicMetadata{
+								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), ParititionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
+								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
+							},
+						}},
+					},
+				},
+			},
+		},
+		{
+			name:   "produce topic/partition doesn't exist error",
 			fields: newFields(),
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
@@ -244,7 +408,7 @@ func TestBroker_Run(t *testing.T) {
 				response := <-tt.args.responseCh
 
 				switch res := response.Response.(*protocol.Response).Body.(type) {
-				// handle timepstamp explicity since we don't know what
+				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
 					for _, response := range res.Responses {

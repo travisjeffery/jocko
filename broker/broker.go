@@ -367,10 +367,20 @@ func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.Me
 	}
 	var topicMetadata []*protocol.TopicMetadata
 	topicMetadataFn := func(topic string, partitions []*jocko.Partition, err protocol.Error) *protocol.TopicMetadata {
+		if err != protocol.ErrNone {
+			return &protocol.TopicMetadata{
+				TopicErrorCode: err.Code(),
+				Topic:          topic,
+			}
+		}
 		partitionMetadata := make([]*protocol.PartitionMetadata, len(partitions))
 		for i, p := range partitions {
 			partitionMetadata[i] = &protocol.PartitionMetadata{
-				ParititionID: p.ID,
+				ParititionID:       p.ID,
+				PartitionErrorCode: protocol.ErrNone.Code(),
+				Leader:             p.Leader,
+				Replicas:           p.Replicas,
+				ISR:                p.ISR,
 			}
 		}
 		return &protocol.TopicMetadata{
