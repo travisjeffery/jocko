@@ -31,6 +31,7 @@ Kafka/distributed commit log service in Go.
 - [x] Discovery
 - [ ] API versioning
 - [ ] Replication [current task]
+- [ ] Tests [current task]
 
 ## Reading
 

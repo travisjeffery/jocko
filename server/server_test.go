@@ -140,6 +140,7 @@ func setup(t require.TestingT) func() {
 		broker.Addr("127.0.0.1:8000"),
 		broker.Raft(raft),
 		broker.Serf(serf),
+		broker.Loner(),
 		broker.Logger(logger))
 	require.NoError(t, err)
 

@@ -32,9 +32,13 @@ type Broker struct {
 	replicators map[*jocko.Partition]*Replicator
 	brokerAddr  string
 	logDir      string
+	// loner should only be used for tests. It makes it so cluster operations
+	// don't go through raft.
+	loner bool
 
-	raft jocko.Raft
-	serf jocko.Serf
+	raft         jocko.Raft
+	serf         jocko.Serf
+	raftCommands chan jocko.RaftCommand
 
 	shutdownCh   chan struct{}
 	shutdown     bool
@@ -56,6 +60,10 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 
 	if b.logger == nil {
 		return nil, ErrInvalidArgument
+	}
+
+	if b.raftCommands == nil {
+		b.raftCommands = make(chan jocko.RaftCommand, 16)
 	}
 
 	port, err := addrPort(b.brokerAddr)
@@ -80,12 +88,11 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		return nil, err
 	}
 
-	commandCh := make(chan jocko.RaftCommand, 16)
-	if err := b.raft.Bootstrap(b.serf, reconcileCh, commandCh); err != nil {
+	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands); err != nil {
 		return nil, err
 	}
 
-	go b.handleRaftCommmands(commandCh)
+	go b.handleRaftCommmands(b.raftCommands)
 
 	return b, nil
 }
@@ -183,6 +190,20 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
+			}
+			continue
+		}
+		if b.loner {
+			partitions := b.partitionsToCreate(req.Topic, req.NumPartitions, req.ReplicationFactor)
+			err := protocol.ErrNone
+			for _, p := range partitions {
+				if err = b.startReplica(p); err != protocol.ErrNone {
+					break
+				}
+			}
+			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
+				Topic:     req.Topic,
+				ErrorCode: err.Code(),
 			}
 			continue
 		}
@@ -306,20 +327,21 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 	for i, td := range req.TopicData {
 		presps := make([]*protocol.ProducePartitionResponse, len(td.Data))
 		for j, p := range td.Data {
-			partition := jocko.NewPartition(td.Topic, p.Partition)
 			presp := &protocol.ProducePartitionResponse{}
 			partition, err := b.partition(td.Topic, p.Partition)
 			if err != protocol.ErrNone {
+				b.logger.Info("produce to partition failed: %v", err)
+				presp.Partition = p.Partition
 				presp.ErrorCode = err.Code()
-			}
-			if !partition.IsLeader(b.id) {
-				presp.ErrorCode = protocol.ErrNotLeaderForPartition.Code()
-				// break ?
+				presps[j] = presp
+				continue
 			}
 			offset, appendErr := partition.Append(p.RecordSet)
 			if appendErr != nil {
 				b.logger.Info("commitlog/append failed: %v", err)
 				presp.ErrorCode = protocol.ErrUnknown.Code()
+				presps[j] = presp
+				continue
 			}
 			presp.Partition = p.Partition
 			presp.BaseOffset = offset
@@ -537,18 +559,27 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 			return protocol.ErrTopicAlreadyExists
 		}
 	}
+	for _, partition := range b.partitionsToCreate(topic, partitions, replicationFactor) {
+		if err := b.createPartition(partition); err != nil {
+			return protocol.ErrUnknown.WithErr(err)
+		}
+	}
+	return protocol.ErrNone
+}
 
-	c := b.clusterMembers()
-	clen := int32(len(c))
+func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replicationFactor int16) []*jocko.Partition {
+	mems := b.clusterMembers()
+	memCount := int32(len(mems))
+	var partitions []*jocko.Partition
 
-	for i := int32(0); i < partitions; i++ {
-		leader := c[i%clen].ID
+	for i := int32(0); i < partitionsCount; i++ {
+		leader := mems[i%memCount].ID
 		replicas := []int32{leader}
-		for replica := rand.Int31n(clen); len(replicas) < int(replicationFactor); replica++ {
+		for replica := rand.Int31n(memCount); len(replicas) < int(replicationFactor); replica++ {
 			if replica != leader {
 				replicas = append(replicas, replica)
 			}
-			if replica+1 == clen {
+			if replica+1 == memCount {
 				replica = -1
 			}
 		}
@@ -560,11 +591,9 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 			Replicas:        replicas,
 			ISR:             replicas,
 		}
-		if err := b.createPartition(partition); err != nil {
-			return protocol.ErrUnknown.WithErr(err)
-		}
+		partitions = append(partitions, partition)
 	}
-	return protocol.ErrNone
+	return partitions
 }
 
 // deleteTopic is used to delete the topic across the cluster.

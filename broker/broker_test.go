@@ -1,11 +1,14 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"os"
 	"reflect"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
@@ -74,25 +77,28 @@ func TestNew(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		os.RemoveAll("/tmp/jocko")
+
 		t.Run(tt.name, func(t *testing.T) {
 			tt.fields = newFields()
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
 			want := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+				logger:       tt.fields.logger,
+				id:           tt.fields.id,
+				topicMap:     tt.fields.topicMap,
+				replicators:  tt.fields.replicators,
+				brokerAddr:   tt.fields.brokerAddr,
+				logDir:       tt.fields.logDir,
+				raftCommands: tt.fields.raftCommands,
+				raft:         tt.fields.raft,
+				serf:         tt.fields.serf,
+				shutdownCh:   tt.fields.shutdownCh,
+				shutdown:     tt.fields.shutdown,
 			}
 
-			got, err := New(tt.fields.id, Addr(tt.fields.brokerAddr), Serf(tt.fields.serf), Raft(tt.fields.raft), Logger(tt.fields.logger), LogDir(tt.fields.logDir))
+			got, err := New(tt.fields.id, Addr(tt.fields.brokerAddr), Serf(tt.fields.serf), Raft(tt.fields.raft), Logger(tt.fields.logger), RaftCommands(tt.fields.raftCommands), LogDir(tt.fields.logDir))
 
 			if err != nil && tt.wantErr {
 				return
@@ -119,12 +125,20 @@ func TestNew(t *testing.T) {
 }
 
 func TestBroker_Run(t *testing.T) {
+	mustEncode := func(e protocol.Encoder) []byte {
+		var b []byte
+		var err error
+		if b, err = protocol.Encode(e); err != nil {
+			panic(err)
+		}
+		return b
+	}
 	type args struct {
-		ctx       context.Context
-		requestc  chan jocko.Request
-		responsec chan jocko.Response
-		request   jocko.Request
-		response  jocko.Response
+		ctx        context.Context
+		requestCh  chan jocko.Request
+		responseCh chan jocko.Response
+		requests   []jocko.Request
+		responses  []jocko.Response
 	}
 	tests := []struct {
 		name   string
@@ -132,46 +146,108 @@ func TestBroker_Run(t *testing.T) {
 		args   args
 	}{
 		{
-			name:   "api verions",
+			name:   "api versions",
 			fields: newFields(),
 			args: args{
-				requestc:  make(chan jocko.Request, 2),
-				responsec: make(chan jocko.Response, 2),
-				request: jocko.Request{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
 					Header:  &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.APIVersionsRequest{},
-				},
-				response: jocko.Response{
+				}},
+				responses: []jocko.Response{{
 					Header:   &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: (&Broker{}).handleAPIVersions(nil, nil)},
+				}},
+			},
+		},
+		{
+			name:   "produce version 2",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
+						Topic:             "the-topic",
+						NumPartitions:     1,
+						ReplicationFactor: 1,
+					}}}}, {
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
+						Topic: "the-topic",
+						Data: []*protocol.Data{{
+							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
 				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 1},
+					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}},
+				}, {
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
+						Responses: []*protocol.ProduceResponse{{
+							Topic:              "the-topic",
+							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					}}}},
 			},
 		},
 	}
 	for _, tt := range tests {
+		os.RemoveAll("/tmp/jocko")
 		t.Run(tt.name, func(t *testing.T) {
 			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+				logger:       tt.fields.logger,
+				id:           tt.fields.id,
+				loner:        tt.fields.loner,
+				topicMap:     tt.fields.topicMap,
+				replicators:  tt.fields.replicators,
+				brokerAddr:   tt.fields.brokerAddr,
+				logDir:       tt.fields.logDir,
+				raft:         tt.fields.raft,
+				serf:         tt.fields.serf,
+				raftCommands: tt.fields.raftCommands,
+				shutdownCh:   tt.fields.shutdownCh,
+				shutdown:     tt.fields.shutdown,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
-			go b.Run(ctx, tt.args.requestc, tt.args.responsec)
-			tt.args.requestc <- tt.args.request
-			response := <-tt.args.responsec
-			if !reflect.DeepEqual(response.Response, tt.args.response.Response) {
-				t.Errorf("got %v, want: %v", response.Response, tt.args.response.Response)
+			go b.Run(ctx, tt.args.requestCh, tt.args.responseCh)
+
+			for i := 0; i < len(tt.args.requests); i++ {
+				tt.args.requestCh <- tt.args.requests[i]
+				response := <-tt.args.responseCh
+
+				switch res := response.Response.(*protocol.Response).Body.(type) {
+				// handle timepstamp explicity since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponses:
+					for _, response := range res.Responses {
+						for _, pr := range response.PartitionResponses {
+							if pr.Timestamp == 0 {
+								t.Error("expected timestamp not to be 0")
+							}
+							pr.Timestamp = 0
+						}
+					}
+				}
+
+				if !reflect.DeepEqual(response.Response, tt.args.responses[i].Response) {
+					t.Errorf("got %s, want: %s", spewstr(response.Response), spewstr(tt.args.responses[i].Response))
+				}
+
 			}
 			cancel()
 		})
 	}
+}
+
+func spewstr(v interface{}) string {
+	var buf bytes.Buffer
+	spew.Fdump(&buf, v)
+	return buf.String()
 }
 
 func TestBroker_Join(t *testing.T) {
@@ -1053,16 +1129,18 @@ func Test_contains(t *testing.T) {
 }
 
 type fields struct {
-	id          int32
-	serf        *mock.Serf
-	raft        *mock.Raft
-	logger      *simplelog.Logger
-	topicMap    map[string][]*jocko.Partition
-	replicators map[*jocko.Partition]*Replicator
-	brokerAddr  string
-	logDir      string
-	shutdownCh  chan struct{}
-	shutdown    bool
+	id           int32
+	serf         *mock.Serf
+	raft         *mock.Raft
+	raftCommands chan jocko.RaftCommand
+	logger       *simplelog.Logger
+	topicMap     map[string][]*jocko.Partition
+	replicators  map[*jocko.Partition]*Replicator
+	brokerAddr   string
+	loner        bool
+	logDir       string
+	shutdownCh   chan struct{}
+	shutdown     bool
 }
 
 func newFields() fields {
@@ -1079,8 +1157,11 @@ func newFields() fields {
 		JoinFn: func(addrs ...string) (int, error) {
 			return 1, nil
 		},
+		ClusterFn: func() []*jocko.ClusterMember {
+			return []*jocko.ClusterMember{{ID: 1, Port: 9092, IP: "localhost"}}
+		},
 		MemberFn: func(memberID int32) *jocko.ClusterMember {
-			return &jocko.ClusterMember{ID: 2}
+			return &jocko.ClusterMember{ID: 1}
 		},
 	}
 	raft := &mock.Raft{
@@ -1099,16 +1180,24 @@ func newFields() fields {
 			}
 			return nil
 		},
+		IsLeaderFn: func() bool {
+			return true
+		},
+		ApplyFn: func(jocko.RaftCommand) error {
+			return nil
+		},
 	}
 	return fields{
-		topicMap:    make(map[string][]*jocko.Partition),
-		replicators: make(map[*jocko.Partition]*Replicator),
-		logger:      simplelog.New(nopReaderWriter{}, simplelog.DEBUG, "TestNew"),
-		logDir:      "/tmp/jocko",
-		serf:        serf,
-		raft:        raft,
-		brokerAddr:  "localhost:9092",
-		id:          1,
+		topicMap:     make(map[string][]*jocko.Partition),
+		raftCommands: make(chan jocko.RaftCommand),
+		replicators:  make(map[*jocko.Partition]*Replicator),
+		logger:       simplelog.New(os.Stdout, simplelog.DEBUG, "broker/test"),
+		logDir:       "/tmp/jocko",
+		loner:        true,
+		serf:         serf,
+		raft:         raft,
+		brokerAddr:   "localhost:9092",
+		id:           1,
 	}
 }
 

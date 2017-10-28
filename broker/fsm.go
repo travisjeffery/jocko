@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	createPartition jocko.RaftCmdType = iota
+	nop jocko.RaftCmdType = iota
+	createPartition
 	deleteTopic
 	// others
 )
@@ -50,7 +51,10 @@ func (b *Broker) apply(c jocko.RaftCommand) {
 	}()
 
 	b.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
+	panic(c)
 	switch c.Cmd {
+	case nop:
+		return
 	case createPartition:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {

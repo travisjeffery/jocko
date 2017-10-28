@@ -43,6 +43,20 @@ func Raft(raft jocko.Raft) BrokerFn {
 	}
 }
 
+// Set broker as a loner for tests.
+func Loner() BrokerFn {
+	return func(b *Broker) {
+		b.loner = true
+	}
+}
+
+// RaftCommands sets the channel the broker listens for raft commands, probably only useful for Jocko tests.
+func RaftCommands(commands chan jocko.RaftCommand) BrokerFn {
+	return func(b *Broker) {
+		b.raftCommands = commands
+	}
+}
+
 // ReplicatorFn is used to configure replicators.
 type ReplicatorFn func(r *Replicator)
 
