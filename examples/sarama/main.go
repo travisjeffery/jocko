@@ -14,6 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
+	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -136,7 +137,7 @@ func setup() func() {
 		fmt.Fprintf(os.Stderr, "failed opening raft store: %v\n", err)
 		os.Exit(1)
 	}
-	srv := server.New(brokerAddr, store, httpAddr, logger)
+	srv := server.New(brokerAddr, store, httpAddr, mock.NewMetrics(), logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting server: %v\n", err)
 		os.Exit(1)

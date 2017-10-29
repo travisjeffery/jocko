@@ -27,23 +27,23 @@ type Server struct {
 	logger       *simplelog.Logger
 	broker       jocko.Broker
 	shutdownCh   chan struct{}
-	metrics      *metrics
+	metrics      *jocko.Metrics
 	requestCh    chan jocko.Request
 	responseCh   chan jocko.Response
 	server       http.Server
 }
 
-func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simplelog.Logger) *Server {
+func New(protocolAddr string, broker jocko.Broker, httpAddr string, metrics *jocko.Metrics, logger *simplelog.Logger) *Server {
 	s := &Server{
 		protocolAddr: protocolAddr,
 		httpAddr:     httpAddr,
 		broker:       broker,
 		logger:       logger,
+		metrics:      metrics,
 		shutdownCh:   make(chan struct{}),
 		requestCh:    make(chan jocko.Request, 32),
 		responseCh:   make(chan jocko.Response, 32),
 	}
-	// s.metrics = newMetrics(prometheus.DefaultRegisterer)
 	return s
 }
 
@@ -129,11 +129,10 @@ func (s *Server) Close() {
 	s.server.Close()
 	s.httpLn.Close()
 	s.protocolLn.Close()
-	return
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
-	// s.metrics.requestsHandled.Inc()
+	s.metrics.RequestsHandled.Inc()
 	defer conn.Close()
 
 	header := new(protocol.RequestHeader)

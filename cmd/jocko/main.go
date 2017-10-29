@@ -9,6 +9,7 @@ import (
 
 	"github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/prometheus"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
@@ -88,7 +89,7 @@ func cmdBrokers(logger *simplelog.Logger) int {
 		os.Exit(1)
 	}
 
-	srv := server.New(*brokerCmdBrokerAddr, store, *brokerCmdHTTPAddr, logger)
+	srv := server.New(*brokerCmdBrokerAddr, store, *brokerCmdHTTPAddr, prometheus.NewMetrics(), logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)
