@@ -16,6 +16,7 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
+	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/simplelog"
 )
 
@@ -147,7 +148,7 @@ func setup(t require.TestingT) func() {
 	_, err = store.WaitForLeader(10 * time.Second)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(":8000", store, ":8003", logger)
+	srv := server.New(":8000", store, ":8003", mock.NewMetrics(), logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 

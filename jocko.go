@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
@@ -26,6 +27,12 @@ type Client interface {
 	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
 	CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error)
 	// others
+}
+
+type Counter = prometheus.Counter
+
+type Metrics struct {
+	RequestsHandled Counter
 }
 
 // Partition is the unit of storage in Jocko.

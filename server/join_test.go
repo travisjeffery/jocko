@@ -21,13 +21,17 @@ func TestJoin(t *testing.T) {
 		RunFn: func(context.Context, <-chan jocko.Request, chan<- jocko.Response) {},
 	}
 	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "server/test")
-	srv := New("localhost:9092", b, "localhost:9093", logger)
+
+	srv := New("localhost:9092", b, "localhost:9093", mock.NewMetrics(), logger)
 	srv.Start(context.Background())
 	defer srv.Close()
+
 	buf := bytes.NewBufferString(`{}`)
 	req := httptest.NewRequest("POST", "http://localhost:9094/join", buf)
 	w := httptest.NewRecorder()
+
 	srv.handleJoin(w, req)
+
 	res := w.Result()
 	if res.StatusCode != 200 {
 		t.Errorf("expected join to 200, got %d", res.StatusCode)
