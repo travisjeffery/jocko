@@ -11,7 +11,6 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
@@ -31,6 +30,7 @@ type Server struct {
 	metrics      *metrics
 	requestCh    chan jocko.Request
 	responseCh   chan jocko.Response
+	server       http.Server
 }
 
 func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simplelog.Logger) *Server {
@@ -43,7 +43,7 @@ func New(protocolAddr string, broker jocko.Broker, httpAddr string, logger *simp
 		requestCh:    make(chan jocko.Request, 32),
 		responseCh:   make(chan jocko.Response, 32),
 	}
-	s.metrics = newMetrics(prometheus.DefaultRegisterer)
+	// s.metrics = newMetrics(prometheus.DefaultRegisterer)
 	return s
 }
 
@@ -71,10 +71,9 @@ func (s *Server) Start(ctx context.Context) error {
 	r.Path("/join").Methods("POST").HandlerFunc(s.handleJoin)
 	r.Handle("/metrics", promhttp.Handler())
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
-	http.Handle("/", r)
 
 	loggedRouter := handlers.LoggingHandler(os.Stdout, r)
-	server := http.Server{
+	s.server = http.Server{
 		Handler: loggedRouter,
 	}
 
@@ -115,7 +114,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go s.broker.Run(ctx, s.requestCh, s.responseCh)
 
 	go func() {
-		err := server.Serve(s.httpLn)
+		err := s.server.Serve(s.httpLn)
 		if err != nil {
 			s.logger.Info("serve failed: %v", err)
 		}
@@ -127,12 +126,14 @@ func (s *Server) Start(ctx context.Context) error {
 // Close closes the service.
 func (s *Server) Close() {
 	close(s.shutdownCh)
+	s.server.Close()
+	s.httpLn.Close()
 	s.protocolLn.Close()
 	return
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
-	s.metrics.requestsHandled.Inc()
+	// s.metrics.requestsHandled.Inc()
 	defer conn.Close()
 
 	header := new(protocol.RequestHeader)
@@ -222,6 +223,8 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) write(resp jocko.Response) error {
