@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -26,17 +27,36 @@ func TestJoin(t *testing.T) {
 	srv.Start(context.Background())
 	defer srv.Close()
 
-	buf := bytes.NewBufferString(`{}`)
-	req := httptest.NewRequest("POST", "http://localhost:9094/join", buf)
-	w := httptest.NewRecorder()
+	t.Run("ok", func(tt *testing.T) {
+		buf := bytes.NewBufferString(`{}`)
+		req := httptest.NewRequest("POST", "http://localhost:9094/join", buf)
+		w := httptest.NewRecorder()
 
-	srv.handleJoin(w, req)
+		srv.handleJoin(w, req)
 
-	res := w.Result()
-	if res.StatusCode != 200 {
-		t.Errorf("expected join to 200, got %d", res.StatusCode)
-	}
-	if !b.JoinInvoked {
-		t.Error("expected join invoked")
-	}
+		res := w.Result()
+		if res.StatusCode != http.StatusOK {
+			t.Errorf("expected join to %d, got %d", http.StatusOK, res.StatusCode)
+		}
+		if !b.JoinInvoked {
+			t.Error("expected join invoked")
+		}
+	})
+
+	b.JoinInvoked = false
+
+	t.Run("bad join request", func(tt *testing.T) {
+		req := httptest.NewRequest("POST", "http://localhost:9094/join", nil)
+		w := httptest.NewRecorder()
+
+		srv.handleJoin(w, req)
+
+		res := w.Result()
+		if res.StatusCode != http.StatusBadRequest {
+			t.Errorf("expected join to %d, got %d", http.StatusBadRequest, res.StatusCode)
+		}
+		if b.JoinInvoked {
+			t.Error("expected join not invoked")
+		}
+	})
 }
