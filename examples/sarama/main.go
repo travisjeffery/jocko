@@ -171,7 +171,7 @@ func setup() func() {
 		os.Exit(1)
 	}
 	for _, topicErrCode := range resp.TopicErrorCodes {
-		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
+		if topicErrCode.ErrorCode != protocol.ErrNone.Code() && topicErrCode.ErrorCode != protocol.ErrTopicAlreadyExists.Code() {
 			err := protocol.Errs[topicErrCode.ErrorCode]
 			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
 			os.Exit(1)
