@@ -51,7 +51,6 @@ func (b *Broker) apply(c jocko.RaftCommand) {
 	}()
 
 	b.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
-	panic(c)
 	switch c.Cmd {
 	case nop:
 		return
