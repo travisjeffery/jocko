@@ -444,6 +444,40 @@ func TestBroker_Run(t *testing.T) {
 					}}}},
 			},
 		},
+		{
+			name:   "leader and isr leader new partition",
+			fields: newFields(),
+			args: args{
+				requestCh:  make(chan jocko.Request, 2),
+				responseCh: make(chan jocko.Response, 2),
+				requests: []jocko.Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Request: &protocol.LeaderAndISRRequest{
+						PartitionStates: []*protocol.PartitionState{
+							{
+								Topic:     "the-topic",
+								Partition: 1,
+								ISR:       []int32{1},
+								Replicas:  []int32{1},
+								Leader:    1,
+								ZKVersion: 1,
+							},
+						},
+					}},
+				},
+				responses: []jocko.Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 2},
+					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.LeaderAndISRResponse{
+						Partitions: []*protocol.LeaderAndISRPartition{
+							{
+								ErrorCode: protocol.ErrNone.Code(),
+								Partition: 1,
+								Topic:     "the-topic",
+							},
+						},
+					}}}},
+			},
+		},
 	}
 	for _, tt := range tests {
 		os.RemoveAll("/tmp/jocko")
