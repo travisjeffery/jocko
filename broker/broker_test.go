@@ -1225,41 +1225,31 @@ func TestBroker_deletePartitions(t *testing.T) {
 }
 
 func TestBroker_Shutdown(t *testing.T) {
-	type fields struct {
-		logger      *simplelog.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
 	tests := []struct {
 		name    string
 		fields  fields
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		{
+			name:    "shutdown ok",
+			fields:  newFields(),
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(tt.fields.id, Addr(tt.fields.brokerAddr), Serf(tt.fields.serf), Raft(tt.fields.raft), Logger(tt.fields.logger), RaftCommands(tt.fields.raftCommands), LogDir(tt.fields.logDir))
+			if err != nil {
+				t.Errorf("Broker.New() error = %v, wanted nil", err)
 			}
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.Shutdown() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.fields.raft.ShutdownInvoked != true {
+				t.Errorf("did not shutdown raft")
+			}
+			if tt.fields.serf.ShutdownInvoked != true {
+				t.Errorf("did not shutdown raft")
 			}
 		})
 	}
@@ -1415,6 +1405,9 @@ func newFields() fields {
 		MemberFn: func(memberID int32) *jocko.ClusterMember {
 			return &jocko.ClusterMember{ID: 1}
 		},
+		ShutdownFn: func() error {
+			return nil
+		},
 	}
 	raft := &mock.Raft{
 		AddrFn: func() string {
@@ -1436,6 +1429,9 @@ func newFields() fields {
 			return true
 		},
 		ApplyFn: func(jocko.RaftCommand) error {
+			return nil
+		},
+		ShutdownFn: func() error {
 			return nil
 		},
 	}
