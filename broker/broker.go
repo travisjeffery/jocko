@@ -256,8 +256,7 @@ func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protoco
 	}
 	for i, p := range req.PartitionStates {
 		partition, err := b.partition(p.Topic, p.Partition)
-		// TODO: seems ok to have protocol.ErrUnknownTopicOrPartition here?
-		if err != protocol.ErrNone {
+		if err != protocol.ErrUnknownTopicOrPartition && err != protocol.ErrNone {
 			setErr(i, p, err)
 			continue
 		}
@@ -289,6 +288,7 @@ func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protoco
 				continue
 			}
 		}
+		resp.Partitions[i] = &protocol.LeaderAndISRPartition{Partition: p.Partition, Topic: p.Topic, ErrorCode: protocol.ErrNone.Code()}
 	}
 	return resp
 }
