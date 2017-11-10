@@ -13,7 +13,7 @@ build:
 	go build -o $(BUILD_PATH) cmd/jocko/main.go
 
 build-static:
-	CGO_ENABLED=0 go build -a --installsuffix cgo --ldflags="-s" -o jocko cmd/jocko/main.go
+	CGO_ENABLED=0 go build -a --installsuffix cgo --ldflags="-s" -o $(BUILD_PATH) cmd/jocko/main.go
 
 build-docker:
 	docker build -t travisjeffery/jocko:$(DOCKER_TAG) .
