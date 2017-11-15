@@ -1,0 +1,27 @@
+snapshot:
+  name_template: SNAPSHOT-{{.Commit}}
+
+builds:
+  - main: cmd/jocko/main.go
+    binary: jocko
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+
+brew:
+  github:
+    owner: travisjeffery
+    name: homebrew-tap
+
+  commit_author:
+    name: travisjeffery
+    email: tj@travisjeffery.com
+
+  folder: Formula
+
+  homepage: "https://github.com/travisjeffery"
+
+  description: "Kafka implemented in Golang with built-in coordination (No ZK dep, single binary install)"
+
