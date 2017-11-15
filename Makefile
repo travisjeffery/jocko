@@ -2,25 +2,28 @@ BUILD_PATH := jocko
 DOCKER_TAG := latest
 
 all: deps test
-.PHONY: all
 
-.PHONY: deps
 deps:
 	@which dep 2>/dev/null || go get -u github.com/golang/dep/cmd/dep
-	dep ensure
+	@dep ensure
 
 build:
-	go build -o $(BUILD_PATH) cmd/jocko/main.go
+	@go build -o $(BUILD_PATH) cmd/jocko/main.go
+
+release:
+	@which goreleaser 2>/dev/null || go get -u github.com/goreleaser/goreleaser
+	@goreleaser
+
+clean:
+	@rm -rf dist
 
 build-docker:
-	docker build -t travisjeffery/jocko:$(DOCKER_TAG) .
+	@docker build -t travisjeffery/jocko:$(DOCKER_TAG) .
 
-.PHONY: test
 test:
-	go test -v ./...
+	@go test -v ./...
 
-.PHONY: test-race
 test-race:
-	go test -v -race -p=1 ./...
+	@go test -v -race -p=1 ./...
 
-
+.PHONY: test-race test build-docker clean release build deps all
