@@ -6,24 +6,24 @@ import (
 )
 
 type Reader struct {
-	commitlog *CommitLog
-	idx       int
-	mu        sync.Mutex
-	position  int64
+	cl  *CommitLog
+	idx int
+	mu  sync.Mutex
+	pos int64
 }
 
 func (r *Reader) Read(p []byte) (n int, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	segments := r.commitlog.Segments()
+	segments := r.cl.Segments()
 	segment := segments[r.idx]
 
 	var readSize int
 	for {
-		readSize, err = segment.ReadAt(p[n:], r.position)
+		readSize, err = segment.ReadAt(p[n:], r.pos)
 		n += readSize
-		r.position += int64(readSize)
+		r.pos += int64(readSize)
 		if readSize != 0 && err == nil {
 			continue
 		}
@@ -36,23 +36,24 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 		}
 		r.idx++
 		segment = segments[r.idx]
-		r.position = 0
+		r.pos = 0
 	}
 
 	return n, err
 }
 
 func (l *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
-	segment, idx := findSegment(l.Segments(), offset)
-	if segment == nil {
+	s, idx := findSegment(l.Segments(), offset)
+	if s == nil {
 		return nil, ErrSegmentNotFound
 	}
-	entry, _ := segment.findEntry(offset)
-	position := entry.Position
-
+	e, err := s.findEntry(offset)
+	if err != nil {
+		return nil, err
+	}
 	return &Reader{
-		commitlog: l,
-		idx:       idx,
-		position:  position,
+		cl:  l,
+		idx: idx,
+		pos: e.Position,
 	}, nil
 }
