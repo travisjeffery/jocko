@@ -29,6 +29,7 @@ func TestBroker_Replicate(t *testing.T) {
 		broker.ReplicatorMinBytes(5),
 		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
 		broker.ReplicatorLeader(leader))
+	replicator.Replicate()
 
 	testutil.WaitForResult(func() (bool, error) {
 		commitLog := clog.Log()

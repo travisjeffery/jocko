@@ -685,6 +685,9 @@ func (b *Broker) becomeFollower(topic string, partitionID int32, partitionState 
 	r := NewReplicator(p, b.id,
 		ReplicatorLeader(server.NewClient(p.Conn)))
 	b.replicators[p] = r
+	if !b.loner {
+		r.Replicate()
+	}
 	return protocol.ErrNone
 }
 
