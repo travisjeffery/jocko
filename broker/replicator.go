@@ -34,11 +34,12 @@ func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...Replicat
 	for _, o := range opts {
 		o(r)
 	}
+	return r
+}
 
+func (r *Replicator) Replicate() {
 	go r.fetchMessages()
 	go r.appendMessages()
-
-	return r
 }
 
 func (r *Replicator) fetchMessages() {
