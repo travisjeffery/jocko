@@ -165,11 +165,12 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	s.Lock()
 	defer s.Unlock()
 	e = &Entry{}
-	idx := sort.Search(int(s.Index.bytes/entryWidth), func(i int) bool {
+	n := int(s.Index.bytes / entryWidth)
+	idx := sort.Search(n, func(i int) bool {
 		_ = s.Index.ReadEntry(e, int64(i*entryWidth))
-		return e.Offset > offset || e.Offset == 0
+		return e.Offset >= offset || e.Offset == 0
 	})
-	if idx == -1 {
+	if idx == n {
 		return nil, errors.New("entry not found")
 	}
 	return e, nil

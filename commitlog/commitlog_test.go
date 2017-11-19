@@ -88,7 +88,8 @@ func TestTruncate(t *testing.T) {
 
 	maxBytes := msgSets[0].Size()
 	_, err = l.NewReader(0, maxBytes)
-	assert.Error(t, err)
+	// should find next segment above
+	assert.NoError(t, err)
 
 	r, err := l.NewReader(1, maxBytes)
 	assert.NoError(t, err)
