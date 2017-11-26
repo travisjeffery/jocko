@@ -63,10 +63,6 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/travisjeffery/simplelog"
-
-[[constraint]]
-  branch = "master"
   name = "github.com/tysontate/gommap"
 
 [[constraint]]

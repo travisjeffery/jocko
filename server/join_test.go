@@ -5,13 +5,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil/mock"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko/zap"
 )
 
 func TestJoin(t *testing.T) {
@@ -21,8 +20,7 @@ func TestJoin(t *testing.T) {
 		},
 		RunFn: func(context.Context, <-chan jocko.Request, chan<- jocko.Response) {},
 	}
-	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "server/test")
-
+	logger := zap.New()
 	srv := New("localhost:9092", b, "localhost:9093", mock.NewMetrics(), logger)
 	srv.Start(context.Background())
 	defer srv.Close()

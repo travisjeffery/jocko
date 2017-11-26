@@ -11,7 +11,6 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
-	"github.com/travisjeffery/simplelog"
 )
 
 const (
@@ -21,7 +20,7 @@ const (
 
 // Raft manages consensus on Jocko cluster using Hashicorp Raft
 type Raft struct {
-	logger    *simplelog.Logger
+	logger    jocko.Logger
 	raft      *raft.Raft
 	transport *raft.NetworkTransport
 	store     *raftboltdb.BoltStore
@@ -137,7 +136,7 @@ func (b *Raft) LeaderID() string {
 func (b *Raft) waitForBarrier() error {
 	barrier := b.raft.Barrier(0)
 	if err := barrier.Error(); err != nil {
-		b.logger.Info("failed to wait for barrier: %v", err)
+		b.logger.Error("failed to wait for barrier", jocko.Error("error", err))
 		return err
 	}
 	return nil
@@ -147,10 +146,10 @@ func (b *Raft) waitForBarrier() error {
 func (b *Raft) addPeer(addr string) error {
 	future := b.raft.AddPeer(addr)
 	if err := future.Error(); err != nil && err != raft.ErrKnownPeer {
-		b.logger.Info("failed to add raft peer: %v", err)
+		b.logger.Info("failed to add raft peer", jocko.Error("error", err))
 		return err
 	} else if err == nil {
-		b.logger.Info("added raft peer: %v", addr)
+		b.logger.Info("added raft peer", jocko.String("addr", addr))
 	}
 	return nil
 }
@@ -159,10 +158,10 @@ func (b *Raft) addPeer(addr string) error {
 func (b *Raft) removePeer(addr string) error {
 	future := b.raft.RemovePeer(addr)
 	if err := future.Error(); err != nil && err != raft.ErrUnknownPeer {
-		b.logger.Info("failed to remove raft peer: %v", err)
+		b.logger.Error("failed to remove raft peer", jocko.Error("error", err))
 		return err
 	} else if err == nil {
-		b.logger.Info("removed raft peer: %v", addr)
+		b.logger.Info("removed raft peer", jocko.String("addr", addr))
 	}
 	return nil
 }
@@ -189,7 +188,7 @@ func (b *Raft) Shutdown() error {
 	}
 	future := b.raft.Shutdown()
 	if err := future.Error(); err != nil {
-		b.logger.Info("failed to shutdown raft: %s", err)
+		b.logger.Error("failed to shutdown raft", jocko.Error("error", err))
 		return err
 	}
 	if err := b.store.Close(); err != nil {

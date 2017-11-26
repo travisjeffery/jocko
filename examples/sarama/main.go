@@ -15,7 +15,7 @@ import (
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/jocko/testutil/mock"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko/zap"
 )
 
 type check struct {
@@ -113,7 +113,7 @@ func main() {
 }
 
 func setup() func() {
-	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko")
+	logger := zap.New()
 
 	serf, err := serf.New(
 		serf.Logger(logger),

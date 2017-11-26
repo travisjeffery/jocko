@@ -14,7 +14,6 @@ import (
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/simplelog"
 )
 
 var (
@@ -25,7 +24,7 @@ var (
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	sync.RWMutex
-	logger *simplelog.Logger
+	logger jocko.Logger
 
 	id          int32
 	topicMap    map[string][]*jocko.Partition
@@ -84,7 +83,7 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 
 	reconcileCh := make(chan *jocko.ClusterMember, 32)
 	if err := b.serf.Bootstrap(conn, reconcileCh); err != nil {
-		b.logger.Info("failed to start serf: %s", err)
+		b.logger.Error("failed to start serf", jocko.Error("error", err))
 		return nil, err
 	}
 
@@ -330,7 +329,7 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 			presp := &protocol.ProducePartitionResponse{}
 			partition, err := b.partition(td.Topic, p.Partition)
 			if err != protocol.ErrNone {
-				b.logger.Info("produce to partition failed: %v", err)
+				b.logger.Error("produce to partition failed", jocko.Error("error", err))
 				presp.Partition = p.Partition
 				presp.ErrorCode = err.Code()
 				presps[j] = presp
@@ -338,7 +337,7 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 			}
 			offset, appendErr := partition.Append(p.RecordSet)
 			if appendErr != nil {
-				b.logger.Info("commitlog/append failed: %v", err)
+				b.logger.Error("commitlog/append failed", jocko.Error("error", err))
 				presp.ErrorCode = protocol.ErrUnknown.Code()
 				presps[j] = presp
 				continue
@@ -645,14 +644,14 @@ func (b *Broker) Shutdown() error {
 
 	if b.serf != nil {
 		if err := b.serf.Shutdown(); err != nil {
-			b.logger.Info("failed to shut down serf: %v", err)
+			b.logger.Error("failed to shut down serf", jocko.Error("error", err))
 			return err
 		}
 	}
 
 	if b.raft != nil {
 		if err := b.raft.Shutdown(); err != nil {
-			b.logger.Info("failed to shut down raft: %v", err)
+			b.logger.Error("failed to shut down raft", jocko.Error("error", err))
 			return err
 		}
 	}

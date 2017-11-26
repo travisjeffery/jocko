@@ -17,7 +17,7 @@ import (
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/jocko/testutil/mock"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko/zap"
 )
 
 const (
@@ -126,7 +126,7 @@ func setup(t require.TestingT) func() {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	require.NoError(t, err)
 
-	logger := simplelog.New(os.Stdout, simplelog.DEBUG, "jocko/servertest")
+	logger := zap.New()
 	serf, err := serf.New(
 		serf.Logger(logger),
 		serf.Addr("127.0.0.1:8002"),

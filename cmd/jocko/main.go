@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/tj/go-gracefully"
+	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/prometheus"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko/zap"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -42,11 +43,7 @@ var (
 func main() {
 	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
 
-	logLevel := simplelog.INFO
-	if *debugLogs {
-		logLevel = simplelog.DEBUG
-	}
-	logger := simplelog.New(os.Stdout, logLevel, "jocko")
+	var logger jocko.Logger = zap.New()
 
 	switch cmd {
 	case brokerCmd.FullCommand():
@@ -56,7 +53,7 @@ func main() {
 	}
 }
 
-func cmdBrokers(logger *simplelog.Logger) int {
+func cmdBrokers(logger jocko.Logger) int {
 	serf, err := serf.New(
 		serf.Logger(logger),
 		serf.Addr(*brokerCmdSerfAddr),
@@ -108,7 +105,7 @@ func cmdBrokers(logger *simplelog.Logger) int {
 	return 0
 }
 
-func cmdCreateTopic(logger *simplelog.Logger) int {
+func cmdCreateTopic(logger jocko.Logger) int {
 	addr, err := net.ResolveTCPAddr("tcp", *createTopicBrokerAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)

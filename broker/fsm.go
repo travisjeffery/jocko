@@ -45,19 +45,19 @@ func (b *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 func (b *Broker) apply(c jocko.RaftCommand) {
 	defer func() {
 		if r := recover(); r != nil {
-			b.logger.Info("error while applying raft command: %v", r)
+			b.logger.Info("error while applying raft command", jocko.Any("recovered", r))
 			b.Shutdown()
 		}
 	}()
 
-	b.logger.Debug("broker/apply cmd %d:\n%s", c.Cmd, c.Data)
+	b.logger.Debug("broker/apply", jocko.Int("cmd", int(c.Cmd)))
 	switch c.Cmd {
 	case nop:
 		return
 	case createPartition:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			b.logger.Info("received malformed raft command: %v", err)
+			b.logger.Error("received malformed raft command", jocko.Error("error", err))
 			// TODO: should panic?
 			return
 		}
@@ -67,7 +67,7 @@ func (b *Broker) apply(c jocko.RaftCommand) {
 	case deleteTopic:
 		p := new(jocko.Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			b.logger.Info("received malformed raft command: %v", err)
+			b.logger.Error("received malformed raft command", jocko.Error("error", err))
 			// TODO: should panic?
 			return
 		}
