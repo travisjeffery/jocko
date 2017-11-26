@@ -2,12 +2,12 @@ package raft
 
 import (
 	"github.com/hashicorp/raft"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko"
 )
 
 type OptionFn func(b *Raft)
 
-func Logger(logger *simplelog.Logger) OptionFn {
+func Logger(logger jocko.Logger) OptionFn {
 	return func(b *Raft) {
 		b.logger = logger
 	}

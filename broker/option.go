@@ -2,7 +2,6 @@ package broker
 
 import (
 	"github.com/travisjeffery/jocko"
-	"github.com/travisjeffery/simplelog"
 )
 
 // BrokerFn is used to configure brokers.
@@ -23,7 +22,7 @@ func Addr(brokerAddr string) BrokerFn {
 }
 
 // Logger is used to set the broker's logger.
-func Logger(logger *simplelog.Logger) BrokerFn {
+func Logger(logger jocko.Logger) BrokerFn {
 	return func(b *Broker) {
 		b.logger = logger
 	}

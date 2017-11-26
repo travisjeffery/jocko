@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/travisjeffery/jocko/protocol"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // CommitLog is the interface that wraps the commit log's methods and
@@ -27,6 +30,47 @@ type Client interface {
 	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
 	CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error)
 	// others
+}
+
+type Field = zapcore.Field
+
+type Logger interface {
+	Debug(msg string, fields ...Field)
+	Info(msg string, fields ...Field)
+	Error(msg string, fields ...Field)
+	Panic(msg string, fields ...Field)
+}
+
+func String(key string, val string) Field {
+	return zap.String(key, val)
+}
+
+func Int(key string, val int) Field {
+	return zap.Int(key, val)
+}
+
+func Int16(key string, val int16) Field {
+	return zap.Int16(key, val)
+}
+
+func Int32(key string, val int32) Field {
+	return zap.Int32(key, val)
+}
+
+func Uint32(key string, val uint32) Field {
+	return zap.Uint32(key, val)
+}
+
+func Duration(key string, val time.Duration) Field {
+	return zap.Duration(key, val)
+}
+
+func Error(key string, val error) Field {
+	return zap.NamedError(key, val)
+}
+
+func Any(key string, val interface{}) Field {
+	return zap.Any(key, val)
 }
 
 // Alias prometheus' counter, probably only need to use Inc() though.

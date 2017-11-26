@@ -2,23 +2,22 @@ package serf_test
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
-	"github.com/travisjeffery/simplelog"
+	"github.com/travisjeffery/jocko/zap"
 )
 
 var (
-	logger   *simplelog.Logger
+	logger   jocko.Logger
 	serfPort int
 )
 
 func init() {
-	logger = simplelog.New(os.Stdout, simplelog.INFO, "jocko/serf_test")
+	logger = zap.New()
 	serfPort = 7946
 }
 
