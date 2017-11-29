@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/commitlog"
 )
 
@@ -34,24 +34,24 @@ func TestNewCommitLog(t *testing.T) {
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 	maxBytes := msgSets[0].Size()
 	r, err := l.NewReader(0, maxBytes)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	for i := range msgSets {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		ms := commitlog.MessageSet(p)
-		assert.Equal(t, int64(i), ms.Offset())
+		require.Equal(t, int64(i), ms.Offset())
 
 		payload := ms.Payload()
 		var offset int
 		for _, msg := range msgs {
-			assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+			require.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
 			offset += len(msg)
 		}
 	}
@@ -66,7 +66,7 @@ func BenchmarkCommitLog(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		_, err = l.Append(msgSet)
-		assert.NoError(b, err)
+		require.NoError(b, err)
 	}
 }
 
@@ -77,35 +77,35 @@ func TestTruncate(t *testing.T) {
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
-	assert.Equal(t, int64(2), l.NewestOffset())
-	assert.Equal(t, 2, len(l.Segments()))
+	require.Equal(t, int64(2), l.NewestOffset())
+	require.Equal(t, 2, len(l.Segments()))
 
 	err = l.Truncate(int64(1))
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(l.Segments()))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(l.Segments()))
 
 	maxBytes := msgSets[0].Size()
 	_, err = l.NewReader(0, maxBytes)
 	// should find next segment above
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	r, err := l.NewReader(1, maxBytes)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	for i := range msgSets[1:] {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		ms := commitlog.MessageSet(p)
-		assert.Equal(t, int64(i+1), ms.Offset())
+		require.Equal(t, int64(i+1), ms.Offset())
 
 		payload := ms.Payload()
 		var offset int
 		for _, msg := range msgs {
-			assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+			require.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
 			offset += len(msg)
 		}
 	}
@@ -118,40 +118,40 @@ func TestCleaner(t *testing.T) {
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 	segments := l.Segments()
-	assert.Equal(t, 2, len(segments))
+	require.Equal(t, 2, len(segments))
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
-	assert.Equal(t, 2, len(l.Segments()))
+	require.Equal(t, 2, len(l.Segments()))
 	for i, s := range l.Segments() {
-		assert.NotEqual(t, s, segments[i])
+		require.NotEqual(t, s, segments[i])
 	}
 }
 
-func check(t assert.TestingT, got, want []byte) {
+func check(t require.TestingT, got, want []byte) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("got = %s, want %s", string(got), string(want))
 	}
 }
 
-func setup(t assert.TestingT) *commitlog.CommitLog {
+func setup(t require.TestingT) *commitlog.CommitLog {
 	opts := commitlog.Options{
 		Path:            path,
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
 	}
 	l, err := commitlog.New(opts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return l
 }
 
-func cleanup(t assert.TestingT) {
+func cleanup(t require.TestingT) {
 	os.RemoveAll(path)
 	os.MkdirAll(path, 0755)
 }

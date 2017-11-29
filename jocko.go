@@ -1,8 +1,3 @@
-//go:generate mocker --prefix "" --out mock/broker.go --pkg mock . Broker
-//go:generate mocker --prefix "" --out mock/commitlog.go --pkg mock . CommitLog
-//go:generate mocker --prefix "" --out mock/serf.go --pkg mock . Serf
-//go:generate mocker --prefix "" --out mock/raft.go --pkg mock . Raft
-
 package jocko
 
 import (
@@ -298,3 +293,8 @@ func (b *ClusterMember) connect() error {
 	b.conn = conn
 	return nil
 }
+
+//go:generate mocker --prefix "" --out mock/broker.go --pkg mock . Broker
+//go:generate mocker --prefix "" --out mock/commitlog.go --pkg mock . CommitLog
+//go:generate mocker --prefix "" --out mock/serf.go --pkg mock . Serf
+//go:generate mocker --prefix "" --out mock/raft.go --pkg mock . Raft

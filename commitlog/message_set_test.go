@@ -3,7 +3,7 @@ package commitlog_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/commitlog"
 )
 
@@ -15,12 +15,12 @@ func TestMessageSet(t *testing.T) {
 		msg1,
 	}
 	ms := commitlog.NewMessageSet(3, msgs...)
-	assert.Equal(t, int64(3), ms.Offset())
+	require.Equal(t, int64(3), ms.Offset())
 
 	payload := ms.Payload()
 	var offset int
 	for _, msg := range msgs {
-		assert.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
+		require.Equal(t, []byte(msg), payload[offset:offset+len(msg)])
 		offset += len(msg)
 	}
 }

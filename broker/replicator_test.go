@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/mock"
@@ -39,14 +39,14 @@ func TestBroker_Replicate(t *testing.T) {
 			return false, nil
 		}
 		for i, m := range l.Messages() {
-			assert.True(t, bytes.Equal(m, commitLog[i]))
+			require.True(t, bytes.Equal(m, commitLog[i]))
 		}
 		return true, nil
 	}, func(err error) {
 		t.Fatalf("err: %v", err)
 	})
 
-	assert.NoError(t, replicator.Close())
+	require.NoError(t, replicator.Close())
 }
 
 type commitLog struct {

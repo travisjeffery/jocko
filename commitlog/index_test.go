@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIndex(t *testing.T) {
@@ -29,7 +29,7 @@ func TestIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(t)
 	}
-	assert.Equal(t, roundDown(bytes, entryWidth), stat.Size())
+	require.Equal(t, roundDown(bytes, entryWidth), stat.Size())
 	entries := []Entry{}
 	for i := 0; i < totalEntries; i++ {
 		entries = append(entries, Entry{
@@ -50,14 +50,14 @@ func TestIndex(t *testing.T) {
 		if err = idx.ReadEntry(act, int64(i*entryWidth)); err != nil {
 			t.Fatal(err)
 		}
-		assert.Equal(t, exp.Offset, act.Offset, act)
-		assert.Equal(t, exp.Position, act.Position, act)
+		require.Equal(t, exp.Offset, act.Offset, act)
+		require.Equal(t, exp.Position, act.Position, act)
 	}
-	assert.Equal(t, nil, idx.SanityCheck())
+	require.Equal(t, nil, idx.SanityCheck())
 
 	//dirty data
 	idx.position++
-	assert.NotEqual(t, nil, idx.SanityCheck())
+	require.NotEqual(t, nil, idx.SanityCheck())
 
 	idx.position--
 	if err = idx.Close(); err != nil {
@@ -67,5 +67,5 @@ func TestIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Equal(t, int64(totalEntries*entryWidth), stat.Size())
+	require.Equal(t, int64(totalEntries*entryWidth), stat.Size())
 }
