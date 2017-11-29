@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/jocko/zap"
 )
 
@@ -46,7 +46,7 @@ func TestNew(t *testing.T) {
 			wantErr: true,
 			setFields: func(f *fields) {
 				f.raft = &mock.Raft{
-					AddrFn: func() string {
+					AddrFunc: func() string {
 						return ""
 					},
 				}
@@ -57,7 +57,7 @@ func TestNew(t *testing.T) {
 			wantErr: true,
 			setFields: func(f *fields) {
 				f.serf = &mock.Serf{
-					BootstrapFn: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
+					BootstrapFunc: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
 						return errors.New("mock serf bootstrap error")
 					},
 				}
@@ -68,8 +68,8 @@ func TestNew(t *testing.T) {
 			wantErr: true,
 			setFields: func(f *fields) {
 				f.raft = &mock.Raft{
-					AddrFn: f.raft.AddrFn,
-					BootstrapFn: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+					AddrFunc: f.raft.AddrFunc,
+					BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
 						return errors.New("mock raft bootstrap error")
 					},
 				}
@@ -106,10 +106,10 @@ func TestNew(t *testing.T) {
 				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !tt.fields.serf.BootstrapInvoked {
+			if !tt.fields.serf.BootstrapCalled() {
 				t.Error("expected serf bootstrap invoked; did not")
 			}
-			if !tt.fields.raft.BootstrapInvoked {
+			if !tt.fields.raft.BootstrapCalled() {
 				t.Error("expected raft bootstrap invoked; did not")
 			}
 			if got != nil && got.shutdownCh == nil {
@@ -663,7 +663,7 @@ func TestBroker_Join(t *testing.T) {
 			name:   "serf errr",
 			fields: newFields(),
 			setFields: func(f *fields) {
-				f.serf.JoinFn = func(addrs ...string) (int, error) {
+				f.serf.JoinFunc = func(addrs ...string) (int, error) {
 					return -1, err
 				}
 			},
@@ -691,7 +691,7 @@ func TestBroker_Join(t *testing.T) {
 			if got := b.Join(tt.args.addrs...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.Join() = %v, want %v", got, tt.want)
 			}
-			if !tt.fields.serf.JoinInvoked {
+			if !tt.fields.serf.JoinCalled() {
 				t.Error("expected serf join invoked; did not")
 			}
 		})
@@ -721,7 +721,7 @@ func TestBroker_clusterMembers(t *testing.T) {
 			name: "found members ok",
 			fields: fields{
 				serf: &mock.Serf{
-					ClusterFn: func() []*jocko.ClusterMember {
+					ClusterFunc: func() []*jocko.ClusterMember {
 						return members
 					},
 				},
@@ -772,7 +772,7 @@ func TestBroker_isController(t *testing.T) {
 			name: "is leader",
 			fields: fields{
 				raft: &mock.Raft{
-					IsLeaderFn: func() bool {
+					IsLeaderFunc: func() bool {
 						return true
 					},
 				},
@@ -1007,7 +1007,7 @@ func TestBroker_createPartition(t *testing.T) {
 		partition *jocko.Partition
 	}
 	raft := &mock.Raft{
-		ApplyFn: func(c jocko.RaftCommand) error {
+		ApplyFunc: func(c jocko.RaftCommand) error {
 			if c.Cmd != createPartition {
 				t.Errorf("Broker.createPartition() c.Cmd = %v, want %v", c.Cmd, createPartition)
 			}
@@ -1046,8 +1046,8 @@ func TestBroker_createPartition(t *testing.T) {
 			if err := b.createPartition(tt.args.partition); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.createPartition() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !raft.ApplyInvoked {
-				t.Errorf("Broker.createPartition() raft.ApplyInvoked = %v, want %v", raft.ApplyInvoked, true)
+			if !raft.ApplyCalled() {
+				t.Errorf("Broker.createPartition() raft.ApplyCalled() = %v, want %v", raft.ApplyCalled(), true)
 			}
 		})
 	}
@@ -1068,7 +1068,7 @@ func TestBroker_clusterMember(t *testing.T) {
 	}
 	member := &jocko.ClusterMember{ID: 1}
 	serf := &mock.Serf{
-		MemberFn: func(id int32) *jocko.ClusterMember {
+		MemberFunc: func(id int32) *jocko.ClusterMember {
 			if id != member.ID {
 				t.Errorf("serf.Member() id = %v, want %v", id, member.ID)
 			}
@@ -1110,8 +1110,8 @@ func TestBroker_clusterMember(t *testing.T) {
 			if got := b.clusterMember(tt.args.id); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.clusterMember() = %v, want %v", got, tt.want)
 			}
-			if !serf.MemberInvoked {
-				t.Errorf("serf.MemberInvoked = %v, want %v", serf.MemberInvoked, true)
+			if !serf.MemberCalled() {
+				t.Errorf("serf.MemberCalled() = %v, want %v", serf.MemberCalled(), true)
 			}
 		})
 	}
@@ -1384,10 +1384,10 @@ func TestBroker_Shutdown(t *testing.T) {
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.Shutdown() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.fields.raft.ShutdownInvoked != true {
+			if tt.fields.raft.ShutdownCalled() != true {
 				t.Errorf("did not shutdown raft")
 			}
-			if tt.fields.serf.ShutdownInvoked != true {
+			if tt.fields.serf.ShutdownCalled() != true {
 				t.Errorf("did not shutdown raft")
 			}
 		})
@@ -1526,7 +1526,7 @@ type fields struct {
 
 func newFields() fields {
 	serf := &mock.Serf{
-		BootstrapFn: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
+		BootstrapFunc: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
 			if n == nil {
 				return errors.New("*jocko.ClusterMember is nil")
 			}
@@ -1535,24 +1535,24 @@ func newFields() fields {
 			}
 			return nil
 		},
-		JoinFn: func(addrs ...string) (int, error) {
+		JoinFunc: func(addrs ...string) (int, error) {
 			return 1, nil
 		},
-		ClusterFn: func() []*jocko.ClusterMember {
+		ClusterFunc: func() []*jocko.ClusterMember {
 			return []*jocko.ClusterMember{{ID: 1, Port: 9092, IP: "localhost"}}
 		},
-		MemberFn: func(memberID int32) *jocko.ClusterMember {
+		MemberFunc: func(memberID int32) *jocko.ClusterMember {
 			return &jocko.ClusterMember{ID: 1}
 		},
-		ShutdownFn: func() error {
+		ShutdownFunc: func() error {
 			return nil
 		},
 	}
 	raft := &mock.Raft{
-		AddrFn: func() string {
+		AddrFunc: func() string {
 			return "localhost:9093"
 		},
-		BootstrapFn: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+		BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
 			if s == nil {
 				return errors.New("jocko.Serf is nil")
 			}
@@ -1564,13 +1564,13 @@ func newFields() fields {
 			}
 			return nil
 		},
-		IsLeaderFn: func() bool {
+		IsLeaderFunc: func() bool {
 			return true
 		},
-		ApplyFn: func(jocko.RaftCommand) error {
+		ApplyFunc: func(jocko.RaftCommand) error {
 			return nil
 		},
-		ShutdownFn: func() error {
+		ShutdownFunc: func() error {
 			return nil
 		},
 	}

@@ -8,17 +8,17 @@ import (
 	"testing"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/jocko/zap"
 )
 
 func TestJoin(t *testing.T) {
 	b := &mock.Broker{
-		JoinFn: func(addr ...string) protocol.Error {
+		JoinFunc: func(addr ...string) protocol.Error {
 			return protocol.ErrNone
 		},
-		RunFn: func(context.Context, <-chan jocko.Request, chan<- jocko.Response) {},
+		RunFunc: func(context.Context, <-chan jocko.Request, chan<- jocko.Response) {},
 	}
 	logger := zap.New()
 	srv := New("localhost:9092", b, "localhost:9093", mock.NewMetrics(), logger)
@@ -36,12 +36,12 @@ func TestJoin(t *testing.T) {
 		if res.StatusCode != http.StatusOK {
 			t.Errorf("expected join to %d, got %d", http.StatusOK, res.StatusCode)
 		}
-		if !b.JoinInvoked {
+		if !b.JoinCalled() {
 			t.Error("expected join invoked")
 		}
 	})
 
-	b.JoinInvoked = false
+	b.Reset()
 
 	t.Run("bad join request", func(tt *testing.T) {
 		req := httptest.NewRequest("POST", "http://localhost:9094/join", nil)
@@ -53,7 +53,7 @@ func TestJoin(t *testing.T) {
 		if res.StatusCode != http.StatusBadRequest {
 			t.Errorf("expected join to %d, got %d", http.StatusBadRequest, res.StatusCode)
 		}
-		if b.JoinInvoked {
+		if b.JoinCalled() {
 			t.Error("expected join not invoked")
 		}
 	})

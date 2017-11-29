@@ -23,6 +23,9 @@ clean:
 build-docker:
 	@docker build -t travisjeffery/jocko:$(DOCKER_TAG) .
 
+generate:
+	@go generate
+
 test:
 	@go test -v ./...
 

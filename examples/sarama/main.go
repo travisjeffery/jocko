@@ -10,11 +10,11 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/testutil/mock"
 	"github.com/travisjeffery/jocko/zap"
 )
 
