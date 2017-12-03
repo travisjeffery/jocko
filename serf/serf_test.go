@@ -22,9 +22,9 @@ func init() {
 }
 
 func Test_Membership(t *testing.T) {
-	s0, err := getSerf(0)
+	s0, err := testSerf(0)
 	require.NoError(t, err)
-	s1, err := getSerf(1)
+	s1, err := testSerf(1)
 	require.NoError(t, err)
 
 	t.Run("Join Peer", func(t *testing.T) {
@@ -59,10 +59,10 @@ func Test_Membership(t *testing.T) {
 	require.NoError(t, s0.Shutdown())
 }
 
-func getSerf(id int32) (*serf.Serf, error) {
+func testSerf(id int32) (*serf.Serf, error) {
 	s, err := serf.New(
 		serf.Logger(logger),
-		serf.Addr(getSerfAddr()),
+		serf.Addr(testSerfAddr()),
 	)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func getSerf(id int32) (*serf.Serf, error) {
 	return s, nil
 }
 
-func getSerfAddr() string {
+func testSerfAddr() string {
 	serfPort++
 	return fmt.Sprintf("0.0.0.0:%d", serfPort)
 }
