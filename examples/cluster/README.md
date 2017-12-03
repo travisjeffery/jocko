@@ -15,7 +15,7 @@ $ go build
 ```bash
 $ ./jocko broker \
           --debug \
-          --log-dir="/tmp/jocko1" \
+          --log-dir="/tmp/jocko0" \
           --broker-addr=127.0.0.1:9001 \
           --raft-addr=127.0.0.1:9002 \
           --serf-addr=127.0.0.1:9003 \
@@ -24,7 +24,7 @@ $ ./jocko broker \
 
 $ ./jocko broker \
           --debug \
-          --log-dir="/tmp/jocko2" \
+          --log-dir="/tmp/jocko1" \
           --broker-addr=127.0.0.1:9101 \
           --raft-addr=127.0.0.1:9102 \
           --serf-addr=127.0.0.1:9103 \
@@ -34,7 +34,7 @@ $ ./jocko broker \
 
 $ ./jocko broker \
           --debug \
-          --log-dir="/tmp/jocko3" \
+          --log-dir="/tmp/jocko2" \
           --broker-addr=127.0.0.1:9201 \
           --raft-addr=127.0.0.1:9202 \
           --serf-addr=127.0.0.1:9203 \
