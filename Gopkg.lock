@@ -234,6 +234,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/travisjeffery/go-dynaport"
+  packages = ["."]
+  revision = "24009f4f2f49d394e2f7edeaa4b541f799d94792"
+
+[[projects]]
+  branch = "master"
   name = "github.com/tysontate/gommap"
   packages = ["."]
   revision = "e87a6e482c2ceaa54bd76e0fb30d1f2d40dd3f01"
@@ -271,6 +277,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2b815c119763553ab4b157e797d668b2cb0113f5391e294382731302e34dfa89"
+  inputs-digest = "8ccafb3adf730572eecafd65255d6722998276871832b4b069ec23df16f01ece"
   solver-name = "gps-cdcl"
   solver-version = 1

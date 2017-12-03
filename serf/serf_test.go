@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
@@ -22,9 +23,11 @@ func init() {
 }
 
 func Test_Membership(t *testing.T) {
-	s0, err := testSerf(0)
+	ports := dynaport.Get(2)
+
+	s0, err := testSerf(0, ports[0])
 	require.NoError(t, err)
-	s1, err := testSerf(1)
+	s1, err := testSerf(1, ports[1])
 	require.NoError(t, err)
 
 	t.Run("Join Peer", func(t *testing.T) {
@@ -59,10 +62,10 @@ func Test_Membership(t *testing.T) {
 	require.NoError(t, s0.Shutdown())
 }
 
-func testSerf(id int32) (*serf.Serf, error) {
+func testSerf(id int32, port int) (*serf.Serf, error) {
 	s, err := serf.New(
 		serf.Logger(logger),
-		serf.Addr(testSerfAddr()),
+		serf.Addr(fmt.Sprintf("0.0.0.0:%d", port)),
 	)
 	if err != nil {
 		return nil, err
@@ -74,11 +77,6 @@ func testSerf(id int32) (*serf.Serf, error) {
 		return nil, err
 	}
 	return s, nil
-}
-
-func testSerfAddr() string {
-	serfPort++
-	return fmt.Sprintf("0.0.0.0:%d", serfPort)
 }
 
 func testJoin(t *testing.T, s0 *serf.Serf, other ...*serf.Serf) {
