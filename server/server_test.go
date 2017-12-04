@@ -11,6 +11,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/require"
+	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/broker"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
@@ -28,8 +29,8 @@ const (
 )
 
 func TestBroker(t *testing.T) {
-	teardown := setup(t)
-	defer teardown()
+	brokerPort, shutdown := setup(t)
+	defer shutdown()
 
 	t.Run("Sarama", func(t *testing.T) {
 		config := sarama.NewConfig()
@@ -38,7 +39,7 @@ func TestBroker(t *testing.T) {
 		config.Producer.Return.Successes = true
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Retry.Max = 10
-		brokers := []string{"127.0.0.1:8000"}
+		brokers := []string{"127.0.0.1:" + brokerPort}
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -72,15 +73,15 @@ func TestBroker(t *testing.T) {
 }
 
 func BenchmarkBroker(b *testing.B) {
-	teardown := setup(b)
-	defer teardown()
+	brokerPort, shutdown := setup(b)
+	defer shutdown()
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V0_10_0_0
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 3
-	brokers := []string{"127.0.0.1:8000"}
+	brokers := []string{"127.0.0.1:" + brokerPort}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
@@ -122,23 +123,26 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t require.TestingT) func() {
+func setup(t require.TestingT) (string, func()) {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	require.NoError(t, err)
+
+	ports := dynaport.GetS(4)
+	brokerPort := ports[0]
 
 	logger := zap.New()
 	serf, err := serf.New(
 		serf.Logger(logger),
-		serf.Addr("127.0.0.1:8002"),
+		serf.Addr("127.0.0.1:"+ports[2]),
 	)
 	raft, err := raft.New(
 		raft.Logger(logger),
 		raft.DataDir(dataDir),
-		raft.Addr("127.0.0.1:8001"),
+		raft.Addr("127.0.0.1:"+ports[1]),
 	)
 	store, err := broker.New(0,
 		broker.LogDir(dataDir),
-		broker.Addr("127.0.0.1:8000"),
+		broker.Addr("127.0.0.1:"+brokerPort),
 		broker.Raft(raft),
 		broker.Serf(serf),
 		broker.Loner(),
@@ -148,11 +152,11 @@ func setup(t require.TestingT) func() {
 	_, err = store.WaitForLeader(10 * time.Second)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(":8000", store, ":8003", mock.NewMetrics(), logger)
+	srv := server.New(":"+brokerPort, store, ":"+ports[3], mock.NewMetrics(), logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", ":8000")
+	tcpAddr, err := net.ResolveTCPAddr("tcp", ":"+brokerPort)
 	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
@@ -173,7 +177,7 @@ func setup(t require.TestingT) func() {
 	})
 	require.NoError(t, err)
 
-	return func() {
+	return brokerPort, func() {
 		cancel()
 		srv.Close()
 		store.Shutdown()
