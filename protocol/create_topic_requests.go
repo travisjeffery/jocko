@@ -22,9 +22,7 @@ func (c *CreateTopicRequests) Encode(e PacketEncoder) error {
 		e.PutArrayLength(len(r.ReplicaAssignment))
 		for pid, ass := range r.ReplicaAssignment {
 			e.PutInt32(pid)
-			for _, a := range ass {
-				e.PutInt32(a)
-			}
+			e.PutInt32Array(ass)
 		}
 		e.PutArrayLength(len(r.Configs))
 		for k, v := range r.Configs {
@@ -60,6 +58,9 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 			return err
 		}
 		assignmentCount, err := d.ArrayLength()
+		if err != nil {
+			return err
+		}
 		ra := make(map[int32][]int32, assignmentCount)
 		for i := 0; i < assignmentCount; i++ {
 			pid, err := d.Int32()
