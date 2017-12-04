@@ -35,13 +35,15 @@ type Client interface {
 type Field = zapcore.Field
 
 type Logger interface {
-	// Use Debug if you want your logs running in development, testing,
+	// Debug is used when you want your logs running in development, testing,
 	// production.
 	Debug(msg string, fields ...Field)
-	// Use Info if you want your logs running in production.
+	// Info is used when you want your logs running in production.
 	Info(msg string, fields ...Field)
-	// Use Error if you want your logs running in production and you have an error.
+	// Error is used when you want your logs running in production and you have an error.
 	Error(msg string, fields ...Field)
+	/// With returns a child logger wrapped with the given fields.
+	With(fields ...Field) Logger
 }
 
 func String(key string, val string) Field {

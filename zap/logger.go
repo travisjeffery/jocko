@@ -27,3 +27,9 @@ func (l *logger) Error(msg string, fields ...jocko.Field) {
 func (l *logger) Debug(msg string, fields ...jocko.Field) {
 	l.Logger.Debug(msg, fields...)
 }
+
+func (l *logger) With(fields ...jocko.Field) jocko.Logger {
+	return &logger{
+		Logger: l.Logger.With(fields...),
+	}
+}
