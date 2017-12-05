@@ -140,16 +140,17 @@ func (b *Raft) waitForBarrier() error {
 	return nil
 }
 
-// addPeer of given address to raft
-func (b *Raft) addPeer(id int32, addr string, voter bool) error {
-	if (!voter) {
-		panic("non voter not supported yet")
-	}
+// addVoter of given address to raft
+func (b *Raft) addVoter(id int32, addr string) error {
 	return b.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 0).Error()
 }
 
-// removePeer of given address from raft
-func (b *Raft) removePeer(id int32, addr string) error {
+func (b *Raft) addNonVoter(id int32, addr string) error {
+	panic("not supported")
+}
+
+// removeServer of given address from raft
+func (b *Raft) removeServer(id int32, addr string) error {
 	return b.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
 }
 
