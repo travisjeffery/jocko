@@ -108,9 +108,9 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	switch member.Status {
 	case jocko.StatusAlive:
 		addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
-		err = b.addPeer(addr.String())
+		err = b.addPeer(member.ID, addr.String(), false)
 	case jocko.StatusLeft, jocko.StatusReap:
-		err = b.removePeer(member.IP)
+		err = b.removePeer(member.ID, member.IP)
 	}
 
 	if err != nil {

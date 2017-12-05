@@ -47,6 +47,8 @@ func New(opts ...OptionFn) (*Raft, error) {
 		o(r)
 	}
 
+	r.config.LocalID = raft.ServerID(r.addr)
+
 	return r, nil
 }
 
@@ -69,10 +71,6 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 		addr := &net.TCPAddr{IP: net.ParseIP(p.IP), Port: p.RaftPort}
 		peersAddrs = append(peersAddrs, addr.String())
 	}
-	raftPeers := raft.NewJSONPeers(path, b.transport)
-	if err = raftPeers.SetPeers(peersAddrs); err != nil {
-		return err
-	}
 
 	snapshots, err := raft.NewFileSnapshotStore(path, 2, os.Stderr)
 	if err != nil {
@@ -94,7 +92,7 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 		logger:    b.logger,
 	}
 
-	raft, err := raft.NewRaft(b.config, fsm, boltStore, boltStore, snapshots, raftPeers, b.transport)
+	raft, err := raft.NewRaft(b.config, fsm, boltStore, boltStore, snapshots, b.transport)
 	if err != nil {
 		b.store.Close()
 		b.transport.Close()
@@ -129,7 +127,7 @@ func (b *Raft) IsLeader() bool {
 
 // LeaderID is ID of the controller node
 func (b *Raft) LeaderID() string {
-	return b.raft.Leader()
+	return string(b.raft.Leader())
 }
 
 // waitForBarrier to let fsm finish
@@ -143,27 +141,16 @@ func (b *Raft) waitForBarrier() error {
 }
 
 // addPeer of given address to raft
-func (b *Raft) addPeer(addr string) error {
-	future := b.raft.AddPeer(addr)
-	if err := future.Error(); err != nil && err != raft.ErrKnownPeer {
-		b.logger.Info("failed to add raft peer", jocko.Error("error", err))
-		return err
-	} else if err == nil {
-		b.logger.Info("added raft peer", jocko.String("addr", addr))
+func (b *Raft) addPeer(id int32, addr string, voter bool) error {
+	if (!voter) {
+		panic("non voter not supported yet")
 	}
-	return nil
+	return b.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 0).Error()
 }
 
 // removePeer of given address from raft
-func (b *Raft) removePeer(addr string) error {
-	future := b.raft.RemovePeer(addr)
-	if err := future.Error(); err != nil && err != raft.ErrUnknownPeer {
-		b.logger.Error("failed to remove raft peer", jocko.Error("error", err))
-		return err
-	} else if err == nil {
-		b.logger.Info("removed raft peer", jocko.String("addr", addr))
-	}
-	return nil
+func (b *Raft) removePeer(id int32, addr string) error {
+	return b.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
 }
 
 // leave is used to prepare for a graceful shutdown of the server
