@@ -35,7 +35,7 @@
 
 [[constraint]]
   name = "github.com/hashicorp/raft"
-  revision = "5f09c4ffdbcd2a53768e78c47717415de12b6728"
+  version = "=1.0.0"
 
 [[constraint]]
   revision = "a8adffd05b79e3d8b1817d46bbe387a112265b3e"
@@ -43,15 +43,15 @@
 
 [[constraint]]
   name = "github.com/hashicorp/serf"
-  version = "0.8.1"
+  version = "=0.8.1"
 
 [[constraint]]
   name = "github.com/pkg/errors"
-  version = "0.8.0"
+  version = "=0.8.0"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
-  version = "0.8.0"
+  version = "=0.8.0"
 
 [[constraint]]
   name = "github.com/stretchr/testify"

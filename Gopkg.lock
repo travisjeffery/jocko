@@ -136,7 +136,8 @@
 [[projects]]
   name = "github.com/hashicorp/raft"
   packages = ["."]
-  revision = "5f09c4ffdbcd2a53768e78c47717415de12b6728"
+  revision = "6d14f0c70869faabd9e60ba7ed88a6cbbd6a661f"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/hashicorp/raft-boltdb"
@@ -277,6 +278,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8ccafb3adf730572eecafd65255d6722998276871832b4b069ec23df16f01ece"
+  inputs-digest = "1ad335eee8ef0ede898dd535c8ad50fa6c33aaea8d53f536d93d73fb481877e5"
   solver-name = "gps-cdcl"
   solver-version = 1
