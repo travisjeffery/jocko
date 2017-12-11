@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/testutil"
 )
@@ -18,7 +18,7 @@ func TestBroker_Replicate(t *testing.T) {
 	c := newCommitLog()
 	l := mock.NewClient(4)
 
-	p := &jocko.Partition{
+	p := &Partition{
 		Topic:           "test",
 		ID:              0,
 		Leader:          0,
@@ -27,7 +27,7 @@ func TestBroker_Replicate(t *testing.T) {
 		CommitLog:       c,
 	}
 
-	replicator := broker.NewReplicator(p, 0,
+	replicator := broker.NewReplicator(log.New(), p, 0,
 		broker.ReplicatorMinBytes(5),
 		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
 		broker.ReplicatorLeader(l))

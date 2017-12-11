@@ -11,16 +11,21 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 const (
-	timeout = 10 * time.Second
+	timeout = 30 * time.Second
 	state   = "raft/"
 )
 
+type Event struct {
+	Op string
+}
+
 // Raft manages consensus on Jocko cluster using Hashicorp Raft
 type Raft struct {
-	logger    jocko.Logger
+	logger    log.Logger
 	raft      *raft.Raft
 	transport *raft.NetworkTransport
 	store     *raftboltdb.BoltStore
@@ -36,32 +41,35 @@ type Raft struct {
 }
 
 // New Raft object
-func New(opts ...OptionFn) (*Raft, error) {
+func New(conf jocko.Config) (*Raft, error) {
 	r := &Raft{
+		addr:              conf.RaftBindAddr,
+		dataDir:           conf.DataDir + "/raft", // TODO: join cleanly
 		config:            raft.DefaultConfig(),
 		reconcileInterval: time.Second * 5,
 		shutdownCh:        make(chan struct{}),
 	}
 
-	for _, o := range opts {
-		o(r)
-	}
-
 	r.config.LocalID = raft.ServerID(r.addr)
+	r.logger = r.logger.With(log.String("ctx", "raft"), log.String("addr", r.addr))
 
 	return r, nil
 }
 
 // Bootstrap is used to bootstrap the raft instance.
 // Commands received by raft are sent on commandCh channel.
-func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) (err error) {
-	b.serf = serf
-	b.transport, err = raft.NewTCPTransport(b.addr, nil, 3, timeout, os.Stderr)
+func (r *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) (err error) {
+	r.serf = serf
+	// r.eventCh = eventCh
+
+	r.transport, err = raft.NewTCPTransport(r.addr, nil, 3, timeout, os.Stderr)
 	if err != nil {
 		return errors.Wrap(err, "tcp transport failed")
 	}
 
-	path := filepath.Join(b.dataDir, state)
+	r.logger = r.logger.With(log.Int32("serf id", serf.ID()))
+
+	path := filepath.Join(r.dataDir, state)
 	if err = os.MkdirAll(path, 0755); err != nil {
 		return errors.Wrap(err, "data directory mkdir failed")
 	}
@@ -81,81 +89,88 @@ func (b *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMembe
 	if err != nil {
 		return errors.Wrap(err, "bolt store failed")
 	}
-	b.store = boltStore
+	r.store = boltStore
 
 	notifyCh := make(chan bool, 1)
-	b.config.NotifyCh = notifyCh
-	b.config.StartAsLeader = !b.devDisableBootstrap
+	r.config.NotifyCh = notifyCh
+	r.config.StartAsLeader = !r.devDisableBootstrap
 
 	fsm := &fsm{
 		commandCh: commandCh,
-		logger:    b.logger,
+		logger:    r.logger,
 	}
 
-	raft, err := raft.NewRaft(b.config, fsm, boltStore, boltStore, snapshots, b.transport)
+	raft, err := raft.NewRaft(r.config, fsm, boltStore, boltStore, snapshots, r.transport)
 	if err != nil {
-		b.store.Close()
-		b.transport.Close()
+		r.store.Close()
+		r.transport.Close()
 		return errors.Wrap(err, "raft failed")
 	}
-	b.raft = raft
+	r.raft = raft
 
-	go b.monitorLeadership(notifyCh, serfEventCh)
+	go r.monitorLeadership(notifyCh, serfEventCh)
+
+	r.logger.Info("bootstraped raft")
 
 	return nil
 }
 
 // Addr of raft node
-func (b *Raft) Addr() string {
-	return b.addr
+func (r *Raft) Addr() string {
+	return r.addr
 }
 
 // Apply command to all raft nodes
-func (b *Raft) Apply(cmd jocko.RaftCommand) error {
+func (r *Raft) Apply(cmd jocko.RaftCommand) error {
 	c, err := json.Marshal(cmd)
 	if err != nil {
 		return err
 	}
-	f := b.raft.Apply(c, timeout)
-	return f.Error()
+	r.logger.Debug("applying", log.Any("cmd", cmd))
+	err = r.raft.Apply(c, timeout).Error()
+	if err != nil {
+		r.logger.Error("applying", log.Any("cmd", c), log.Error("error", err))
+	}
+	return err
 }
 
 // IsLeader checks if this broker is the cluster controller
-func (b *Raft) IsLeader() bool {
-	return b.raft.State() == raft.Leader
+func (r *Raft) IsLeader() bool {
+	return r.raft.State() == raft.Leader
 }
 
 // LeaderID is ID of the controller node
-func (b *Raft) LeaderID() string {
-	return string(b.raft.Leader())
+func (r *Raft) LeaderID() string {
+	return string(r.raft.Leader())
 }
 
 // waitForBarrier to let fsm finish
-func (b *Raft) waitForBarrier() error {
-	barrier := b.raft.Barrier(0)
+func (r *Raft) waitForBarrier() error {
+	barrier := r.raft.Barrier(0)
 	if err := barrier.Error(); err != nil {
-		b.logger.Error("failed to wait for barrier", jocko.Error("error", err))
+		r.logger.Error("failed to wait for barrier", log.Error("error", err))
 		return err
 	}
 	return nil
 }
 
-// addPeer of given address to raft
-func (b *Raft) addPeer(id int32, addr string, voter bool) error {
-	if (!voter) {
-		panic("non voter not supported yet")
-	}
-	return b.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 0).Error()
+// addVoter of given address to raft
+func (r *Raft) addVoter(id int32, addr string) error {
+	return r.raft.AddVoter(raft.ServerID(id), raft.ServerAddress(addr), 0, 0).Error()
 }
 
-// removePeer of given address from raft
-func (b *Raft) removePeer(id int32, addr string) error {
-	return b.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
+func (r *Raft) addNonVoter(id int32, addr string) error {
+	panic("not supported")
+}
+
+// removeServer of given address from raft
+func (r *Raft) removeServer(id int32, addr string) error {
+	return r.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
 }
 
 // leave is used to prepare for a graceful shutdown of the server
-func (b *Raft) leave() error {
-	b.logger.Info("preparing to leave raft peers")
+func (r *Raft) leave() error {
+	r.logger.Info("leaving raft peers")
 
 	// TODO: handle case if we're the controller/leader
 
@@ -163,22 +178,22 @@ func (b *Raft) leave() error {
 }
 
 // Shutdown raft agent
-func (b *Raft) Shutdown() error {
-	close(b.shutdownCh)
+func (r *Raft) Shutdown() error {
+	close(r.shutdownCh)
 
-	if err := b.leave(); err != nil {
+	if err := r.leave(); err != nil {
 		return err
 	}
 
-	if err := b.transport.Close(); err != nil {
+	if err := r.transport.Close(); err != nil {
 		return err
 	}
-	future := b.raft.Shutdown()
+	future := r.raft.Shutdown()
 	if err := future.Error(); err != nil {
-		b.logger.Error("failed to shutdown raft", jocko.Error("error", err))
+		r.logger.Error("failed to shutdown raft", log.Error("error", err))
 		return err
 	}
-	if err := b.store.Close(); err != nil {
+	if err := r.store.Close(); err != nil {
 		return err
 	}
 	return nil

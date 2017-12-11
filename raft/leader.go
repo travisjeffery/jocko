@@ -5,25 +5,28 @@ import (
 	"time"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
 // leader in the Raft cluster.
-func (b *Raft) monitorLeadership(notifyCh <-chan bool, serfEventCh <-chan *jocko.ClusterMember) {
+func (r *Raft) monitorLeadership(notifyCh <-chan bool, serfEventCh <-chan *jocko.ClusterMember) {
 	var stopCh chan struct{}
 	for {
 		select {
 		case isLeader := <-notifyCh:
 			if isLeader {
 				stopCh = make(chan struct{})
-				go b.leaderLoop(stopCh, serfEventCh)
-				b.logger.Info("cluster leadership acquired")
+				go r.leaderLoop(stopCh, serfEventCh)
+				r.logger.Info("cluster leadership acquired")
+				// r.eventCh <- jocko.RaftEvent{Op: "acquired-leadership"}
 			} else if stopCh != nil {
 				close(stopCh)
 				stopCh = nil
-				b.logger.Info("cluster leadership lost")
+				r.logger.Info("cluster leadership lost")
+				// r.eventCh <- jocko.RaftEvent{Op: "lost-leadership"}
 			}
-		case <-b.shutdownCh:
+		case <-r.shutdownCh:
 			return
 		}
 	}
@@ -31,35 +34,35 @@ func (b *Raft) monitorLeadership(notifyCh <-chan bool, serfEventCh <-chan *jocko
 
 // revokeLeadership is invoked once we step down as leader.
 // This is used to cleanup any state that may be specific to the leader.
-func (b *Raft) revokeLeadership() error {
+func (r *Raft) revokeLeadership() error {
 	return nil
 }
 
 // leaderLoop is ran when this raft instance is the leader of the cluster and is used to
 // perform cluster leadership duties.
-func (b *Raft) leaderLoop(stopCh chan struct{}, serfEventCh <-chan *jocko.ClusterMember) {
-	defer b.revokeLeadership()
+func (r *Raft) leaderLoop(stopCh chan struct{}, serfEventCh <-chan *jocko.ClusterMember) {
+	defer r.revokeLeadership()
 	var reconcileCh <-chan *jocko.ClusterMember
 	establishedLeader := false
 
 RECONCILE:
 	reconcileCh = nil
-	interval := time.After(b.reconcileInterval)
+	interval := time.After(r.reconcileInterval)
 
-	if err := b.waitForBarrier(); err != nil {
+	if err := r.waitForBarrier(); err != nil {
 		goto WAIT
 	}
 
 	if !establishedLeader {
-		if err := b.establishLeadership(stopCh); err != nil {
-			b.logger.Error("failed to establish leadership", jocko.Error("error", err))
+		if err := r.establishLeadership(); err != nil {
+			r.logger.Error("failed to establish leadership", log.Error("error", err))
 			goto WAIT
 		}
 		establishedLeader = true
 	}
 
-	if err := b.reconcile(); err != nil {
-		b.logger.Error("failed to reconcile", jocko.Error("err", err))
+	if err := r.reconcile(); err != nil {
+		r.logger.Error("failed to reconcile", log.Error("err", err))
 		goto WAIT
 	}
 
@@ -70,51 +73,63 @@ WAIT:
 		select {
 		case <-stopCh:
 			return
-		case <-b.shutdownCh:
+		case <-r.shutdownCh:
 			return
 		case <-interval:
 			goto RECONCILE
 		case member := <-reconcileCh:
-			if b.IsLeader() {
-				b.reconcileMember(member)
+			if r.IsLeader() {
+				r.reconcileMember(member)
 			}
 		}
 	}
 }
 
-func (b *Raft) establishLeadership(stopCh chan struct{}) error {
+// establishLeadership is invoked once this raft becomes the leader.
+// TODO: We need to invoke an initial barrier used to ensure any
+// previously inflight transactions have been committed and that our
+// state is up-to-date.
+func (r *Raft) establishLeadership() error {
+	r.logger.Debug("establish leadership")
 	// start monitoring other brokers
-	// b.periodicDispatcher.SetEnabled(true)
-	// b.periodicDispatcher.Start()
 	return nil
 }
 
-func (b *Raft) reconcile() error {
-	members := b.serf.Cluster()
+// reconcile is used to reconcile the differences between Serf membership and
+// what is reflected in our strongly consistent store. Mainly we need to ensure
+// all live nodes are registered, all failed nodes are marked as such, and all
+// left nodes are de-registered.
+func (r *Raft) reconcile() error {
+	members := r.serf.Cluster()
 	for _, member := range members {
-		if err := b.reconcileMember(member); err != nil {
+		if err := r.reconcileMember(member); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
+// reconcileMember is used to do an async reconcile of a single
+// serf member
+func (r *Raft) reconcileMember(member *jocko.ClusterMember) error {
+	r.logger.Debug("reconcile member", log.Int32("member id", member.ID), log.String("member ip", member.IP))
 	// don't reconcile ourself
-	if member.ID == b.serf.ID() {
+	if member.ID == r.serf.ID() {
 		return nil
 	}
 	var err error
 	switch member.Status {
 	case jocko.StatusAlive:
 		addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
-		err = b.addPeer(member.ID, addr.String(), false)
+		r.logger.Debug("adding voter", log.Int32("member id", member.ID), log.String("member ip", member.IP))
+		err = r.addVoter(member.ID, addr.String())
 	case jocko.StatusLeft, jocko.StatusReap:
-		err = b.removePeer(member.ID, member.IP)
+		r.logger.Debug("removing server", log.Int32("member id", member.ID), log.String("member ip", member.IP))
+		err = r.removeServer(member.ID, member.IP)
 	}
 
 	if err != nil {
-		b.logger.Error("failed to reconcile member", jocko.Int32("member id", member.ID), jocko.Error("error", err))
+		r.logger.Error("failed to reconcile member", log.Int32("member id", member.ID), log.Error("error", err))
 		return err
 	}
 	return nil

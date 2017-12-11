@@ -12,9 +12,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/zap"
 )
 
 func TestNew(t *testing.T) {
@@ -69,7 +69,7 @@ func TestNew(t *testing.T) {
 			setFields: func(f *fields) {
 				f.raft = &mock.Raft{
 					AddrFunc: f.raft.AddrFunc,
-					BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+					BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand, controllerCh chan<- struct{}, removedCh chan<- int32) error {
 						return errors.New("mock raft bootstrap error")
 					},
 				}
@@ -116,9 +116,6 @@ func TestNew(t *testing.T) {
 				t.Errorf("got.shutdownCh is nil")
 			} else if got != nil {
 				want.shutdownCh = got.shutdownCh
-			}
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("New() = %v, want %v", got, want)
 			}
 		})
 	}
@@ -483,8 +480,8 @@ func TestBroker_Run(t *testing.T) {
 			name:   "leader and isr leader become leader",
 			fields: newFields(),
 			setFields: func(f *fields) {
-				f.topicMap = map[string][]*jocko.Partition{
-					"the-topic": []*jocko.Partition{{
+				f.topicMap = map[string][]*Partition{
+					"the-topic": []*Partition{{
 						Topic:                   "the-topic",
 						ID:                      1,
 						Replicas:                nil,
@@ -530,8 +527,8 @@ func TestBroker_Run(t *testing.T) {
 			name:   "leader and isr leader become follower",
 			fields: newFields(),
 			setFields: func(f *fields) {
-				f.topicMap = map[string][]*jocko.Partition{
-					"the-topic": []*jocko.Partition{{
+				f.topicMap = map[string][]*Partition{
+					"the-topic": []*Partition{{
 						Topic:                   "the-topic",
 						ID:                      1,
 						Replicas:                nil,
@@ -700,10 +697,10 @@ func TestBroker_Join(t *testing.T) {
 
 func TestBroker_clusterMembers(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -752,10 +749,10 @@ func TestBroker_clusterMembers(t *testing.T) {
 
 func TestBroker_isController(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -774,6 +771,9 @@ func TestBroker_isController(t *testing.T) {
 				raft: &mock.Raft{
 					IsLeaderFunc: func() bool {
 						return true
+					},
+					LeaderIDFunc: func() string {
+						return "localhost:9093"
 					},
 				},
 			},
@@ -803,10 +803,10 @@ func TestBroker_isController(t *testing.T) {
 
 func TestBroker_topicPartitions(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -821,22 +821,22 @@ func TestBroker_topicPartitions(t *testing.T) {
 		name      string
 		fields    fields
 		args      args
-		wantFound []*jocko.Partition
+		wantFound []*Partition
 		wantErr   protocol.Error
 	}{
 		{
 			name: "partitions found",
 			fields: fields{
-				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
+				topicMap: map[string][]*Partition{"topic": []*Partition{{ID: 1}}},
 			},
 			args:      args{topic: "topic"},
-			wantFound: []*jocko.Partition{{ID: 1}},
+			wantFound: []*Partition{{ID: 1}},
 			wantErr:   protocol.ErrNone,
 		},
 		{
 			name: "partitions not found",
 			fields: fields{
-				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
+				topicMap: map[string][]*Partition{"topic": []*Partition{{ID: 1}}},
 			},
 			args:      args{topic: "not_topic"},
 			wantFound: nil,
@@ -870,10 +870,10 @@ func TestBroker_topicPartitions(t *testing.T) {
 
 func TestBroker_topics(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -881,13 +881,13 @@ func TestBroker_topics(t *testing.T) {
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
-	topicMap := map[string][]*jocko.Partition{
-		"topic": []*jocko.Partition{{ID: 1}},
+	topicMap := map[string][]*Partition{
+		"topic": []*Partition{{ID: 1}},
 	}
 	tests := []struct {
 		name   string
 		fields fields
-		want   map[string][]*jocko.Partition
+		want   map[string][]*Partition
 	}{
 		{
 			name: "topic map returned",
@@ -919,9 +919,9 @@ func TestBroker_topics(t *testing.T) {
 
 func TestBroker_partition(t *testing.T) {
 	f := newFields()
-	f.topicMap = map[string][]*jocko.Partition{
-		"the-topic":   []*jocko.Partition{{ID: 1}},
-		"empty-topic": []*jocko.Partition{},
+	f.topicMap = map[string][]*Partition{
+		"the-topic":   []*Partition{{ID: 1}},
+		"empty-topic": []*Partition{},
 	}
 	type args struct {
 		topic     string
@@ -931,7 +931,7 @@ func TestBroker_partition(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
-		want    *jocko.Partition
+		want    *Partition
 		wanterr protocol.Error
 	}{
 		{
@@ -992,10 +992,10 @@ func TestBroker_partition(t *testing.T) {
 
 func TestBroker_createPartition(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1004,9 +1004,12 @@ func TestBroker_createPartition(t *testing.T) {
 		shutdown    bool
 	}
 	type args struct {
-		partition *jocko.Partition
+		partition *Partition
 	}
 	raft := &mock.Raft{
+		LeaderIDFunc: func() string {
+			return "localhost:9093"
+		},
 		ApplyFunc: func(c jocko.RaftCommand) error {
 			if c.Cmd != createPartition {
 				t.Errorf("Broker.createPartition() c.Cmd = %v, want %v", c.Cmd, createPartition)
@@ -1025,7 +1028,7 @@ func TestBroker_createPartition(t *testing.T) {
 			fields: fields{
 				raft: raft,
 			},
-			args:    args{partition: &jocko.Partition{ID: 1}},
+			args:    args{partition: &Partition{ID: 1}},
 			wantErr: false,
 		},
 	}
@@ -1055,10 +1058,10 @@ func TestBroker_createPartition(t *testing.T) {
 
 func TestBroker_clusterMember(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1119,9 +1122,9 @@ func TestBroker_clusterMember(t *testing.T) {
 
 func TestBroker_startReplica(t *testing.T) {
 	type args struct {
-		partition *jocko.Partition
+		partition *Partition
 	}
-	partition := &jocko.Partition{
+	partition := &Partition{
 		Topic:  "the-topic",
 		ID:     1,
 		Leader: 1,
@@ -1142,7 +1145,7 @@ func TestBroker_startReplica(t *testing.T) {
 		{
 			name: "started replica as follower",
 			args: args{
-				partition: &jocko.Partition{
+				partition: &Partition{
 					ID:       1,
 					Topic:    "replica-topic",
 					Replicas: []int32{1},
@@ -1154,7 +1157,7 @@ func TestBroker_startReplica(t *testing.T) {
 		{
 			name: "started replica with existing topic",
 			setFields: func(f *fields) {
-				f.topicMap["existing-topic"] = []*jocko.Partition{
+				f.topicMap["existing-topic"] = []*Partition{
 					{
 						ID:    1,
 						Topic: "existing-topic",
@@ -1162,7 +1165,7 @@ func TestBroker_startReplica(t *testing.T) {
 				}
 			},
 			args: args{
-				partition: &jocko.Partition{ID: 2, Topic: "existing-topic"},
+				partition: &Partition{ID: 2, Topic: "existing-topic"},
 			},
 			want: protocol.ErrNone,
 		},
@@ -1172,7 +1175,7 @@ func TestBroker_startReplica(t *testing.T) {
 		// 	name:   "started replica with dupe partition",
 		// 	fields: f,
 		// 	args: args{
-		// 		partition: &jocko.Partition{ID: 1, Topic: "existing-topic"},
+		// 		partition: &Partition{ID: 1, Topic: "existing-topic"},
 		// 	},
 		// 	want: protocol.ErrNone,
 		// },
@@ -1182,7 +1185,7 @@ func TestBroker_startReplica(t *testing.T) {
 				f.logDir = ""
 			},
 			args: args{
-				partition: &jocko.Partition{Leader: 1},
+				partition: &Partition{Leader: 1},
 			},
 			want: protocol.ErrUnknown.WithErr(errors.New("mkdir failed: mkdir /0: permission denied")),
 		},
@@ -1212,7 +1215,7 @@ func TestBroker_startReplica(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.args.partition) {
 				t.Errorf("Broker.partition() = %v, want %v", got, partition)
 			}
-			parts := map[int32]*jocko.Partition{}
+			parts := map[int32]*Partition{}
 			for _, p := range b.topicMap[tt.args.partition.Topic] {
 				if _, ok := parts[p.ID]; ok {
 					t.Errorf("Broker.topicPartition contains dupes, dupe %v", p)
@@ -1228,10 +1231,10 @@ func TestBroker_startReplica(t *testing.T) {
 
 func TestBroker_createTopic(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1250,7 +1253,7 @@ func TestBroker_createTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1275,10 +1278,10 @@ func TestBroker_createTopic(t *testing.T) {
 
 func TestBroker_deleteTopic(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1295,7 +1298,7 @@ func TestBroker_deleteTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1320,10 +1323,10 @@ func TestBroker_deleteTopic(t *testing.T) {
 
 func TestBroker_deletePartitions(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1332,7 +1335,7 @@ func TestBroker_deletePartitions(t *testing.T) {
 		shutdown    bool
 	}
 	type args struct {
-		tp *jocko.Partition
+		tp *Partition
 	}
 	tests := []struct {
 		name    string
@@ -1340,7 +1343,7 @@ func TestBroker_deletePartitions(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1396,10 +1399,10 @@ func TestBroker_Shutdown(t *testing.T) {
 
 func TestBroker_becomeFollower(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1418,7 +1421,7 @@ func TestBroker_becomeFollower(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1443,10 +1446,10 @@ func TestBroker_becomeFollower(t *testing.T) {
 
 func TestBroker_becomeLeader(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
+		topicMap    map[string][]*Partition
+		replicators map[*Partition]*Replicator
 		brokerAddr  string
 		logDir      string
 		raft        jocko.Raft
@@ -1465,7 +1468,7 @@ func TestBroker_becomeLeader(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1498,7 +1501,7 @@ func Test_contains(t *testing.T) {
 		args args
 		want bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1514,9 +1517,9 @@ type fields struct {
 	serf         *mock.Serf
 	raft         *mock.Raft
 	raftCommands chan jocko.RaftCommand
-	logger       jocko.Logger
-	topicMap     map[string][]*jocko.Partition
-	replicators  map[*jocko.Partition]*Replicator
+	logger       log.Logger
+	topicMap     map[string][]*Partition
+	replicators  map[*Partition]*Replicator
 	brokerAddr   string
 	loner        bool
 	logDir       string
@@ -1552,7 +1555,7 @@ func newFields() fields {
 		AddrFunc: func() string {
 			return "localhost:9093"
 		},
-		BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
+		BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand, controllerCh chan<- struct{}, removedCh chan<- int32) error {
 			if s == nil {
 				return errors.New("jocko.Serf is nil")
 			}
@@ -1567,6 +1570,9 @@ func newFields() fields {
 		IsLeaderFunc: func() bool {
 			return true
 		},
+		LeaderIDFunc: func() string {
+			return "localhost:9093"
+		},
 		ApplyFunc: func(jocko.RaftCommand) error {
 			return nil
 		},
@@ -1575,10 +1581,10 @@ func newFields() fields {
 		},
 	}
 	return fields{
-		topicMap:     make(map[string][]*jocko.Partition),
+		topicMap:     make(map[string][]*Partition),
 		raftCommands: make(chan jocko.RaftCommand),
-		replicators:  make(map[*jocko.Partition]*Replicator),
-		logger:       zap.New(),
+		replicators:  make(map[*Partition]*Replicator),
+		logger:       log.New(),
 		logDir:       "/tmp/jocko",
 		loner:        true,
 		serf:         serf,

@@ -3,8 +3,9 @@
 package mock
 
 import (
-	"github.com/travisjeffery/jocko"
 	"sync"
+
+	"github.com/travisjeffery/jocko"
 )
 
 var (
@@ -28,7 +29,7 @@ var (
 //             ApplyFunc: func(cmd jocko.RaftCommand) error {
 // 	               panic("TODO: mock out the Apply method")
 //             },
-//             BootstrapFunc: func(serf jocko.Serf,serfEventCh <-chan *jocko.ClusterMember,commandCh chan<- jocko.RaftCommand) error {
+//             BootstrapFunc: func(serf jocko.Serf,serfEventCh <-chan *jocko.ClusterMember,commandCh chan<- jocko.RaftCommand,eventCh chan<- jocko.RaftEvent) error {
 // 	               panic("TODO: mock out the Bootstrap method")
 //             },
 //             IsLeaderFunc: func() bool {
@@ -54,7 +55,7 @@ type Raft struct {
 	ApplyFunc func(cmd jocko.RaftCommand) error
 
 	// BootstrapFunc mocks the Bootstrap method.
-	BootstrapFunc func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error
+	BootstrapFunc func(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand, eventCh chan<- jocko.RaftEvent) error
 
 	// IsLeaderFunc mocks the IsLeader method.
 	IsLeaderFunc func() bool
@@ -83,6 +84,8 @@ type Raft struct {
 			SerfEventCh <-chan *jocko.ClusterMember
 			// CommandCh is the commandCh argument value.
 			CommandCh chan<- jocko.RaftCommand
+			// EventCh is the eventCh argument value.
+			EventCh chan<- jocko.RaftEvent
 		}
 		// IsLeader holds details about calls to the IsLeader method.
 		IsLeader []struct {
@@ -190,7 +193,7 @@ func (mock *Raft) ApplyCalls() []struct {
 }
 
 // Bootstrap calls BootstrapFunc.
-func (mock *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) error {
+func (mock *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand, eventCh chan<- jocko.RaftEvent) error {
 	if mock.BootstrapFunc == nil {
 		panic("moq: Raft.BootstrapFunc is nil but Raft.Bootstrap was just called")
 	}
@@ -198,15 +201,17 @@ func (mock *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMe
 		Serf        jocko.Serf
 		SerfEventCh <-chan *jocko.ClusterMember
 		CommandCh   chan<- jocko.RaftCommand
+		EventCh     chan<- jocko.RaftEvent
 	}{
 		Serf:        serf,
 		SerfEventCh: serfEventCh,
 		CommandCh:   commandCh,
+		EventCh:     eventCh,
 	}
 	lockRaftBootstrap.Lock()
 	mock.calls.Bootstrap = append(mock.calls.Bootstrap, callInfo)
 	lockRaftBootstrap.Unlock()
-	return mock.BootstrapFunc(serf, serfEventCh, commandCh)
+	return mock.BootstrapFunc(serf, serfEventCh, commandCh, eventCh)
 }
 
 // BootstrapCalled returns true if at least one call was made to Bootstrap.
@@ -223,11 +228,13 @@ func (mock *Raft) BootstrapCalls() []struct {
 	Serf        jocko.Serf
 	SerfEventCh <-chan *jocko.ClusterMember
 	CommandCh   chan<- jocko.RaftCommand
+	EventCh     chan<- jocko.RaftEvent
 } {
 	var calls []struct {
 		Serf        jocko.Serf
 		SerfEventCh <-chan *jocko.ClusterMember
 		CommandCh   chan<- jocko.RaftCommand
+		EventCh     chan<- jocko.RaftEvent
 	}
 	lockRaftBootstrap.RLock()
 	calls = mock.calls.Bootstrap

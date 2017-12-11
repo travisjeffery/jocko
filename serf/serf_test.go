@@ -7,18 +7,18 @@ import (
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
-	"github.com/travisjeffery/jocko/zap"
 )
 
 var (
-	logger   jocko.Logger
+	logger   log.Logger
 	serfPort int
 )
 
 func init() {
-	logger = zap.New()
+	logger = log.New()
 	serfPort = 7946
 }
 

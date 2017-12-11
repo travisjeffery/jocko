@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	lockBrokerID       sync.RWMutex
 	lockBrokerJoin     sync.RWMutex
 	lockBrokerRun      sync.RWMutex
 	lockBrokerShutdown sync.RWMutex
@@ -21,6 +22,9 @@ var (
 //
 //         // make and configure a mocked Broker
 //         mockedBroker := &Broker{
+//             IDFunc: func() int32 {
+// 	               panic("TODO: mock out the ID method")
+//             },
 //             JoinFunc: func(addr ...string) protocol.Error {
 // 	               panic("TODO: mock out the Join method")
 //             },
@@ -37,6 +41,9 @@ var (
 //
 //     }
 type Broker struct {
+	// IDFunc mocks the ID method.
+	IDFunc func() int32
+
 	// JoinFunc mocks the Join method.
 	JoinFunc func(addr ...string) protocol.Error
 
@@ -48,6 +55,9 @@ type Broker struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// ID holds details about calls to the ID method.
+		ID []struct {
+		}
 		// Join holds details about calls to the Join method.
 		Join []struct {
 			// Addr is the addr argument value.
@@ -70,6 +80,9 @@ type Broker struct {
 
 // Reset resets the calls made to the mocked APIs.
 func (mock *Broker) Reset() {
+	lockBrokerID.Lock()
+	mock.calls.ID = nil
+	lockBrokerID.Unlock()
 	lockBrokerJoin.Lock()
 	mock.calls.Join = nil
 	lockBrokerJoin.Unlock()
@@ -79,6 +92,39 @@ func (mock *Broker) Reset() {
 	lockBrokerShutdown.Lock()
 	mock.calls.Shutdown = nil
 	lockBrokerShutdown.Unlock()
+}
+
+// ID calls IDFunc.
+func (mock *Broker) ID() int32 {
+	if mock.IDFunc == nil {
+		panic("moq: Broker.IDFunc is nil but Broker.ID was just called")
+	}
+	callInfo := struct {
+	}{}
+	lockBrokerID.Lock()
+	mock.calls.ID = append(mock.calls.ID, callInfo)
+	lockBrokerID.Unlock()
+	return mock.IDFunc()
+}
+
+// IDCalled returns true if at least one call was made to ID.
+func (mock *Broker) IDCalled() bool {
+	lockBrokerID.RLock()
+	defer lockBrokerID.RUnlock()
+	return len(mock.calls.ID) > 0
+}
+
+// IDCalls gets all the calls that were made to ID.
+// Check the length with:
+//     len(mockedBroker.IDCalls())
+func (mock *Broker) IDCalls() []struct {
+} {
+	var calls []struct {
+	}
+	lockBrokerID.RLock()
+	calls = mock.calls.ID
+	lockBrokerID.RUnlock()
+	return calls
 }
 
 // Join calls JoinFunc.
