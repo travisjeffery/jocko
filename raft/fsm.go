@@ -6,10 +6,11 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 type fsm struct {
-	logger    jocko.Logger
+	logger    log.Logger
 	commandCh chan<- jocko.RaftCommand
 }
 

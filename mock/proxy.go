@@ -44,6 +44,6 @@ func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequ
 	return response, nil
 }
 
-func (p *Client) CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error) {
+func (p *Client) CreateTopics(clientID string, createRequests *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
 	return nil, nil
 }

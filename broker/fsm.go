@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
@@ -45,19 +46,19 @@ func (b *Broker) handleRaftCommmands(commandCh <-chan jocko.RaftCommand) {
 func (b *Broker) apply(c jocko.RaftCommand) {
 	defer func() {
 		if r := recover(); r != nil {
-			b.logger.Info("error while applying raft command", jocko.Any("recovered", r))
+			b.logger.Info("error while applying raft command", log.Any("recovered", r))
 			b.Shutdown()
 		}
 	}()
 
-	b.logger.Debug("broker/apply", jocko.Int("cmd", int(c.Cmd)))
+	b.logger.Debug("apply", log.Int("cmd", int(c.Cmd)))
 	switch c.Cmd {
 	case nop:
 		return
 	case createPartition:
-		p := new(jocko.Partition)
+		p := new(Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			b.logger.Error("received malformed raft command", jocko.Error("error", err))
+			b.logger.Error("received malformed raft command", log.Error("error", err))
 			// TODO: should panic?
 			return
 		}
@@ -65,9 +66,9 @@ func (b *Broker) apply(c jocko.RaftCommand) {
 			panic(err)
 		}
 	case deleteTopic:
-		p := new(jocko.Partition)
+		p := new(Partition)
 		if err := unmarshalData(c.Data, p); err != nil {
-			b.logger.Error("received malformed raft command", jocko.Error("error", err))
+			b.logger.Error("received malformed raft command", log.Error("error", err))
 			// TODO: should panic?
 			return
 		}

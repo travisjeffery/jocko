@@ -15,6 +15,9 @@ import (
 
 func TestJoin(t *testing.T) {
 	b := &mock.Broker{
+		IDFunc: func() int32 {
+			return 0
+		},
 		JoinFunc: func(addr ...string) protocol.Error {
 			return protocol.ErrNone
 		},

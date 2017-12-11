@@ -3,15 +3,18 @@ package broker
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"path"
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
 )
@@ -24,11 +27,12 @@ var (
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	sync.RWMutex
-	logger jocko.Logger
+	logger log.Logger
 
 	id          int32
-	topicMap    map[string][]*jocko.Partition
-	replicators map[*jocko.Partition]*Replicator
+	topicMap    map[string][]*Partition
+	replicators map[*Partition]*Replicator
+	controller  bool
 	brokerAddr  string
 	logDir      string
 	// loner should only be used for tests. It makes it so cluster operations
@@ -45,11 +49,11 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(id int32, opts ...BrokerFn) (*Broker, error) {
+func New(conf *jocko.Config) (*Broker, error) {
 	b := &Broker{
 		id:          id,
-		topicMap:    make(map[string][]*jocko.Partition),
-		replicators: make(map[*jocko.Partition]*Replicator),
+		topicMap:    make(map[string][]*Partition),
+		replicators: make(map[*Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
 	}
 
@@ -60,6 +64,8 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 	if b.logger == nil {
 		return nil, ErrInvalidArgument
 	}
+
+	b.logger = b.logger.With(log.String("ctx", "broker"), log.Int32("id", id), log.String("addr", b.brokerAddr))
 
 	if b.raftCommands == nil {
 		b.raftCommands = make(chan jocko.RaftCommand, 16)
@@ -83,20 +89,26 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 
 	reconcileCh := make(chan *jocko.ClusterMember, 32)
 	if err := b.serf.Bootstrap(conn, reconcileCh); err != nil {
-		b.logger.Error("failed to start serf", jocko.Error("error", err))
+		b.logger.Error("failed to start serf", log.Error("error", err))
 		return nil, err
 	}
 
-	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands); err != nil {
+	raftEvents := make(chan jocko.RaftEvent)
+	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands, raftEvents); err != nil {
 		return nil, err
 	}
 
 	go b.handleRaftCommmands(b.raftCommands)
+	go b.handleRaftEvents(raftEvents)
 
 	return b, nil
 }
 
 // jocko.Broker API.
+
+func (b *Broker) ID() int32 {
+	return b.id
+}
 
 // Run starts a loop to handle requests send back responses.
 func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, responsec chan<- jocko.Response) {
@@ -109,6 +121,8 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, respons
 		case request := <-requestc:
 			conn = request.Conn
 			header = request.Header
+
+			b.logger.Debug("request", log.Bool("controller", b.controller), log.Any("request", request))
 
 			switch req := request.Request.(type) {
 			case *protocol.APIVersionsRequest:
@@ -176,9 +190,28 @@ func (b *Broker) handleAPIVersions(header *protocol.RequestHeader, req *protocol
 func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
+	fmt.Println("raft leader:", b.raft.LeaderID())
+	spew.Dump("broker header:", header)
+	spew.Dump("broker reqs:", reqs)
+	spew.Dump(reqs)
+	fmt.Println("cluster member:", b.clusterMembers())
 	isController := b.isController()
+	if !isController {
+		for _, cl := range b.clusterMembers() {
+			if b.raft.LeaderID() == fmt.Sprintf("%s:%d", cl.Addr().IP.String(), cl.RaftPort) {
+				conn := b.clusterMember(cl.ID)
+				client := server.NewClient(conn)
+				resp, err := client.CreateTopics(fmt.Sprintf("broker-%d", b.id), reqs)
+				if err != nil {
+					panic(err)
+				}
+				return resp
+			}
+		}
+	}
 	for i, req := range reqs.Requests {
 		if !isController {
+			b.logger.Debug("attempt to create topic on non-controller", log.String("topic", req.Topic), log.Bool("controller", b.controller))
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrNotController.Code(),
@@ -206,6 +239,7 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			}
 			continue
 		}
+		b.logger.Debug("creating topic", log.Bool("controller", b.controller), log.String("topic", req.Topic), log.Int32("partitions", req.NumPartitions), log.Int16("replication factor", req.ReplicationFactor))
 		err := b.createTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
 		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 			Topic:     req.Topic,
@@ -260,7 +294,7 @@ func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protoco
 			continue
 		}
 		if partition == nil {
-			partition = &jocko.Partition{
+			partition = &Partition{
 				Topic:                   p.Topic,
 				ID:                      p.Partition,
 				Replicas:                p.Replicas,
@@ -329,7 +363,7 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 			presp := &protocol.ProducePartitionResponse{}
 			partition, err := b.partition(td.Topic, p.Partition)
 			if err != protocol.ErrNone {
-				b.logger.Error("produce to partition failed", jocko.Error("error", err))
+				b.logger.Error("produce to partition failed", log.Error("error", err))
 				presp.Partition = p.Partition
 				presp.ErrorCode = err.Code()
 				presps[j] = presp
@@ -337,7 +371,7 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 			}
 			offset, appendErr := partition.Append(p.RecordSet)
 			if appendErr != nil {
-				b.logger.Error("commitlog/append failed", jocko.Error("error", err))
+				b.logger.Error("commitlog/append failed", log.Error("error", err))
 				presp.ErrorCode = protocol.ErrUnknown.Code()
 				presps[j] = presp
 				continue
@@ -365,7 +399,7 @@ func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.Me
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
-	topicMetadataFn := func(topic string, partitions []*jocko.Partition, err protocol.Error) *protocol.TopicMetadata {
+	topicMetadataFn := func(topic string, partitions []*Partition, err protocol.Error) *protocol.TopicMetadata {
 		if err != protocol.ErrNone {
 			return &protocol.TopicMetadata{
 				TopicErrorCode: err.Code(),
@@ -491,7 +525,7 @@ func (b *Broker) isController() bool {
 }
 
 // topicPartitions is used to get the partitions for the given topic.
-func (b *Broker) topicPartitions(topic string) (found []*jocko.Partition, err protocol.Error) {
+func (b *Broker) topicPartitions(topic string) (found []*Partition, err protocol.Error) {
 	b.RLock()
 	defer b.RUnlock()
 	if p, ok := b.topicMap[topic]; ok {
@@ -501,13 +535,13 @@ func (b *Broker) topicPartitions(topic string) (found []*jocko.Partition, err pr
 	}
 }
 
-func (b *Broker) topics() map[string][]*jocko.Partition {
+func (b *Broker) topics() map[string][]*Partition {
 	b.RLock()
 	defer b.RUnlock()
 	return b.topicMap
 }
 
-func (b *Broker) partition(topic string, partition int32) (*jocko.Partition, protocol.Error) {
+func (b *Broker) partition(topic string, partition int32) (*Partition, protocol.Error) {
 	found, err := b.topicPartitions(topic)
 	if err != protocol.ErrNone {
 		return nil, err
@@ -521,7 +555,7 @@ func (b *Broker) partition(topic string, partition int32) (*jocko.Partition, pro
 }
 
 // createPartition is used to add a partition across the cluster.
-func (b *Broker) createPartition(partition *jocko.Partition) error {
+func (b *Broker) createPartition(partition *Partition) error {
 	return b.raftApply(createPartition, partition)
 }
 
@@ -531,13 +565,14 @@ func (b *Broker) clusterMember(id int32) *jocko.ClusterMember {
 }
 
 // startReplica is used to start a replica on this, including creating its commit log.
-func (b *Broker) startReplica(partition *jocko.Partition) protocol.Error {
+func (b *Broker) startReplica(partition *Partition) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
+	b.logger.Debug("start replica", log.Bool("controller", b.controller), log.Int32("partition id", partition.ID))
 	if v, ok := b.topicMap[partition.Topic]; ok {
 		b.topicMap[partition.Topic] = append(v, partition)
 	} else {
-		b.topicMap[partition.Topic] = []*jocko.Partition{partition}
+		b.topicMap[partition.Topic] = []*Partition{partition}
 	}
 	isLeader := partition.Leader == b.id
 	isFollower := false
@@ -576,10 +611,10 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 	return protocol.ErrNone
 }
 
-func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replicationFactor int16) []*jocko.Partition {
+func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replicationFactor int16) []*Partition {
 	mems := b.clusterMembers()
 	memCount := int32(len(mems))
-	var partitions []*jocko.Partition
+	var partitions []*Partition
 
 	for i := int32(0); i < partitionsCount; i++ {
 		leader := mems[i%memCount].ID
@@ -592,7 +627,7 @@ func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replica
 				replica = -1
 			}
 		}
-		partition := &jocko.Partition{
+		partition := &Partition{
 			Topic:           topic,
 			ID:              i,
 			Leader:          leader,
@@ -607,14 +642,14 @@ func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replica
 
 // deleteTopic is used to delete the topic across the cluster.
 func (b *Broker) deleteTopic(topic string) protocol.Error {
-	if err := b.raftApply(deleteTopic, &jocko.Partition{Topic: topic}); err != nil {
+	if err := b.raftApply(deleteTopic, &Partition{Topic: topic}); err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
 	return protocol.ErrNone
 }
 
 // deletePartitions is used to delete the topic from this.
-func (b *Broker) deletePartitions(tp *jocko.Partition) error {
+func (b *Broker) deletePartitions(tp *Partition) error {
 	partitions, err := b.topicPartitions(tp.Topic)
 	if err != protocol.ErrNone {
 		return err
@@ -644,14 +679,14 @@ func (b *Broker) Shutdown() error {
 
 	if b.serf != nil {
 		if err := b.serf.Shutdown(); err != nil {
-			b.logger.Error("failed to shut down serf", jocko.Error("error", err))
+			b.logger.Error("failed to shut down serf", log.Error("error", err))
 			return err
 		}
 	}
 
 	if b.raft != nil {
 		if err := b.raft.Shutdown(); err != nil {
-			b.logger.Error("failed to shut down raft", jocko.Error("error", err))
+			b.logger.Error("failed to shut down raft", log.Error("error", err))
 			return err
 		}
 	}
@@ -681,7 +716,7 @@ func (b *Broker) becomeFollower(topic string, partitionID int32, partitionState 
 	}
 	p.Leader = partitionState.Leader
 	p.Conn = b.clusterMember(p.LeaderID())
-	r := NewReplicator(p, b.id,
+	r := NewReplicator(b.logger, p, b.id,
 		ReplicatorLeader(server.NewClient(p.Conn)))
 	b.replicators[p] = r
 	if !b.loner {
@@ -716,4 +751,24 @@ func contains(rs []int32, r int32) bool {
 		}
 	}
 	return false
+}
+
+func (b *Broker) handleRaftEvents(eventCh chan jocko.RaftEvent) {
+	for {
+		select {
+		case <-b.shutdownCh:
+			return
+		case e := <-eventCh:
+			switch e.Op {
+			case "acquired-leadership":
+				b.Lock()
+				b.controller = true
+				b.Unlock()
+			case "lost-leadership":
+				b.Lock()
+				b.controller = false
+				b.Unlock()
+			}
+		}
+	}
 }

@@ -30,16 +30,16 @@ type Serf struct {
 
 // New Serf object
 func New(opts ...OptionFn) (*Serf, error) {
-	b := &Serf{
+	s := &Serf{
 		peers:      make(map[int32]*jocko.ClusterMember),
 		shutdownCh: make(chan struct{}),
 	}
 
 	for _, opt := range opts {
-		opt(b)
+		opt(s)
 	}
 
-	return b, nil
+	return s, nil
 }
 
 // Bootstrap saves the node metadata and starts the serf agent
@@ -78,6 +78,9 @@ func (s *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 
 	// ingest events for serf
 	go s.serfEventHandler(eventCh)
+
+	s.logger = s.logger.With(jocko.String("ctx", "serf"), jocko.Int32("id", s.nodeID), jocko.String("addr", s.addr))
+	s.logger.Info("bootstraped serf")
 
 	return nil
 }

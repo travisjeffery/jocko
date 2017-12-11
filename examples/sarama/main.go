@@ -159,12 +159,14 @@ func setup() func() {
 	}
 
 	client := server.NewClient(conn)
-	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
-		Topic:             topic,
-		NumPartitions:     numPartitions,
-		ReplicationFactor: 1,
-		ReplicaAssignment: nil,
-		Configs:           nil,
+	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
+		Requests: []*protocol.CreateTopicRequest{{
+			Topic:             topic,
+			NumPartitions:     numPartitions,
+			ReplicationFactor: 1,
+			ReplicaAssignment: nil,
+			Configs:           nil,
+		}},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed with request to broker: %v\n", err)
