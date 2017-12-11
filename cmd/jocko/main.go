@@ -1,150 +1,152 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"os"
+	"time"
 
-	"github.com/mitchellh/cli"
+	gracefully "github.com/tj/go-gracefully"
+	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/log"
+	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/raft"
+	"github.com/travisjeffery/jocko/serf"
+	"github.com/travisjeffery/jocko/server"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
-// cli       = kingpin.New("jocko", "Jocko, Go implementation of Kafka")
-// debugLogs = cli.Flag("debug", "Enable debug logs").Default("false").Bool()
-// conf      = jocko.RuntimeConfig{}
+	cli       = kingpin.New("jocko", "JOCKO -- Kafka in Go and more.")
+	debugLogs = cli.Flag("debug", "Enable debug logs").Default("false").Bool()
+	logger    = log.New()
 
-// brokerCmd            = cli.Command("broker", "Run a Jocko broker")
-// brokerCmdRaftAddr    = brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").String()
-// brokerCmdLogDir      = brokerCmd.Flag("log-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").String()
-// brokerCmdBrokerAddr  = brokerCmd.Flag("broker-addr", "Address for broker to bind on").Default("0.0.0.0:9092").String()
-// brokerCmdSerfAddr    = brokerCmd.Flag("serf-addr", "Address for Serf to bind on").Default("0.0.0.0:9094").String()
-// brokerCmdHTTPAddr    = brokerCmd.Flag("http-addr", "Address for HTTP handlers to serve metrics on, like Prometheus").Default(":9095").String()
-// brokerCmdSerfMembers = brokerCmd.Flag("serf-members", "List of existing Serf members").Strings()
-// brokerCmdBrokerID    = brokerCmd.Flag("id", "Broker ID").Int32()
+	brokerCmd       = cli.Command("broker", "Run a Jocko broker")
+	brokerCmdConfig = newBrokerOptions(brokerCmd)
 
-// topicCmd                     = cli.Command("topic", "Manage topics")
-// createTopicCmd               = topicCmd.Command("create", "Create a topic")
-// createTopicBrokerAddr        = createTopicCmd.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").String()
-// createTopicTopic             = createTopicCmd.Flag("topic", "Name of topic to create").String()
-// createTopicPartitions        = createTopicCmd.Flag("partitions", "Number of partitions").Default("1").Int32()
-// createTopicReplicationFactor = createTopicCmd.Flag("replication-factor", "Replication factor").Default("1").Int16()
+	topicCmd          = cli.Command("topic", "Manage topics")
+	createTopicCmd    = topicCmd.Command("create", "Create a topic")
+	createTopicConfig = newCreateTopicFlags(createTopicCmd)
 )
 
 func main() {
-	c := cli.NewCLI("jocko", "0.0.1")
-	c.Args = os.Args[1:]
-	c.Commands = map[string]cli.CommandFactory{
-		"topic":        func() (cli.Command, error) { return &TopicCommand{}, nil },
-		"topic create": func() (cli.Command, error) { return &TopicCreateCommand{}, nil },
+	cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
+
+	switch cmd {
+	case brokerCmd.FullCommand():
+		os.Exit(cmdBrokers())
+	case createTopicCmd.FullCommand():
+		os.Exit(cmdCreateTopic())
 	}
-
-	// cmd := kingpin.MustParse(cli.Parse(os.Args[1:]))
-
-	// var logger jocko.Logger = log.New()
-
-	// switch cmd {
-	// case brokerCmd.FullCommand():
-	// 	os.Exit(cmdBrokers(logger))
-	// case createTopicCmd.FullCommand():
-	// 	os.Exit(cmdCreateTopic(logger))
-	// }
 }
 
-// func cmdBrokers(logger jocko.Logger) int {
-// 	conf := &jocko.RuntimeConfig{
-// 		SerfBindAddrLAN: *brokerCmdSerfAddr,
-// 	}
-// 	serf, err := serf.New(
-// 		serf.Logger(logger),
-// 		serf.Addr(*brokerCmdSerfAddr),
-// 		serf.InitMembers(*brokerCmdSerfMembers),
-// 	)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error starting serf: %v\n", err)
-// 		os.Exit(1)
-// 	}
+func newBrokerOptions(cmd *kingpin.CmdClause) jocko.Config {
+	conf := jocko.Config{}
+	brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").StringVar(&conf.RaftBindAddr)
+	brokerCmd.Flag("data-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").StringVar(&conf.DataDir)
+	brokerCmd.Flag("broker-addr", "Address for broker to bind on").Default("0.0.0.0:9092").StringVar(&conf.BindAddrLAN)
+	brokerCmd.Flag("serf-addr", "Address for Serf to bind on").Default("0.0.0.0:9094").StringVar(&conf.SerfBindAddrLAN)
+	brokerCmd.Flag("http-addr", "Address for HTTP handlers to serve Prometheus metrics on").Default(":9095").StringVar(&conf.HTTPBindAddr)
+	brokerCmd.Flag("join", "Address of an broker serf to join at start time. Can be specified multiple times.").StringsVar(&conf.StartJoinAddrsLAN)
+	brokerCmd.Flag("join-wan", "Address of an broker serf to join -wan at start time. Can be specified multiple times.").StringsVar(&conf.StartJoinAddrsWAN)
+	brokerCmd.Flag("id", "Broker ID").Int32Var(&conf.ID)
+	return conf
+}
 
-// 	raft, err := raft.New(
-// 		raft.Logger(logger),
-// 		raft.DataDir(*brokerCmdLogDir),
-// 		raft.Addr(*brokerCmdRaftAddr),
-// 	)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error starting raft: %v\n", err)
-// 		os.Exit(1)
-// 	}
+type createTopicOptions struct {
+	Addr              string
+	Topic             string
+	Partitions        int32
+	ReplicationFactor int16
+}
 
-// 	store, err := broker.New(*brokerCmdBrokerID,
-// 		broker.LogDir(*brokerCmdLogDir),
-// 		broker.Logger(logger),
-// 		broker.Addr(*brokerCmdBrokerAddr),
-// 		broker.Serf(serf),
-// 		broker.Raft(raft),
-// 	)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
-// 		os.Exit(1)
-// 	}
+func newCreateTopicFlags(cmd *kingpin.CmdClause) createTopicOptions {
+	conf := createTopicOptions{}
+	createTopicCmd.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").StringVar(&conf.Addr)
+	createTopicCmd.Flag("topic", "Name of topic to create").StringVar(&conf.Topic)
+	createTopicCmd.Flag("partitions", "Number of partitions").Default("1").Int32Var(&conf.Partitions)
+	createTopicCmd.Flag("replication-factor", "Replication factor").Default("1").Int16Var(&conf.ReplicationFactor)
+	return conf
+}
 
-// 	srv := server.New(
-// 		*brokerCmdBrokerAddr,
-// 		store,
-// 		*brokerCmdHTTPAddr,
-// 		prometheus.NewMetrics(),
-// 		logger,
-// 	)
-// 	if err := srv.Start(context.Background()); err != nil {
-// 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
-// 		os.Exit(1)
-// 	}
+func cmdBrokers() int {
+	var err error
 
-// 	defer srv.Close()
+	brokerCmdConfig.Serf, err = serf.New(brokerCmdConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error starting serf: %v\n", err)
+		os.Exit(1)
+	}
 
-// 	gracefully.Timeout = 10 * time.Second
-// 	gracefully.Shutdown()
+	brokerCmdConfig.Raft, err = raft.New(brokerCmdConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error starting raft: %v\n", err)
+		os.Exit(1)
+	}
 
-// 	if err := store.Shutdown(); err != nil {
-// 		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
-// 		os.Exit(1)
-// 	}
+	brokerCmdConfig.Broker, err = broker.New(brokerCmdConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
+		os.Exit(1)
+	}
 
-// 	return 0
-// }
+	srv := server.New(brokerCmdConfig)
+	if err := srv.Start(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
+		os.Exit(1)
+	}
 
-// func cmdCreateTopic(logger jocko.Logger) int {
-// 	addr, err := net.ResolveTCPAddr("tcp", *createTopicBrokerAddr)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
-// 		os.Exit(1)
-// 	}
+	defer srv.Close()
 
-// 	conn, err := net.DialTCP("tcp", nil, addr)
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
-// 		os.Exit(1)
-// 	}
+	gracefully.Timeout = 10 * time.Second
+	gracefully.Shutdown()
 
-// 	client := server.NewClient(conn)
-// 	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
-// 		Requests: []*protocol.CreateTopicRequest{{
-// 			Topic:             *createTopicTopic,
-// 			NumPartitions:     *createTopicPartitions,
-// 			ReplicationFactor: *createTopicReplicationFactor,
-// 			ReplicaAssignment: nil,
-// 			Configs:           nil,
-// 		}},
-// 	})
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "error with request to broker: %v\n", err)
-// 		os.Exit(1)
-// 	}
-// 	for _, topicErrCode := range resp.TopicErrorCodes {
-// 		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
-// 			err := protocol.Errs[topicErrCode.ErrorCode]
-// 			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
-// 			os.Exit(1)
-// 		}
-// 	}
+	if err := brokerCmdConfig.Broker.Shutdown(); err != nil {
+		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
+		os.Exit(1)
+	}
 
-// 	fmt.Printf("created topic: %v\n", *createTopicTopic)
+	return 0
+}
 
-// 	return 0
-// }
+func cmdCreateTopic() int {
+	addr, err := net.ResolveTCPAddr("tcp", createTopicConfig.Addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
+		os.Exit(1)
+	}
+
+	conn, err := net.DialTCP("tcp", nil, addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := server.NewClient(conn)
+	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
+		Requests: []*protocol.CreateTopicRequest{{
+			Topic:             createTopicConfig.Topic,
+			NumPartitions:     createTopicConfig.Partitions,
+			ReplicationFactor: createTopicConfig.ReplicationFactor,
+			ReplicaAssignment: nil,
+			Configs:           nil,
+		}},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error with request to broker: %v\n", err)
+		os.Exit(1)
+	}
+	for _, topicErrCode := range resp.TopicErrorCodes {
+		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
+			err := protocol.Errs[topicErrCode.ErrorCode]
+			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("created topic: %v\n", createTopicConfig.Topic)
+
+	return 0
+}

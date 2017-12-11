@@ -7,8 +7,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/hashicorp/raft"
-	"github.com/hashicorp/serf/serf"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
@@ -42,9 +40,10 @@ const (
 	StatusReap
 )
 
-type RuntimeConfig struct {
+type Config struct {
 	ID          int32
-	BindAddrLAN *net.IPAddr
+	Logger      log.Logger
+	BindAddrLAN string
 	// Bootstrap is used to bring up the first Consul server, and
 	// permits that node to elect itself leader
 	Bootstrap bool
@@ -54,16 +53,23 @@ type RuntimeConfig struct {
 	// automatic bootstrap process if they detect any servers that are part of
 	// an existing cluster, so it's safe to leave this set to a non-zero value.
 	BoostrapExpect int
+	Metrics        *Metrics
 	DataDir        string
 	Datacenter     string
 	// EnableDebug is used to enable various debugging features.
 	EnableDebug bool
 	// LogLevel is the level of the logs to write. Defaults to "INFO".
-	SerfBindAddrLAN *net.TCPAddr
-	SerfBindAddrWAN *net.TCPAddr
-	SerfPortLAN     int
-	SerfPortWAN     int
-	RaftBindAddr    *net.TCPAddr
+	SerfBindAddrLAN   string
+	SerfBindAddrWAN   string
+	StartJoinAddrsLAN []string
+	StartJoinAddrsWAN []string
+	SerfPortLAN       int
+	SerfPortWAN       int
+	Raft              Raft
+	Serf              Serf
+	Broker            Broker
+	RaftBindAddr      string
+	HTTPBindAddr      string
 	// ServerMode controls if this agent acts like a Jocko server,
 	// or merely as a client. Servers have more state, take part
 	// in leader election, etc.
@@ -81,30 +87,6 @@ type RuntimeConfig struct {
 	JockoSerfWANProbeTimeout    time.Duration
 	JockoSerfWANSuspicionMult   int
 	JockoServerHealthInterval   time.Duration
-}
-
-type Config struct {
-	Bootstrap       bool
-	BootstrapExpect int
-	// Where the logs and raft data are stored.
-	DataDir            string
-	DevMode            bool
-	ID                 int32
-	AdvertisedListener *net.TCPAddr
-	Logger             log.Logger
-	RaftConfig         *raft.Config
-	// SerfLANConfig is the configuration for the intra-dc serf
-	SerfLANConfig *serf.Config
-	// SerfWANConfig is the configuration for the cross-dc serf
-	SerfWANConfig *serf.Config
-	// ReconcileInterval controls how often we reconcile the strongly
-	// consistent store with the Serf info. This is used to handle nodes
-	// that are force removed, as well as intermittent unavailability during
-	// leader election.
-	ReconcileInterval time.Duration
-	// NonVoter is used to prevent this server from being added
-	// as a voting member of the Raft cluster.
-	NonVoter bool
 }
 
 type RaftCmdType int

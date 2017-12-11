@@ -41,19 +41,17 @@ type Raft struct {
 }
 
 // New Raft object
-func New(opts ...OptionFn) (*Raft, error) {
+func New(conf jocko.Config) (*Raft, error) {
 	r := &Raft{
+		addr:              conf.RaftBindAddr,
+		dataDir:           conf.DataDir + "/raft", // TODO: join cleanly
 		config:            raft.DefaultConfig(),
 		reconcileInterval: time.Second * 5,
 		shutdownCh:        make(chan struct{}),
 	}
 
-	for _, o := range opts {
-		o(r)
-	}
-
 	r.config.LocalID = raft.ServerID(r.addr)
-	r.logger = r.logger.With(jocko.String("ctx", "raft"), jocko.String("addr", r.addr))
+	r.logger = r.logger.With(log.String("ctx", "raft"), log.String("addr", r.addr))
 
 	return r, nil
 }
@@ -62,14 +60,14 @@ func New(opts ...OptionFn) (*Raft, error) {
 // Commands received by raft are sent on commandCh channel.
 func (r *Raft) Bootstrap(serf jocko.Serf, serfEventCh <-chan *jocko.ClusterMember, commandCh chan<- jocko.RaftCommand) (err error) {
 	r.serf = serf
-	r.eventCh = eventCh
+	// r.eventCh = eventCh
 
 	r.transport, err = raft.NewTCPTransport(r.addr, nil, 3, timeout, os.Stderr)
 	if err != nil {
 		return errors.Wrap(err, "tcp transport failed")
 	}
 
-	r.logger = r.logger.With(jocko.Int32("serf id", serf.ID()))
+	r.logger = r.logger.With(log.Int32("serf id", serf.ID()))
 
 	path := filepath.Join(r.dataDir, state)
 	if err = os.MkdirAll(path, 0755); err != nil {
@@ -128,10 +126,10 @@ func (r *Raft) Apply(cmd jocko.RaftCommand) error {
 	if err != nil {
 		return err
 	}
-	r.logger.Debug("applying", jocko.Any("cmd", cmd))
+	r.logger.Debug("applying", log.Any("cmd", cmd))
 	err = r.raft.Apply(c, timeout).Error()
 	if err != nil {
-		r.logger.Error("applying", jocko.Any("cmd", c), jocko.Error("error", err))
+		r.logger.Error("applying", log.Any("cmd", c), log.Error("error", err))
 	}
 	return err
 }
@@ -150,7 +148,7 @@ func (r *Raft) LeaderID() string {
 func (r *Raft) waitForBarrier() error {
 	barrier := r.raft.Barrier(0)
 	if err := barrier.Error(); err != nil {
-		r.logger.Error("failed to wait for barrier", jocko.Error("error", err))
+		r.logger.Error("failed to wait for barrier", log.Error("error", err))
 		return err
 	}
 	return nil
@@ -192,7 +190,7 @@ func (r *Raft) Shutdown() error {
 	}
 	future := r.raft.Shutdown()
 	if err := future.Error(); err != nil {
-		r.logger.Error("failed to shutdown raft", jocko.Error("error", err))
+		r.logger.Error("failed to shutdown raft", log.Error("error", err))
 		return err
 	}
 	if err := r.store.Close(); err != nil {

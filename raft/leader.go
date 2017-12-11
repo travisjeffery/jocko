@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
@@ -18,12 +19,12 @@ func (r *Raft) monitorLeadership(notifyCh <-chan bool, serfEventCh <-chan *jocko
 				stopCh = make(chan struct{})
 				go r.leaderLoop(stopCh, serfEventCh)
 				r.logger.Info("cluster leadership acquired")
-				r.eventCh <- jocko.RaftEvent{Op: "acquired-leadership"}
+				// r.eventCh <- jocko.RaftEvent{Op: "acquired-leadership"}
 			} else if stopCh != nil {
 				close(stopCh)
 				stopCh = nil
 				r.logger.Info("cluster leadership lost")
-				r.eventCh <- jocko.RaftEvent{Op: "lost-leadership"}
+				// r.eventCh <- jocko.RaftEvent{Op: "lost-leadership"}
 			}
 		case <-r.shutdownCh:
 			return
@@ -54,14 +55,14 @@ RECONCILE:
 
 	if !establishedLeader {
 		if err := r.establishLeadership(); err != nil {
-			r.logger.Error("failed to establish leadership", jocko.Error("error", err))
+			r.logger.Error("failed to establish leadership", log.Error("error", err))
 			goto WAIT
 		}
 		establishedLeader = true
 	}
 
 	if err := r.reconcile(); err != nil {
-		r.logger.Error("failed to reconcile", jocko.Error("err", err))
+		r.logger.Error("failed to reconcile", log.Error("err", err))
 		goto WAIT
 	}
 
@@ -111,7 +112,7 @@ func (r *Raft) reconcile() error {
 // reconcileMember is used to do an async reconcile of a single
 // serf member
 func (r *Raft) reconcileMember(member *jocko.ClusterMember) error {
-	r.logger.Debug("reconcile member", jocko.Int32("member id", member.ID), jocko.String("member ip", member.IP))
+	r.logger.Debug("reconcile member", log.Int32("member id", member.ID), log.String("member ip", member.IP))
 	// don't reconcile ourself
 	if member.ID == r.serf.ID() {
 		return nil
@@ -120,15 +121,15 @@ func (r *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	switch member.Status {
 	case jocko.StatusAlive:
 		addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
-		r.logger.Debug("adding voter", jocko.Int32("member id", member.ID), jocko.String("member ip", member.IP))
+		r.logger.Debug("adding voter", log.Int32("member id", member.ID), log.String("member ip", member.IP))
 		err = r.addVoter(member.ID, addr.String())
 	case jocko.StatusLeft, jocko.StatusReap:
-		r.logger.Debug("removing server", jocko.Int32("member id", member.ID), jocko.String("member ip", member.IP))
+		r.logger.Debug("removing server", log.Int32("member id", member.ID), log.String("member ip", member.IP))
 		err = r.removeServer(member.ID, member.IP)
 	}
 
 	if err != nil {
-		r.logger.Error("failed to reconcile member", jocko.Int32("member id", member.ID), jocko.Error("error", err))
+		r.logger.Error("failed to reconcile member", log.Int32("member id", member.ID), log.Error("error", err))
 		return err
 	}
 	return nil

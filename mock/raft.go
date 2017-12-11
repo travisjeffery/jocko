@@ -3,8 +3,9 @@
 package mock
 
 import (
-	"github.com/travisjeffery/jocko"
 	"sync"
+
+	"github.com/travisjeffery/jocko"
 )
 
 var (

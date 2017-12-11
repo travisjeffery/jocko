@@ -32,13 +32,13 @@ type Server struct {
 	server       http.Server
 }
 
-func New(protocolAddr string, broker jocko.Broker, httpAddr string, metrics *jocko.Metrics, logger log.Logger) *Server {
+func New(conf jocko.Config) *Server {
 	s := &Server{
-		protocolAddr: protocolAddr,
-		httpAddr:     httpAddr,
-		broker:       broker,
-		logger:       logger.With(log.String("ctx", "server"), log.Int32("id", broker.ID()), log.String("protocol addr", protocolAddr), log.String("http addr", httpAddr)),
-		metrics:      metrics,
+		protocolAddr: conf.BindAddrLAN,
+		httpAddr:     conf.HTTPBindAddr,
+		broker:       conf.Broker,
+		logger:       conf.Logger.With(log.String("ctx", "server"), log.Int32("id", conf.ID), log.String("protocol addr", conf.BindAddrLAN), log.String("http addr", conf.HTTPBindAddr)),
+		metrics:      conf.Metrics,
 		shutdownCh:   make(chan struct{}),
 		requestCh:    make(chan jocko.Request, 32),
 		responseCh:   make(chan jocko.Response, 32),

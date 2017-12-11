@@ -49,23 +49,23 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(conf *jocko.Config) (*Broker, error) {
+func New(conf jocko.Config) (*Broker, error) {
 	b := &Broker{
-		id:          id,
+		logDir:      conf.DataDir + "/logs", // TODO do this right
+		brokerAddr:  conf.BindAddrLAN,
+		raft:        conf.Raft,
+		serf:        conf.Serf,
+		id:          conf.ID,
 		topicMap:    make(map[string][]*Partition),
 		replicators: make(map[*Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
-	}
-
-	for _, o := range opts {
-		o(b)
 	}
 
 	if b.logger == nil {
 		return nil, ErrInvalidArgument
 	}
 
-	b.logger = b.logger.With(log.String("ctx", "broker"), log.Int32("id", id), log.String("addr", b.brokerAddr))
+	b.logger = b.logger.With(log.String("ctx", "broker"), log.Int32("id", conf.ID), log.String("addr", b.brokerAddr))
 
 	if b.raftCommands == nil {
 		b.raftCommands = make(chan jocko.RaftCommand, 16)
@@ -94,7 +94,7 @@ func New(conf *jocko.Config) (*Broker, error) {
 	}
 
 	raftEvents := make(chan jocko.RaftEvent)
-	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands, raftEvents); err != nil {
+	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands); err != nil {
 		return nil, err
 	}
 
