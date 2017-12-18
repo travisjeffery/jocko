@@ -18,7 +18,7 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/zap"
+	"github.com/travisjeffery/jocko/log"
 )
 
 const (
@@ -130,7 +130,7 @@ func setup(t require.TestingT) (string, func()) {
 	ports := dynaport.GetS(4)
 	brokerPort := ports[0]
 
-	logger := zap.New()
+	logger := log.New()
 	serf, err := serf.New(
 		serf.Logger(logger),
 		serf.Addr("127.0.0.1:"+ports[2]),

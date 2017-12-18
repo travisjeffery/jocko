@@ -1,10 +1,10 @@
 package serf
 
-import "github.com/travisjeffery/jocko"
+import "github.com/travisjeffery/jocko/log"
 
 type OptionFn func(b *Serf)
 
-func Logger(logger jocko.Logger) OptionFn {
+func Logger(logger log.Logger) OptionFn {
 	return func(b *Serf) {
 		b.logger = logger
 	}

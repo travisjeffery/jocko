@@ -11,6 +11,7 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 const (
@@ -20,7 +21,7 @@ const (
 
 // Raft manages consensus on Jocko cluster using Hashicorp Raft
 type Raft struct {
-	logger    jocko.Logger
+	logger    log.Logger
 	raft      *raft.Raft
 	transport *raft.NetworkTransport
 	store     *raftboltdb.BoltStore
@@ -134,7 +135,7 @@ func (b *Raft) LeaderID() string {
 func (b *Raft) waitForBarrier() error {
 	barrier := b.raft.Barrier(0)
 	if err := barrier.Error(); err != nil {
-		b.logger.Error("failed to wait for barrier", jocko.Error("error", err))
+		b.logger.Error("failed to wait for barrier", log.Error("error", err))
 		return err
 	}
 	return nil
@@ -175,7 +176,7 @@ func (b *Raft) Shutdown() error {
 	}
 	future := b.raft.Shutdown()
 	if err := future.Error(); err != nil {
-		b.logger.Error("failed to shutdown raft", jocko.Error("error", err))
+		b.logger.Error("failed to shutdown raft", log.Error("error", err))
 		return err
 	}
 	if err := b.store.Close(); err != nil {
