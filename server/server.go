@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/log"
 )
 
 // Server is used to handle the TCP connections, decode requests,
@@ -23,7 +24,7 @@ type Server struct {
 	protocolLn   *net.TCPListener
 	httpAddr     string
 	httpLn       *net.TCPListener
-	logger       jocko.Logger
+	logger       log.Logger
 	broker       jocko.Broker
 	shutdownCh   chan struct{}
 	metrics      *jocko.Metrics
@@ -32,7 +33,7 @@ type Server struct {
 	server       http.Server
 }
 
-func New(protocolAddr string, broker jocko.Broker, httpAddr string, metrics *jocko.Metrics, logger jocko.Logger) *Server {
+func New(protocolAddr string, broker jocko.Broker, httpAddr string, metrics *jocko.Metrics, logger log.Logger) *Server {
 	s := &Server{
 		protocolAddr: protocolAddr,
 		httpAddr:     httpAddr,
@@ -86,7 +87,7 @@ func (s *Server) Start(ctx context.Context) error {
 			default:
 				conn, err := s.protocolLn.Accept()
 				if err != nil {
-					s.logger.Error("listener accept failed", jocko.Error("error", err))
+					s.logger.Error("listener accept failed", log.Error("error", err))
 					continue
 				}
 
@@ -104,7 +105,7 @@ func (s *Server) Start(ctx context.Context) error {
 				break
 			case resp := <-s.responseCh:
 				if err := s.write(resp); err != nil {
-					s.logger.Error("failed to write response", jocko.Error("error", err))
+					s.logger.Error("failed to write response", log.Error("error", err))
 				}
 			}
 		}
@@ -115,7 +116,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		err := s.server.Serve(s.httpLn)
 		if err != nil {
-			s.logger.Error("serve failed", jocko.Error("error", err))
+			s.logger.Error("serve failed", log.Error("error", err))
 		}
 	}()
 
@@ -140,7 +141,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			s.logger.Error("read deadline failed", jocko.Error("error", err))
+			s.logger.Error("read deadline failed", log.Error("error", err))
 			continue
 		}
 		_, err = io.ReadFull(conn, p[:])
@@ -148,7 +149,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			break
 		}
 		if err != nil {
-			s.logger.Error("conn read failed", jocko.Error("error", err))
+			s.logger.Error("conn read failed", log.Error("error", err))
 			break
 		}
 
@@ -162,18 +163,18 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		if _, err = io.ReadFull(conn, b[4:]); err != nil {
 			// TODO: handle request
-			s.logger.Error("failed to read from connection", jocko.Error("error", err))
+			s.logger.Error("failed to read from connection", log.Error("error", err))
 			panic(err)
 		}
 
 		d := protocol.NewDecoder(b)
 		if err := header.Decode(d); err != nil {
 			// TODO: handle err
-			s.logger.Error("failed to decode header", jocko.Error("error", err))
+			s.logger.Error("failed to decode header", log.Error("error", err))
 			panic(err)
 		}
 
-		s.logger.Debug("request", jocko.Int32("correlation id", header.CorrelationID), jocko.String("client id", header.ClientID), jocko.Uint32("size", size), jocko.Int16("api key", header.APIKey))
+		s.logger.Debug("request", log.Int32("correlation id", header.CorrelationID), log.String("client id", header.ClientID), log.Uint32("size", size), log.Int16("api key", header.APIKey))
 
 		var req protocol.Decoder
 		switch header.APIKey {
@@ -197,7 +198,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		if err := req.Decode(d); err != nil {
 			// TODO: handle err
-			s.logger.Error("failed to decode request", jocko.Error("error", err))
+			s.logger.Error("failed to decode request", log.Error("error", err))
 			panic(err)
 		}
 
@@ -227,7 +228,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) write(resp jocko.Response) error {
-	s.logger.Debug("response", jocko.Int32("correlation id", resp.Header.CorrelationID), jocko.Int16("api key", resp.Header.APIKey))
+	s.logger.Debug("response", log.Int32("correlation id", resp.Header.CorrelationID), log.Int16("api key", resp.Header.APIKey))
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err

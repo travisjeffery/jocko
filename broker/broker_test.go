@@ -14,7 +14,7 @@ import (
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/zap"
+	"github.com/travisjeffery/jocko/log"
 )
 
 func TestNew(t *testing.T) {
@@ -700,7 +700,7 @@ func TestBroker_Join(t *testing.T) {
 
 func TestBroker_clusterMembers(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -752,7 +752,7 @@ func TestBroker_clusterMembers(t *testing.T) {
 
 func TestBroker_isController(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -803,7 +803,7 @@ func TestBroker_isController(t *testing.T) {
 
 func TestBroker_topicPartitions(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -870,7 +870,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 
 func TestBroker_topics(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -992,7 +992,7 @@ func TestBroker_partition(t *testing.T) {
 
 func TestBroker_createPartition(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1055,7 +1055,7 @@ func TestBroker_createPartition(t *testing.T) {
 
 func TestBroker_clusterMember(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1228,7 +1228,7 @@ func TestBroker_startReplica(t *testing.T) {
 
 func TestBroker_createTopic(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1275,7 +1275,7 @@ func TestBroker_createTopic(t *testing.T) {
 
 func TestBroker_deleteTopic(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1320,7 +1320,7 @@ func TestBroker_deleteTopic(t *testing.T) {
 
 func TestBroker_deletePartitions(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1396,7 +1396,7 @@ func TestBroker_Shutdown(t *testing.T) {
 
 func TestBroker_becomeFollower(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1443,7 +1443,7 @@ func TestBroker_becomeFollower(t *testing.T) {
 
 func TestBroker_becomeLeader(t *testing.T) {
 	type fields struct {
-		logger      jocko.Logger
+		logger      log.Logger
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
@@ -1514,7 +1514,7 @@ type fields struct {
 	serf         *mock.Serf
 	raft         *mock.Raft
 	raftCommands chan jocko.RaftCommand
-	logger       jocko.Logger
+	logger       log.Logger
 	topicMap     map[string][]*jocko.Partition
 	replicators  map[*jocko.Partition]*Replicator
 	brokerAddr   string
@@ -1578,7 +1578,7 @@ func newFields() fields {
 		topicMap:     make(map[string][]*jocko.Partition),
 		raftCommands: make(chan jocko.RaftCommand),
 		replicators:  make(map[*jocko.Partition]*Replicator),
-		logger:       zap.New(),
+		logger:       log.New(),
 		logDir:       "/tmp/jocko",
 		loner:        true,
 		serf:         serf,

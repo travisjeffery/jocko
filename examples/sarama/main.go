@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
@@ -15,7 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/zap"
+	"github.com/travisjeffery/jocko/log"
 )
 
 type check struct {
@@ -38,7 +37,9 @@ const (
 )
 
 func main() {
-	defer setup()()
+	logger := log.New()
+	logger = logger.With(log.String("example", "sarama"))
+	defer setup(logger)()
 
 	config := sarama.NewConfig()
 	config.ChannelBufferSize = 1
@@ -88,12 +89,12 @@ func main() {
 			fmt.Printf("msg partition [%d] offset [%d]\n", msg.Partition, msg.Offset)
 			check := pmap[partitionID][i]
 			if string(msg.Value) != check.message {
-				log.Fatalf("msg value not equal! partition %d, offset: %d!\n", msg.Partition, msg.Offset)
+				logger.Fatal("msg values not equal", log.Int32("partition", msg.Partition), log.Int64("offset", msg.Offset))
 			}
 			if msg.Offset != check.offset {
-				log.Fatalf("msg offset not equal! partition %d, offset: %d!\n", msg.Partition, msg.Offset)
+				logger.Fatal("msg offsets not equal", log.Int32("partition", msg.Partition), log.Int64("offset", msg.Offset))
 			}
-			log.Printf("msg is ok! partition: %d, offset: %d\n", msg.Partition, msg.Offset)
+			logger.Info("msg is ok", log.Int32("partition", msg.Partition), log.Int64("offset", msg.Offset))
 			i++
 			checked++
 			fmt.Printf("i: %d, len: %d\n", i, len(pmap[partitionID]))
@@ -112,8 +113,8 @@ func main() {
 	fmt.Printf("producer and consumer worked! %d messages ok\n", totalChecked)
 }
 
-func setup() func() {
-	logger := zap.New()
+func setup(logger log.Logger) func() {
+
 
 	serf, err := serf.New(
 		serf.Logger(logger),

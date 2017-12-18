@@ -9,16 +9,16 @@ import (
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
-	"github.com/travisjeffery/jocko/zap"
+	"github.com/travisjeffery/jocko/log"
 )
 
 var (
-	logger   jocko.Logger
+	logger   log.Logger
 	serfPort int
 )
 
 func init() {
-	logger = zap.New()
+	logger = log.New()
 	serfPort = 7946
 }
 

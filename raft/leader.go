@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko"
 )
 
@@ -52,14 +53,14 @@ RECONCILE:
 
 	if !establishedLeader {
 		if err := b.establishLeadership(stopCh); err != nil {
-			b.logger.Error("failed to establish leadership", jocko.Error("error", err))
+			b.logger.Error("failed to establish leadership", log.Error("error", err))
 			goto WAIT
 		}
 		establishedLeader = true
 	}
 
 	if err := b.reconcile(); err != nil {
-		b.logger.Error("failed to reconcile", jocko.Error("err", err))
+		b.logger.Error("failed to reconcile", log.Error("err", err))
 		goto WAIT
 	}
 
@@ -114,7 +115,7 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	}
 
 	if err != nil {
-		b.logger.Error("failed to reconcile member", jocko.Int32("member id", member.ID), jocko.Error("error", err))
+		b.logger.Error("failed to reconcile member", log.Int32("member id", member.ID), log.Error("error", err))
 		return err
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/serf/serf"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 
 // Serf manages membership of Jocko cluster using Hashicorp Serf
 type Serf struct {
-	logger      jocko.Logger
+	logger      log.Logger
 	serf        *serf.Serf
 	addr        string
 	nodeID      int32
@@ -97,7 +98,7 @@ func (s *Serf) serfEventHandler(eventCh <-chan serf.Event) {
 			case serf.EventMemberUpdate, serf.EventMemberReap, serf.EventUser, serf.EventQuery:
 				// ignore
 			default:
-				s.logger.Info("unhandled serf event", jocko.Any("event", e))
+				s.logger.Info("unhandled serf event", log.Any("event", e))
 			}
 		case <-s.shutdownCh:
 			return
@@ -111,10 +112,10 @@ func (s *Serf) nodeJoinEvent(me serf.MemberEvent) {
 		// TODO: need to change these parts
 		peer, err := clusterMember(m)
 		if err != nil {
-			s.logger.Error("failed to parse peer from serf member", jocko.Error("error", err), jocko.String("name", m.Name))
+			s.logger.Error("failed to parse peer from serf member", log.Error("error", err), log.String("name", m.Name))
 			continue
 		}
-		s.logger.Info("adding peer", jocko.Any("peer", peer))
+		s.logger.Info("adding peer", log.Any("peer", peer))
 		s.peerLock.Lock()
 		s.peers[peer.ID] = peer
 		s.peerLock.Unlock()
@@ -124,7 +125,7 @@ func (s *Serf) nodeJoinEvent(me serf.MemberEvent) {
 // nodeFailedEvent is used to handle fail events on the serf cluster.
 func (s *Serf) nodeFailedEvent(me serf.MemberEvent) {
 	for _, m := range me.Members {
-		s.logger.Info("removing peer", jocko.Any("peer", me))
+		s.logger.Info("removing peer", log.Any("peer", me))
 		peer, err := clusterMember(m)
 		if err != nil {
 			continue
@@ -144,7 +145,7 @@ func (s *Serf) localMemberEvent(me serf.MemberEvent) error {
 		}
 		conn, err := clusterMember(m)
 		if err != nil {
-			s.logger.Error("failed to parse serf member event", jocko.Error("error", err), jocko.Any("event", me))
+			s.logger.Error("failed to parse serf member event", log.Error("error", err), log.Any("event", me))
 			continue
 		}
 		s.reconcileCh <- conn
