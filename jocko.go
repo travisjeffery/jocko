@@ -11,8 +11,6 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// CommitLog is the interface that wraps the commit log's methods and
-// is used to manage a partition's data.
 type CommitLog interface {
 	Delete() error
 	NewReader(offset int64, maxBytes int32) (io.Reader, error)
@@ -25,7 +23,7 @@ type CommitLog interface {
 // Client is used to request other brokers.
 type Client interface {
 	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
-	CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error)
+	CreateTopics(clientID string, createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error)
 	// others
 }
 
@@ -150,7 +148,6 @@ const (
 // Serf is the interface that wraps Serf methods and is used to manage
 // the cluster membership for Jocko nodes.
 type Serf interface {
-	Bootstrap(node *ClusterMember, reconcileCh chan<- *ClusterMember) error
 	Cluster() []*ClusterMember
 	Member(memberID int32) *ClusterMember
 	Join(addrs ...string) (int, error)
@@ -168,7 +165,6 @@ type RaftCommand struct {
 // Raft is the interface that wraps Raft's methods and is used to
 // manage consensus for the Jocko cluster.
 type Raft interface {
-	Bootstrap(serf Serf, serfEventCh <-chan *ClusterMember, commandCh chan<- RaftCommand) error
 	Apply(cmd RaftCommand) error
 	IsLeader() bool
 	LeaderID() string
@@ -205,7 +201,7 @@ type ClusterMember struct {
 	IP   string `json:"addr"`
 
 	SerfPort int          `json:"-"`
-	RaftPort int          `json:"-"`
+	RaftAddr string       `json:"-"`
 	Status   MemberStatus `json:"-"`
 
 	conn net.Conn

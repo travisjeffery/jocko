@@ -4,8 +4,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 )
 
 // monitorLeadership is used to monitor if we acquire or lose our role as the
@@ -45,7 +45,7 @@ func (b *Raft) leaderLoop(stopCh chan struct{}, serfEventCh <-chan *jocko.Cluste
 
 RECONCILE:
 	reconcileCh = nil
-	interval := time.After(b.reconcileInterval)
+	interval := time.After(b.config.ReconcileInterval)
 
 	if err := b.waitForBarrier(); err != nil {
 		goto WAIT
@@ -108,7 +108,10 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 	var err error
 	switch member.Status {
 	case jocko.StatusAlive:
-		addr := &net.TCPAddr{IP: net.ParseIP(member.IP), Port: member.RaftPort}
+		addr, err := net.ResolveTCPAddr("tcp", member.RaftAddr)
+		if err != nil {
+			return err
+		}
 		err = b.addPeer(member.ID, addr.String(), false)
 	case jocko.StatusLeft, jocko.StatusReap:
 		err = b.removePeer(member.ID, member.IP)

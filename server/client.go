@@ -64,14 +64,11 @@ func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequ
 }
 
 // CreateTopic sends request to server to create a topic as per createRequest
-func (p *Client) CreateTopic(clientID string, createRequest *protocol.CreateTopicRequest) (*protocol.CreateTopicsResponse, error) {
-	body := &protocol.CreateTopicRequests{
-		Requests: []*protocol.CreateTopicRequest{createRequest},
-	}
+func (p *Client) CreateTopics(clientID string, createRequests *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
 	req := &protocol.Request{
 		CorrelationID: rand.Int31(),
 		ClientID:      clientID,
-		Body:          body,
+		Body:          createRequests,
 	}
 	createResponse := new(protocol.CreateTopicsResponse)
 	if err := p.makeRequest(req, createResponse); err != nil {

@@ -12,9 +12,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/log"
 )
 
 func TestNew(t *testing.T) {
@@ -1250,7 +1250,7 @@ func TestBroker_createTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1295,7 +1295,7 @@ func TestBroker_deleteTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1340,7 +1340,7 @@ func TestBroker_deletePartitions(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1418,7 +1418,7 @@ func TestBroker_becomeFollower(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1465,7 +1465,7 @@ func TestBroker_becomeLeader(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1498,7 +1498,7 @@ func Test_contains(t *testing.T) {
 		args args
 		want bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

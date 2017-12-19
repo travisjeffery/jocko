@@ -13,43 +13,46 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko"
-	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/log"
+	"github.com/travisjeffery/jocko/protocol"
 )
+
+type Config struct {
+	BrokerAddr string
+	HTTPAddr   string
+}
 
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	protocolAddr string
-	protocolLn   *net.TCPListener
-	httpAddr     string
-	httpLn       *net.TCPListener
-	logger       log.Logger
-	broker       jocko.Broker
-	shutdownCh   chan struct{}
-	metrics      *jocko.Metrics
-	requestCh    chan jocko.Request
-	responseCh   chan jocko.Response
-	server       http.Server
+	config     Config
+	protocolLn *net.TCPListener
+	httpLn     *net.TCPListener
+	logger     log.Logger
+	broker     jocko.Broker
+	shutdownCh chan struct{}
+	metrics    *jocko.Metrics
+	requestCh  chan jocko.Request
+	responseCh chan jocko.Response
+	server     http.Server
 }
 
-func New(protocolAddr string, broker jocko.Broker, httpAddr string, metrics *jocko.Metrics, logger log.Logger) *Server {
+func New(config Config, broker jocko.Broker, metrics *jocko.Metrics, logger log.Logger) *Server {
 	s := &Server{
-		protocolAddr: protocolAddr,
-		httpAddr:     httpAddr,
-		broker:       broker,
-		logger:       logger,
-		metrics:      metrics,
-		shutdownCh:   make(chan struct{}),
-		requestCh:    make(chan jocko.Request, 32),
-		responseCh:   make(chan jocko.Response, 32),
+		config:     config,
+		broker:     broker,
+		logger:     logger.With(log.Any("config", config)),
+		metrics:    metrics,
+		shutdownCh: make(chan struct{}),
+		requestCh:  make(chan jocko.Request, 32),
+		responseCh: make(chan jocko.Response, 32),
 	}
 	return s
 }
 
 // Start starts the service.
 func (s *Server) Start(ctx context.Context) error {
-	protocolAddr, err := net.ResolveTCPAddr("tcp", s.protocolAddr)
+	protocolAddr, err := net.ResolveTCPAddr("tcp", s.config.BrokerAddr)
 	if err != nil {
 		return err
 	}
@@ -57,7 +60,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	httpAddr, err := net.ResolveTCPAddr("tcp", s.httpAddr)
+	httpAddr, err := net.ResolveTCPAddr("tcp", s.config.HTTPAddr)
 	if err != nil {
 		return err
 	}
