@@ -123,13 +123,13 @@ func setup(logger log.Logger) func() {
 	raft, err := raft.New(raft.Config{
 		Addr:    raftAddr,
 		DataDir: logDir + "/raft",
-	}, logger)
+	}, serf, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting raft: %v\n", err)
 		os.Exit(1)
 	}
 
-	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/log"}, serf, raft, logger)
+	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/logs"}, serf, raft, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting broker: %v\n", err)
 		os.Exit(1)

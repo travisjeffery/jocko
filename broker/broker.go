@@ -40,7 +40,6 @@ type Broker struct {
 
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
-	logDir      string
 
 	raft         jocko.Raft
 	serf         jocko.Serf
@@ -59,6 +58,8 @@ func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*B
 		topicMap:    make(map[string][]*jocko.Partition),
 		replicators: make(map[*jocko.Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
+		serf:        serf,
+		raft:        raft,
 	}
 
 	if b.logger == nil {
@@ -470,18 +471,12 @@ func (b *Broker) handleFetch(header *protocol.RequestHeader, r *protocol.FetchRe
 
 // clusterMembers is used to get a list of members in the cluster.
 func (b *Broker) clusterMembers() []*jocko.ClusterMember {
-	port, err := addrPort(b.config.Addr)
-	if err != nil {
-		panic(err)
-	}
-	return []*jocko.ClusterMember{{ID: b.config.ID, Port: port}}
-	// return b.serf.Cluster()
+	return b.serf.Cluster()
 }
 
 // isController returns true if this is the cluster controller.
 func (b *Broker) isController() bool {
-	return true
-	// return b.raft.IsLeader()
+	return b.raft.IsLeader()
 }
 
 // topicPartitions is used to get the partitions for the given topic.
@@ -542,7 +537,7 @@ func (b *Broker) startReplica(partition *jocko.Partition) protocol.Error {
 	}
 	if isLeader || isFollower {
 		commitLog, err := commitlog.New(commitlog.Options{
-			Path:            path.Join(b.logDir, partition.String()),
+			Path:            path.Join(b.config.DataDir, partition.String()),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
 		})

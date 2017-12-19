@@ -24,6 +24,8 @@ type Replicator struct {
 }
 
 type ReplicatorConfig struct {
+	MinBytes    int32
+	MaxWaitTime int32
 }
 
 // NewReplicator returns a new replicator instance.
@@ -33,6 +35,7 @@ func NewReplicator(config ReplicatorConfig, partition *jocko.Partition, replicaI
 		partition: partition,
 		replicaID: replicaID,
 		clientID:  fmt.Sprintf("Replicator-%d", replicaID),
+		leader:    leader,
 		done:      make(chan struct{}, 2),
 		msgs:      make(chan []byte, 2),
 	}

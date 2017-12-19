@@ -37,10 +37,11 @@ type Serf struct {
 // New Serf object
 func New(config Config, logger log.Logger) (*Serf, error) {
 	b := &Serf{
-		config:     config,
-		logger:     logger,
-		peers:      make(map[int32]*jocko.ClusterMember),
-		shutdownCh: make(chan struct{}),
+		config:      config,
+		logger:      logger.With(log.Any("config", config)),
+		peers:       make(map[int32]*jocko.ClusterMember),
+		shutdownCh:  make(chan struct{}),
+		reconcileCh: make(chan *jocko.ClusterMember),
 	}
 	if err := b.setupSerf(); err != nil {
 		return nil, err
@@ -66,14 +67,13 @@ func (s *Serf) setupSerf() error {
 	conf.EnableNameConflictResolution = false
 	conf.NodeName = fmt.Sprintf("jocko-%03d", s.config.ID)
 	conf.Tags["id"] = strconv.Itoa(int(s.config.ID))
-	conf.Tags["port"] = strconv.Itoa(int(s.config.ID))
+	conf.Tags["port"] = strconv.Itoa(port)
 	conf.Tags["raft_addr"] = s.config.RaftAddr
 	s.serf, err = serf.Create(conf)
 	if err != nil {
 		return err
 	}
 	if _, err := s.Join(s.config.Join...); err != nil {
-		// b.Shutdown()
 		return err
 	}
 
@@ -115,7 +115,6 @@ func (s *Serf) nodeJoinEvent(me serf.MemberEvent) {
 			s.logger.Error("failed to parse peer from serf member", log.Error("error", err), log.String("name", m.Name))
 			continue
 		}
-		s.logger.Info("adding peer", log.Any("peer", peer))
 		s.peerLock.Lock()
 		s.peers[peer.ID] = peer
 		s.peerLock.Unlock()
@@ -175,7 +174,6 @@ func (s *Serf) Join(addrs ...string) (int, error) {
 func (s *Serf) Cluster() []*jocko.ClusterMember {
 	s.peerLock.RLock()
 	defer s.peerLock.RUnlock()
-
 	cluster := make([]*jocko.ClusterMember, 0, len(s.peers))
 	for _, v := range s.peers {
 		cluster = append(cluster, v)

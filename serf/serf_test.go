@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
-	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/testutil"
@@ -63,14 +62,8 @@ func Test_Membership(t *testing.T) {
 }
 
 func testSerf(id int32, port int) (*serf.Serf, error) {
-	s, err := serf.New(serf.Config{Addr: fmt.Sprintf("0.0.0.0:%d", port)}, logger)
+	s, err := serf.New(serf.Config{ID: id, Addr: fmt.Sprintf("0.0.0.0:%d", port)}, logger)
 	if err != nil {
-		return nil, err
-	}
-	member := &jocko.ClusterMember{
-		ID: id,
-	}
-	if err := s.Bootstrap(member, make(chan *jocko.ClusterMember, 32)); err != nil {
 		return nil, err
 	}
 	return s, nil

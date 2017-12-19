@@ -95,7 +95,7 @@ func cmdBrokers() int {
 		os.Exit(1)
 	}
 
-	raft, err := raft.New(brokerCmdConfig.RaftConfig, logger)
+	raft, err := raft.New(brokerCmdConfig.RaftConfig, serf, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting raft: %v\n", err)
 		os.Exit(1)
