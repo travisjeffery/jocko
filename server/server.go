@@ -47,6 +47,7 @@ func New(config Config, broker jocko.Broker, metrics *jocko.Metrics, logger log.
 		requestCh:  make(chan jocko.Request, 32),
 		responseCh: make(chan jocko.Response, 32),
 	}
+	s.logger.Info("hello")
 	return s
 }
 
@@ -222,7 +223,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// TODO: change join to take a broker
-	if err := s.broker.Join(b.IP); err != protocol.ErrNone {
+	if err := s.broker.Join(b.HTTPAddr); err != protocol.ErrNone {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

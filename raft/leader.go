@@ -114,7 +114,7 @@ func (b *Raft) reconcileMember(member *jocko.ClusterMember) error {
 		}
 		err = b.addPeer(member.ID, addr.String(), false)
 	case jocko.StatusLeft, jocko.StatusReap:
-		err = b.removePeer(member.ID, member.IP)
+		err = b.removePeer(member.ID)
 	}
 
 	if err != nil {

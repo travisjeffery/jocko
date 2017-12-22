@@ -50,11 +50,12 @@ func New(config Config, serf jocko.Serf, logger log.Logger) (*Raft, error) {
 		serf:       serf,
 		raftConfig: raft.DefaultConfig(),
 		shutdownCh: make(chan struct{}),
-		logger:     logger,
+		logger:     logger.With(log.Any("config", config)),
 	}
 	if err := r.setupRaft(); err != nil {
 		return nil, err
 	}
+	r.logger.Info("hello")
 	return r, nil
 }
 
@@ -109,7 +110,7 @@ func (r *Raft) setupRaft() error {
 
 	notifyCh := make(chan bool, 1)
 	r.raftConfig.NotifyCh = notifyCh
-	r.raftConfig.StartAsLeader = !r.config.Bootstrap
+	r.raftConfig.StartAsLeader = r.config.Bootstrap
 
 	fsm := &fsm{
 		commandCh: nil, // TODO: set this
@@ -189,7 +190,7 @@ func (b *Raft) addPeer(id int32, addr string, voter bool) error {
 }
 
 // removePeer of given address from raft
-func (b *Raft) removePeer(id int32, addr string) error {
+func (b *Raft) removePeer(id int32) error {
 	return b.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
 }
 

@@ -114,22 +114,26 @@ func main() {
 }
 
 func setup(logger log.Logger) func() {
-	serf, err := serf.New(serf.Config{Addr: serfAddr}, logger)
+	serf, err := serf.New(serf.Config{ID: brokerID, Addr: serfAddr, RaftAddr: raftAddr}, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting serf: %v\n", err)
 		os.Exit(1)
 	}
 
 	raft, err := raft.New(raft.Config{
-		Addr:    raftAddr,
-		DataDir: logDir + "/raft",
+		Addr:              raftAddr,
+		DataDir:           logDir + "/raft",
+		DevMode:           true,
+		Bootstrap:         true,
+		BootstrapExpect:   1,
+		ReconcileInterval: time.Second * 5,
 	}, serf, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting raft: %v\n", err)
 		os.Exit(1)
 	}
 
-	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/logs"}, serf, raft, logger)
+	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/logs", DevMode: true}, serf, raft, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting broker: %v\n", err)
 		os.Exit(1)

@@ -16,11 +16,13 @@ const (
 )
 
 type Config struct {
-	ID       int32
-	Addr     string
-	RaftAddr string
-	Join     []string
-	JoinWAN  []string
+	ID         int32
+	Addr       string
+	RaftAddr   string
+	BrokerAddr string
+	HTTPAddr   string
+	Join       []string
+	JoinWAN    []string
 }
 
 // Serf manages membership of Jocko cluster using Hashicorp Serf
@@ -41,11 +43,12 @@ func New(config Config, logger log.Logger) (*Serf, error) {
 		logger:      logger.With(log.Any("config", config)),
 		peers:       make(map[int32]*jocko.ClusterMember),
 		shutdownCh:  make(chan struct{}),
-		reconcileCh: make(chan *jocko.ClusterMember),
+		reconcileCh: make(chan *jocko.ClusterMember, 32),
 	}
 	if err := b.setupSerf(); err != nil {
 		return nil, err
 	}
+	b.logger.Info("hello")
 	return b, nil
 }
 
@@ -67,8 +70,9 @@ func (s *Serf) setupSerf() error {
 	conf.EnableNameConflictResolution = false
 	conf.NodeName = fmt.Sprintf("jocko-%03d", s.config.ID)
 	conf.Tags["id"] = strconv.Itoa(int(s.config.ID))
-	conf.Tags["port"] = strconv.Itoa(port)
 	conf.Tags["raft_addr"] = s.config.RaftAddr
+	conf.Tags["broker_addr"] = s.config.BrokerAddr
+	conf.Tags["http_addr"] = s.config.HTTPAddr
 	s.serf, err = serf.Create(conf)
 	if err != nil {
 		return err
@@ -209,8 +213,11 @@ func (s *Serf) Shutdown() error {
 }
 
 func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
-	portStr := m.Tags["port"]
-	port, err := strconv.Atoi(portStr)
+	brokerIP, brokerPortS, err := net.SplitHostPort(m.Tags["broker_addr"])
+	if err != nil {
+		return nil, err
+	}
+	brokerPort, err := strconv.Atoi(brokerPortS)
 	if err != nil {
 		return nil, err
 	}
@@ -222,11 +229,12 @@ func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
 	}
 
 	conn := &jocko.ClusterMember{
-		IP:       m.Addr.String(),
-		ID:       int32(id),
-		RaftAddr: m.Tags["raft_addr"],
-		Port:     port,
-		Status:   status(m.Status),
+		ID:         int32(id),
+		BrokerPort: brokerPort,
+		BrokerIP:   brokerIP,
+		RaftAddr:   m.Tags["raft_addr"],
+		HTTPAddr:   m.Tags["http_addr"],
+		Status:     status(m.Status),
 	}
 
 	return conn, nil

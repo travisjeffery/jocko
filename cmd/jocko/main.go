@@ -44,14 +44,14 @@ func main() {
 type config struct {
 	ID           int32
 	DataDir      string
-	BrokerConfig broker.Config
-	RaftConfig   raft.Config
-	SerfConfig   serf.Config
-	ServerConfig server.Config
+	BrokerConfig *broker.Config
+	RaftConfig   *raft.Config
+	SerfConfig   *serf.Config
+	ServerConfig *server.Config
 }
 
 func newBrokerOptions(cmd *kingpin.CmdClause) config {
-	conf := config{}
+	conf := &config{RaftConfig: &raft.Config{}, SerfConfig: &serf.Config{}, ServerConfig: &server.Config{}, BrokerConfig: &broker.Config{}}
 	brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").StringVar(&conf.RaftConfig.Addr)
 	brokerCmd.Flag("data-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").StringVar(&conf.DataDir)
 	brokerCmd.Flag("broker-addr", "Address for broker to bind on").Default("0.0.0.0:9092").StringVar(&conf.ServerConfig.BrokerAddr)
@@ -60,7 +60,7 @@ func newBrokerOptions(cmd *kingpin.CmdClause) config {
 	brokerCmd.Flag("join", "Address of an broker serf to join at start time. Can be specified multiple times.").StringsVar(&conf.SerfConfig.Join)
 	brokerCmd.Flag("join-wan", "Address of an broker serf to join -wan at start time. Can be specified multiple times.").StringsVar(&conf.SerfConfig.JoinWAN)
 	brokerCmd.Flag("id", "Broker ID").Int32Var(&conf.ID)
-	return conf
+	return *conf
 }
 
 type createTopicOptions struct {
@@ -89,25 +89,25 @@ func cmdBrokers() int {
 		log.String("raft addr", brokerCmdConfig.RaftConfig.Addr),
 	)
 
-	serf, err := serf.New(brokerCmdConfig.SerfConfig, logger)
+	serf, err := serf.New(*brokerCmdConfig.SerfConfig, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting serf: %v\n", err)
 		os.Exit(1)
 	}
 
-	raft, err := raft.New(brokerCmdConfig.RaftConfig, serf, logger)
+	raft, err := raft.New(*brokerCmdConfig.RaftConfig, serf, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting raft: %v\n", err)
 		os.Exit(1)
 	}
 
-	broker, err := broker.New(brokerCmdConfig.BrokerConfig, serf, raft, logger)
+	broker, err := broker.New(*brokerCmdConfig.BrokerConfig, serf, raft, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
 		os.Exit(1)
 	}
 
-	srv := server.New(brokerCmdConfig.ServerConfig, broker, nil, logger)
+	srv := server.New(*brokerCmdConfig.ServerConfig, broker, nil, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)

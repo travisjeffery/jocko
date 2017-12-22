@@ -62,7 +62,7 @@ func Test_Membership(t *testing.T) {
 }
 
 func testSerf(id int32, port int) (*serf.Serf, error) {
-	s, err := serf.New(serf.Config{ID: id, Addr: fmt.Sprintf("0.0.0.0:%d", port)}, logger)
+	s, err := serf.New(serf.Config{ID: id, BrokerAddr: fmt.Sprintf("localhost:%d", port), Addr: fmt.Sprintf("0.0.0.0:%d", port)}, logger)
 	if err != nil {
 		return nil, err
 	}

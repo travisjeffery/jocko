@@ -1395,7 +1395,7 @@ func newFields() fields {
 			return 1, nil
 		},
 		ClusterFunc: func() []*jocko.ClusterMember {
-			return []*jocko.ClusterMember{{ID: 1, Port: 9092, IP: "localhost"}}
+			return []*jocko.ClusterMember{{ID: 1, BrokerPort: 9092, BrokerIP: "localhost"}}
 		},
 		MemberFunc: func(memberID int32) *jocko.ClusterMember {
 			return &jocko.ClusterMember{ID: 1}

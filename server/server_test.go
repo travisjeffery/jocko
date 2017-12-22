@@ -45,7 +45,6 @@ func TestBroker(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-
 		bValue := []byte("Hello from Jocko!")
 		msgValue := sarama.ByteEncoder(bValue)
 		pPartition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
@@ -131,7 +130,12 @@ func setup(t require.TestingT) (string, func()) {
 	brokerPort := ports[0]
 
 	logger := log.New()
-	serf, err := serf.New(serf.Config{Addr: "127.0.0.1:" + ports[2]}, logger)
+
+	raftAddr := "127.0.0.1:" + ports[1]
+	brokerAddr := "127.0.0.1:" + brokerPort
+	httpAddr := "127.0.0.1:" + ports[3]
+
+	serf, err := serf.New(serf.Config{ID: 0, Addr: "127.0.0.1:" + ports[2], BrokerAddr: brokerAddr, HTTPAddr: httpAddr, RaftAddr: raftAddr}, logger)
 	if err != nil {
 		panic(err)
 	}
@@ -140,7 +144,7 @@ func setup(t require.TestingT) (string, func()) {
 		Bootstrap:         true,
 		BootstrapExpect:   1,
 		DevMode:           true,
-		Addr:              "127.0.0.1:" + ports[1],
+		Addr:              raftAddr,
 		ReconcileInterval: time.Second * 5,
 	}, serf, logger)
 	if err != nil {
@@ -152,19 +156,16 @@ func setup(t require.TestingT) (string, func()) {
 	}
 	require.NoError(t, err)
 
-	_, err = raft.WaitForLeader(10 * time.Second)
-	require.NoError(t, err)
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(server.Config{BrokerAddr: ":" + brokerPort, HTTPAddr: ":" + ports[3]}, broker, mock.NewMetrics(), logger)
+	srv := server.New(server.Config{BrokerAddr: ":" + brokerPort, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", ":"+brokerPort)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "localhost:"+brokerPort)
 	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	require.NoError(t, err)
-	defer conn.Close()
 
 	client := server.NewClient(conn)
 	_, err = client.CreateTopics("testclient", &protocol.CreateTopicRequests{
@@ -181,11 +182,15 @@ func setup(t require.TestingT) (string, func()) {
 		}},
 	})
 	require.NoError(t, err)
+	conn.Close()
 
 	return brokerPort, func() {
+		defer func() {
+			logger.Info("removing data dir")
+			os.RemoveAll(dataDir)
+		}()
 		cancel()
 		srv.Close()
 		broker.Shutdown()
-		os.RemoveAll(dataDir)
 	}
 }

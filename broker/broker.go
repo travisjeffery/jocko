@@ -54,7 +54,7 @@ type Broker struct {
 func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:      config,
-		logger:      logger,
+		logger:      logger.With(log.Any("config", config)),
 		topicMap:    make(map[string][]*jocko.Partition),
 		replicators: make(map[*jocko.Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
@@ -70,17 +70,9 @@ func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*B
 		b.raftCommands = make(chan jocko.RaftCommand, 16)
 	}
 
-	// 	reconcileCh := make(chan *jocko.ClusterMember, 32)
-	// 	if err := b.serf.Bootstrap(conn, reconcileCh); err != nil {
-	// 		b.logger.Error("failed to start serf", log.Error("error", err))
-	// 		return nil, err
-	// 	}
-
-	// 	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands); err != nil {
-	// 		return nil, err
-	// 	}
-
 	go b.handleRaftCommmands(b.raftCommands)
+
+	b.logger.Info("")
 
 	return b, nil
 }
@@ -349,8 +341,8 @@ func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.Me
 	for _, mem := range b.clusterMembers() {
 		brokers = append(brokers, &protocol.Broker{
 			NodeID: b.config.ID,
-			Host:   mem.IP,
-			Port:   int32(mem.Port),
+			Host:   mem.BrokerIP,
+			Port:   int32(mem.BrokerPort),
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata

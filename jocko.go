@@ -196,20 +196,18 @@ type Broker interface {
 // ClusterMember is used as a wrapper around a broker's info and a
 // connection to it.
 type ClusterMember struct {
-	ID   int32  `json:"id"`
-	Port int    `json:"port"`
-	IP   string `json:"addr"`
-
-	SerfPort int          `json:"-"`
-	RaftAddr string       `json:"-"`
-	Status   MemberStatus `json:"-"`
-
-	conn net.Conn
+	ID         int32        `json:"id"`
+	BrokerPort int          `json:"broker_port"`
+	BrokerIP   string       `json:"broker_ip"`
+	HTTPAddr   string       `json:"http_addr"`
+	RaftAddr   string       `json:"-"`
+	Status     MemberStatus `json:"-"`
+	conn       net.Conn
 }
 
 // Addr is used to get the address of the member.
 func (b *ClusterMember) Addr() *net.TCPAddr {
-	return &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
+	return &net.TCPAddr{IP: net.ParseIP(b.BrokerIP), Port: b.BrokerPort}
 }
 
 // Write is used to write the member.
@@ -234,7 +232,7 @@ func (b *ClusterMember) Read(p []byte) (int, error) {
 
 // connect opens a tcp connection to the cluster member.
 func (b *ClusterMember) connect() error {
-	addr := &net.TCPAddr{IP: net.ParseIP(b.IP), Port: b.Port}
+	addr := &net.TCPAddr{IP: net.ParseIP(b.BrokerIP), Port: b.BrokerPort}
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		return err
