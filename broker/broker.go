@@ -72,7 +72,7 @@ func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*B
 
 	go b.handleRaftCommmands(b.raftCommands)
 
-	b.logger.Info("")
+	b.logger.Info("hello")
 
 	return b, nil
 }
