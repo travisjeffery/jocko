@@ -9,12 +9,12 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/log"
 )
 
 type check struct {
@@ -114,37 +114,38 @@ func main() {
 }
 
 func setup(logger log.Logger) func() {
-
-
-	serf, err := serf.New(
-		serf.Logger(logger),
-		serf.Addr(serfAddr),
-	)
-
-	raft, err := raft.New(
-		raft.Logger(logger),
-		raft.DataDir(logDir),
-		raft.Addr(raftAddr),
-	)
-
-	store, err := broker.New(brokerID,
-		broker.LogDir(logDir),
-		broker.Logger(logger),
-		broker.Addr(brokerAddr),
-		broker.Serf(serf),
-		broker.Raft(raft),
-	)
+	serf, err := serf.New(serf.Config{ID: brokerID, Addr: serfAddr, RaftAddr: raftAddr}, logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed opening raft store: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed starting serf: %v\n", err)
 		os.Exit(1)
 	}
-	srv := server.New(brokerAddr, store, httpAddr, mock.NewMetrics(), logger)
+
+	raft, err := raft.New(raft.Config{
+		Addr:              raftAddr,
+		DataDir:           logDir + "/raft",
+		DevMode:           true,
+		Bootstrap:         true,
+		BootstrapExpect:   1,
+		ReconcileInterval: time.Second * 5,
+	}, serf, logger)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed starting raft: %v\n", err)
+		os.Exit(1)
+	}
+
+	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/logs", DevMode: true}, serf, raft, logger)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed starting broker: %v\n", err)
+		os.Exit(1)
+	}
+
+	srv := server.New(server.Config{BrokerAddr: brokerAddr, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting server: %v\n", err)
 		os.Exit(1)
 	}
 
-	if _, err := store.WaitForLeader(10 * time.Second); err != nil {
+	if _, err := raft.WaitForLeader(10 * time.Second); err != nil {
 		panic(err)
 	}
 
@@ -160,12 +161,14 @@ func setup(logger log.Logger) func() {
 	}
 
 	client := server.NewClient(conn)
-	resp, err := client.CreateTopic("cmd/createtopic", &protocol.CreateTopicRequest{
-		Topic:             topic,
-		NumPartitions:     numPartitions,
-		ReplicationFactor: 1,
-		ReplicaAssignment: nil,
-		Configs:           nil,
+	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
+		Requests: []*protocol.CreateTopicRequest{{
+			Topic:             topic,
+			NumPartitions:     numPartitions,
+			ReplicationFactor: 1,
+			ReplicaAssignment: nil,
+			Configs:           nil,
+		}},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed with request to broker: %v\n", err)

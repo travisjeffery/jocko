@@ -27,10 +27,10 @@ func TestBroker_Replicate(t *testing.T) {
 		CommitLog:       c,
 	}
 
-	replicator := broker.NewReplicator(p, 0,
-		broker.ReplicatorMinBytes(5),
-		broker.ReplicatorMaxWaitTime(int32(250*time.Millisecond)),
-		broker.ReplicatorLeader(l))
+	replicator := broker.NewReplicator(broker.ReplicatorConfig{
+		MinBytes:    5,
+		MaxWaitTime: int32(250 * time.Millisecond),
+	}, p, 0, l)
 	replicator.Replicate()
 
 	testutil.WaitForResult(func() (bool, error) {

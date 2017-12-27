@@ -9,6 +9,7 @@ import (
 
 // Replicator fetches from the partition's leader producing to itself the follower, thereby replicating the partition.
 type Replicator struct {
+	config              ReplicatorConfig
 	replicaID           int32
 	partition           *jocko.Partition
 	clientID            string
@@ -22,17 +23,21 @@ type Replicator struct {
 	leader              jocko.Client
 }
 
+type ReplicatorConfig struct {
+	MinBytes    int32
+	MaxWaitTime int32
+}
+
 // NewReplicator returns a new replicator instance.
-func NewReplicator(partition *jocko.Partition, replicaID int32, opts ...ReplicatorFn) *Replicator {
+func NewReplicator(config ReplicatorConfig, partition *jocko.Partition, replicaID int32, leader jocko.Client) *Replicator {
 	r := &Replicator{
+		config:    config,
 		partition: partition,
 		replicaID: replicaID,
 		clientID:  fmt.Sprintf("Replicator-%d", replicaID),
+		leader:    leader,
 		done:      make(chan struct{}, 2),
 		msgs:      make(chan []byte, 2),
-	}
-	for _, o := range opts {
-		o(r)
 	}
 	return r
 }

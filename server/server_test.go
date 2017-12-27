@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/raft"
 	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/log"
 )
 
 const (
@@ -45,7 +45,6 @@ func TestBroker(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-
 		bValue := []byte("Hello from Jocko!")
 		msgValue := sarama.ByteEncoder(bValue)
 		pPartition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
@@ -131,56 +130,67 @@ func setup(t require.TestingT) (string, func()) {
 	brokerPort := ports[0]
 
 	logger := log.New()
-	serf, err := serf.New(
-		serf.Logger(logger),
-		serf.Addr("127.0.0.1:"+ports[2]),
-	)
-	raft, err := raft.New(
-		raft.Logger(logger),
-		raft.DataDir(dataDir),
-		raft.Addr("127.0.0.1:"+ports[1]),
-	)
-	store, err := broker.New(0,
-		broker.LogDir(dataDir),
-		broker.Addr("127.0.0.1:"+brokerPort),
-		broker.Raft(raft),
-		broker.Serf(serf),
-		broker.Loner(),
-		broker.Logger(logger))
+
+	raftAddr := "127.0.0.1:" + ports[1]
+	brokerAddr := "127.0.0.1:" + brokerPort
+	httpAddr := "127.0.0.1:" + ports[3]
+
+	serf, err := serf.New(serf.Config{ID: 0, Addr: "127.0.0.1:" + ports[2], BrokerAddr: brokerAddr, HTTPAddr: httpAddr, RaftAddr: raftAddr}, logger)
+	if err != nil {
+		panic(err)
+	}
+	raft, err := raft.New(raft.Config{
+		DataDir:           dataDir + "/raft",
+		Bootstrap:         true,
+		BootstrapExpect:   1,
+		DevMode:           true,
+		Addr:              raftAddr,
+		ReconcileInterval: time.Second * 5,
+	}, serf, logger)
+	if err != nil {
+		panic(err)
+	}
+	broker, err := broker.New(broker.Config{ID: 0, DataDir: dataDir + "/logs", DevMode: true, Addr: "127.0.0.1:" + brokerPort}, serf, raft, logger)
+	if err != nil {
+		panic(err)
+	}
 	require.NoError(t, err)
 
-	_, err = store.WaitForLeader(10 * time.Second)
-	require.NoError(t, err)
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(":"+brokerPort, store, ":"+ports[3], mock.NewMetrics(), logger)
+	srv := server.New(server.Config{BrokerAddr: ":" + brokerPort, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", ":"+brokerPort)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "localhost:"+brokerPort)
 	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	require.NoError(t, err)
-	defer conn.Close()
 
 	client := server.NewClient(conn)
-	_, err = client.CreateTopic("testclient", &protocol.CreateTopicRequest{
-		Topic:             topic,
-		NumPartitions:     int32(1),
-		ReplicationFactor: int16(1),
-		ReplicaAssignment: map[int32][]int32{
-			0: []int32{0, 1},
-		},
-		Configs: map[string]string{
-			"config_key": "config_val",
-		},
+	_, err = client.CreateTopics("testclient", &protocol.CreateTopicRequests{
+		Requests: []*protocol.CreateTopicRequest{{
+			Topic:             topic,
+			NumPartitions:     int32(1),
+			ReplicationFactor: int16(1),
+			ReplicaAssignment: map[int32][]int32{
+				0: []int32{0, 1},
+			},
+			Configs: map[string]string{
+				"config_key": "config_val",
+			},
+		}},
 	})
 	require.NoError(t, err)
+	conn.Close()
 
 	return brokerPort, func() {
+		defer func() {
+			logger.Info("removing data dir")
+			os.RemoveAll(dataDir)
+		}()
 		cancel()
 		srv.Close()
-		store.Shutdown()
-		os.RemoveAll(dataDir)
+		broker.Shutdown()
 	}
 }

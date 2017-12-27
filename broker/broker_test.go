@@ -12,117 +12,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/log"
 )
-
-func TestNew(t *testing.T) {
-	tests := []struct {
-		name      string
-		fields    fields
-		setFields func(f *fields)
-		wantErr   bool
-	}{
-		{
-			name: "broker ok",
-		},
-		{
-			name:    "no logger error",
-			wantErr: true,
-			setFields: func(f *fields) {
-				f.logger = nil
-			},
-		},
-		{
-			name:    "no broker addr error",
-			wantErr: true,
-			setFields: func(f *fields) {
-				f.brokerAddr = ""
-			},
-		},
-		{
-			name:    "no raft addr error",
-			wantErr: true,
-			setFields: func(f *fields) {
-				f.raft = &mock.Raft{
-					AddrFunc: func() string {
-						return ""
-					},
-				}
-			},
-		},
-		{
-			name:    "serf bootstrap error",
-			wantErr: true,
-			setFields: func(f *fields) {
-				f.serf = &mock.Serf{
-					BootstrapFunc: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
-						return errors.New("mock serf bootstrap error")
-					},
-				}
-			},
-		},
-		{
-			name:    "raft bootstrap error",
-			wantErr: true,
-			setFields: func(f *fields) {
-				f.raft = &mock.Raft{
-					AddrFunc: f.raft.AddrFunc,
-					BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
-						return errors.New("mock raft bootstrap error")
-					},
-				}
-			},
-		},
-	}
-	for _, tt := range tests {
-		os.RemoveAll("/tmp/jocko")
-
-		t.Run(tt.name, func(t *testing.T) {
-			tt.fields = newFields()
-			if tt.setFields != nil {
-				tt.setFields(&tt.fields)
-			}
-			want := &Broker{
-				logger:       tt.fields.logger,
-				id:           tt.fields.id,
-				topicMap:     tt.fields.topicMap,
-				replicators:  tt.fields.replicators,
-				brokerAddr:   tt.fields.brokerAddr,
-				logDir:       tt.fields.logDir,
-				raftCommands: tt.fields.raftCommands,
-				raft:         tt.fields.raft,
-				serf:         tt.fields.serf,
-				shutdownCh:   tt.fields.shutdownCh,
-				shutdown:     tt.fields.shutdown,
-			}
-
-			got, err := New(tt.fields.id, Addr(tt.fields.brokerAddr), Serf(tt.fields.serf), Raft(tt.fields.raft), Logger(tt.fields.logger), RaftCommands(tt.fields.raftCommands), LogDir(tt.fields.logDir))
-
-			if err != nil && tt.wantErr {
-				return
-			} else if (err != nil) != tt.wantErr {
-				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.fields.serf.BootstrapCalled() {
-				t.Error("expected serf bootstrap invoked; did not")
-			}
-			if !tt.fields.raft.BootstrapCalled() {
-				t.Error("expected raft bootstrap invoked; did not")
-			}
-			if got != nil && got.shutdownCh == nil {
-				t.Errorf("got.shutdownCh is nil")
-			} else if got != nil {
-				want.shutdownCh = got.shutdownCh
-			}
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("New() = %v, want %v", got, want)
-			}
-		})
-	}
-}
 
 func TestBroker_Run(t *testing.T) {
 	mustEncode := func(e protocol.Encoder) []byte {
@@ -580,21 +473,17 @@ func TestBroker_Run(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
-			b := &Broker{
-				logger:       tt.fields.logger,
-				id:           tt.fields.id,
-				loner:        tt.fields.loner,
-				topicMap:     tt.fields.topicMap,
-				replicators:  tt.fields.replicators,
-				brokerAddr:   tt.fields.brokerAddr,
-				logDir:       tt.fields.logDir,
-				raft:         tt.fields.raft,
-				serf:         tt.fields.serf,
-				raftCommands: tt.fields.raftCommands,
-				shutdownCh:   tt.fields.shutdownCh,
-				shutdown:     tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DevMode: tt.fields.loner,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if tt.fields.topicMap != nil {
+				b.topicMap = tt.fields.topicMap
 				for _, ps := range tt.fields.topicMap {
 					for _, p := range ps {
 						b.startReplica(p)
@@ -676,17 +565,13 @@ func TestBroker_Join(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.Join(tt.args.addrs...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.Join() = %v, want %v", got, tt.want)
@@ -720,6 +605,8 @@ func TestBroker_clusterMembers(t *testing.T) {
 		{
 			name: "found members ok",
 			fields: fields{
+				logger:     log.New(),
+				brokerAddr: "localhost:9092",
 				serf: &mock.Serf{
 					ClusterFunc: func() []*jocko.ClusterMember {
 						return members
@@ -731,17 +618,13 @@ func TestBroker_clusterMembers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.clusterMembers(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.clusterMembers() = %v, want %v", got, tt.want)
@@ -771,6 +654,7 @@ func TestBroker_isController(t *testing.T) {
 		{
 			name: "is leader",
 			fields: fields{
+				logger: log.New(),
 				raft: &mock.Raft{
 					IsLeaderFunc: func() bool {
 						return true
@@ -782,17 +666,13 @@ func TestBroker_isController(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.isController(); got != tt.want {
 				t.Errorf("Broker.isController() = %v, want %v", got, tt.want)
@@ -828,6 +708,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 			name: "partitions found",
 			fields: fields{
 				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
+				logger:   log.New(),
 			},
 			args:      args{topic: "topic"},
 			wantFound: []*jocko.Partition{{ID: 1}},
@@ -837,6 +718,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 			name: "partitions not found",
 			fields: fields{
 				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
+				logger:   log.New(),
 			},
 			args:      args{topic: "not_topic"},
 			wantFound: nil,
@@ -845,18 +727,15 @@ func TestBroker_topicPartitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
+			b.topicMap = tt.fields.topicMap
 			gotFound, gotErr := b.topicPartitions(tt.args.topic)
 			if !reflect.DeepEqual(gotFound, tt.wantFound) {
 				t.Errorf("Broker.topicPartitions() gotFound = %v, want %v", gotFound, tt.wantFound)
@@ -892,23 +771,24 @@ func TestBroker_topics(t *testing.T) {
 		{
 			name: "topic map returned",
 			fields: fields{
-				topicMap: topicMap},
+				topicMap: topicMap,
+				logger:   log.New(),
+			},
 			want: topicMap,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
+			}
+			if tt.fields.topicMap != nil {
+				b.topicMap = tt.fields.topicMap
 			}
 			if got := b.topics(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.topics() = %v, want %v", got, tt.want)
@@ -967,17 +847,16 @@ func TestBroker_partition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
+			}
+			if tt.fields.topicMap != nil {
+				b.topicMap = tt.fields.topicMap
 			}
 			got, goterr := b.partition(tt.args.topic, tt.args.partition)
 			if !reflect.DeepEqual(got, tt.want) {
@@ -1023,7 +902,8 @@ func TestBroker_createPartition(t *testing.T) {
 		{
 			name: "called apply",
 			fields: fields{
-				raft: raft,
+				raft:   raft,
+				logger: log.New(),
 			},
 			args:    args{partition: &jocko.Partition{ID: 1}},
 			wantErr: false,
@@ -1031,17 +911,13 @@ func TestBroker_createPartition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if err := b.createPartition(tt.args.partition); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.createPartition() error = %v, wantErr %v", err, tt.wantErr)
@@ -1087,7 +963,8 @@ func TestBroker_clusterMember(t *testing.T) {
 		{
 			name: "found member",
 			fields: fields{
-				serf: serf,
+				serf:   serf,
+				logger: log.New(),
 			},
 			args: args{id: 1},
 			want: member,
@@ -1095,17 +972,13 @@ func TestBroker_clusterMember(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.clusterMember(tt.args.id); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.clusterMember() = %v, want %v", got, tt.want)
@@ -1193,17 +1066,13 @@ func TestBroker_startReplica(t *testing.T) {
 			tt.setFields(&fields)
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      fields.logger,
-				id:          fields.id,
-				topicMap:    fields.topicMap,
-				replicators: fields.replicators,
-				brokerAddr:  fields.brokerAddr,
-				logDir:      fields.logDir,
-				raft:        fields.raft,
-				serf:        fields.serf,
-				shutdownCh:  fields.shutdownCh,
-				shutdown:    fields.shutdown,
+			b, err := New(Config{
+				ID:      fields.id,
+				DataDir: fields.logDir,
+				Addr:    fields.brokerAddr,
+			}, fields.serf, fields.raft, fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.startReplica(tt.args.partition); got.Error() != tt.want.Error() {
 				t.Errorf("Broker.startReplica() = %v, want %v", got, tt.want)
@@ -1250,21 +1119,17 @@ func TestBroker_createTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.createTopic(tt.args.topic, tt.args.partitions, tt.args.replicationFactor); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.createTopic() = %v, want %v", got, tt.want)
@@ -1295,21 +1160,17 @@ func TestBroker_deleteTopic(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.deleteTopic(tt.args.topic); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.deleteTopic() = %v, want %v", got, tt.want)
@@ -1340,21 +1201,17 @@ func TestBroker_deletePartitions(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if err := b.deletePartitions(tt.args.tp); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.deletePartitions() error = %v, wantErr %v", err, tt.wantErr)
@@ -1377,7 +1234,14 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(tt.fields.id, Addr(tt.fields.brokerAddr), Serf(tt.fields.serf), Raft(tt.fields.raft), Logger(tt.fields.logger), RaftCommands(tt.fields.raftCommands), LogDir(tt.fields.logDir))
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
+			}
 			if err != nil {
 				t.Errorf("Broker.New() error = %v, wanted nil", err)
 			}
@@ -1418,21 +1282,17 @@ func TestBroker_becomeFollower(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.becomeFollower(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.becomeFollower() = %v, want %v", got, tt.want)
@@ -1465,21 +1325,17 @@ func TestBroker_becomeLeader(t *testing.T) {
 		args   args
 		want   protocol.Error
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := &Broker{
-				logger:      tt.fields.logger,
-				id:          tt.fields.id,
-				topicMap:    tt.fields.topicMap,
-				replicators: tt.fields.replicators,
-				brokerAddr:  tt.fields.brokerAddr,
-				logDir:      tt.fields.logDir,
-				raft:        tt.fields.raft,
-				serf:        tt.fields.serf,
-				shutdownCh:  tt.fields.shutdownCh,
-				shutdown:    tt.fields.shutdown,
+			b, err := New(Config{
+				ID:      tt.fields.id,
+				DataDir: tt.fields.logDir,
+				Addr:    tt.fields.brokerAddr,
+			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			if err != nil {
+				t.Error("expected no err")
 			}
 			if got := b.becomeLeader(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.becomeLeader() = %v, want %v", got, tt.want)
@@ -1498,7 +1354,7 @@ func Test_contains(t *testing.T) {
 		args args
 		want bool
 	}{
-	// TODO: Add test cases.
+		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1539,7 +1395,7 @@ func newFields() fields {
 			return 1, nil
 		},
 		ClusterFunc: func() []*jocko.ClusterMember {
-			return []*jocko.ClusterMember{{ID: 1, Port: 9092, IP: "localhost"}}
+			return []*jocko.ClusterMember{{ID: 1, BrokerPort: 9092, BrokerIP: "localhost"}}
 		},
 		MemberFunc: func(memberID int32) *jocko.ClusterMember {
 			return &jocko.ClusterMember{ID: 1}
@@ -1579,7 +1435,7 @@ func newFields() fields {
 		raftCommands: make(chan jocko.RaftCommand),
 		replicators:  make(map[*jocko.Partition]*Replicator),
 		logger:       log.New(),
-		logDir:       "/tmp/jocko",
+		logDir:       "/tmp/jocko/logs",
 		loner:        true,
 		serf:         serf,
 		raft:         raft,

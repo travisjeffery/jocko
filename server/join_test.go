@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/log"
 )
 
 func TestJoin(t *testing.T) {
@@ -21,7 +21,7 @@ func TestJoin(t *testing.T) {
 		RunFunc: func(context.Context, <-chan jocko.Request, chan<- jocko.Response) {},
 	}
 	logger := log.New()
-	srv := New("localhost:9092", b, "localhost:9093", mock.NewMetrics(), logger)
+	srv := New(Config{BrokerAddr: "localhost:9092", HTTPAddr: "localhost:9093"}, b, mock.NewMetrics(), logger)
 	srv.Start(context.Background())
 	defer srv.Close()
 

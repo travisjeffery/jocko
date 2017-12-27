@@ -3,18 +3,21 @@ package broker
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"math/rand"
+	"net"
 	"path"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
-	"github.com/travisjeffery/jocko/log"
 )
 
 var (
@@ -22,19 +25,21 @@ var (
 	ErrInvalidArgument = errors.New("no logger set")
 )
 
+type Config struct {
+	ID      int32
+	DataDir string
+	DevMode bool
+	Addr    string
+}
+
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
+	config Config
 
-	id          int32
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
-	brokerAddr  string
-	logDir      string
-	// loner should only be used for tests. It makes it so cluster operations
-	// don't go through raft.
-	loner bool
 
 	raft         jocko.Raft
 	serf         jocko.Serf
@@ -46,16 +51,15 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(id int32, opts ...BrokerFn) (*Broker, error) {
+func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
-		id:          id,
+		config:      config,
+		logger:      logger.With(log.Any("config", config)),
 		topicMap:    make(map[string][]*jocko.Partition),
 		replicators: make(map[*jocko.Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
-	}
-
-	for _, o := range opts {
-		o(b)
+		serf:        serf,
+		raft:        raft,
 	}
 
 	if b.logger == nil {
@@ -66,33 +70,9 @@ func New(id int32, opts ...BrokerFn) (*Broker, error) {
 		b.raftCommands = make(chan jocko.RaftCommand, 16)
 	}
 
-	port, err := addrPort(b.brokerAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	raftPort, err := addrPort(b.raft.Addr())
-	if err != nil {
-		return nil, err
-	}
-
-	conn := &jocko.ClusterMember{
-		ID:       b.id,
-		Port:     port,
-		RaftPort: raftPort,
-	}
-
-	reconcileCh := make(chan *jocko.ClusterMember, 32)
-	if err := b.serf.Bootstrap(conn, reconcileCh); err != nil {
-		b.logger.Error("failed to start serf", log.Error("error", err))
-		return nil, err
-	}
-
-	if err := b.raft.Bootstrap(b.serf, reconcileCh, b.raftCommands); err != nil {
-		return nil, err
-	}
-
 	go b.handleRaftCommmands(b.raftCommands)
+
+	b.logger.Info("hello")
 
 	return b, nil
 }
@@ -193,7 +173,7 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			}
 			continue
 		}
-		if b.loner {
+		if b.config.DevMode {
 			partitions := b.partitionsToCreate(req.Topic, req.NumPartitions, req.ReplicationFactor)
 			err := protocol.ErrNone
 			for _, p := range partitions {
@@ -275,13 +255,13 @@ func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protoco
 				continue
 			}
 		}
-		if p.Leader == b.id && !partition.IsLeader(b.id) {
+		if p.Leader == b.config.ID && !partition.IsLeader(b.config.ID) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
 			if err := b.becomeLeader(partition.Topic, partition.ID, p); err != protocol.ErrNone {
 				setErr(i, p, err)
 				continue
 			}
-		} else if contains(p.Replicas, b.id) && !partition.IsFollowing(p.Leader) {
+		} else if contains(p.Replicas, b.config.ID) && !partition.IsFollowing(p.Leader) {
 			// is command asking this broker to follow leader who it isn't a leader of already
 			if err := b.becomeFollower(partition.Topic, partition.ID, p); err != protocol.ErrNone {
 				setErr(i, p, err)
@@ -358,11 +338,11 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 
 func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.MetadataRequest) *protocol.MetadataResponse {
 	brokers := make([]*protocol.Broker, 0, len(b.clusterMembers()))
-	for _, b := range b.clusterMembers() {
+	for _, mem := range b.clusterMembers() {
 		brokers = append(brokers, &protocol.Broker{
-			NodeID: b.ID,
-			Host:   b.IP,
-			Port:   int32(b.Port),
+			NodeID: b.config.ID,
+			Host:   mem.BrokerIP,
+			Port:   int32(mem.BrokerPort),
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
@@ -432,7 +412,7 @@ func (b *Broker) handleFetch(header *protocol.RequestHeader, r *protocol.FetchRe
 				}
 				continue
 			}
-			if !partition.IsLeader(b.id) {
+			if !partition.IsLeader(b.config.ID) {
 				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 					Partition: p.Partition,
 					ErrorCode: protocol.ErrNotLeaderForPartition.Code(),
@@ -540,16 +520,16 @@ func (b *Broker) startReplica(partition *jocko.Partition) protocol.Error {
 	} else {
 		b.topicMap[partition.Topic] = []*jocko.Partition{partition}
 	}
-	isLeader := partition.Leader == b.id
+	isLeader := partition.Leader == b.config.ID
 	isFollower := false
 	for _, r := range partition.Replicas {
-		if r == b.id {
+		if r == b.config.ID {
 			isFollower = true
 		}
 	}
 	if isLeader || isFollower {
 		commitLog, err := commitlog.New(commitlog.Options{
-			Path:            path.Join(b.logDir, partition.String()),
+			Path:            path.Join(b.config.DataDir, partition.String()),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
 		})
@@ -557,7 +537,7 @@ func (b *Broker) startReplica(partition *jocko.Partition) protocol.Error {
 			return protocol.ErrUnknown.WithErr(err)
 		}
 		partition.CommitLog = commitLog
-		partition.Conn = b.serf.Member(partition.LeaderID())
+		// partition.Conn = b.serf.Member(partition.LeaderID())
 	}
 	return protocol.ErrNone
 }
@@ -682,10 +662,9 @@ func (b *Broker) becomeFollower(topic string, partitionID int32, partitionState 
 	}
 	p.Leader = partitionState.Leader
 	p.Conn = b.clusterMember(p.LeaderID())
-	r := NewReplicator(p, b.id,
-		ReplicatorLeader(server.NewClient(p.Conn)))
+	r := NewReplicator(ReplicatorConfig{}, p, b.config.ID, server.NewClient(p.Conn))
 	b.replicators[p] = r
-	if !b.loner {
+	if !b.config.DevMode {
 		r.Replicate()
 	}
 	return protocol.ErrNone
@@ -703,7 +682,7 @@ func (b *Broker) becomeLeader(topic string, partitionID int32, partitionState *p
 			return protocol.ErrUnknown.WithErr(err)
 		}
 	}
-	p.Leader = b.id
+	p.Leader = b.config.ID
 	p.Conn = b.clusterMember(p.LeaderID())
 	p.ISR = partitionState.ISR
 	p.LeaderAndISRVersionInZK = partitionState.ZKVersion
@@ -717,4 +696,28 @@ func contains(rs []int32, r int32) bool {
 		}
 	}
 	return false
+}
+
+func addrPort(addr string) (int, error) {
+	_, strPort, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return 0, err
+	}
+	return port, nil
+}
+
+func unmarshalData(data *json.RawMessage, p interface{}) error {
+	b, err := data.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "json marshal failed")
+	}
+	if err := json.Unmarshal(b, p); err != nil {
+		return errors.Wrap(err, "json unmarshal failed")
+	}
+	return nil
 }

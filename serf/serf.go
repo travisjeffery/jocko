@@ -15,38 +15,45 @@ const (
 	statusReap = serf.MemberStatus(-1)
 )
 
+type Config struct {
+	ID         int32
+	Addr       string
+	RaftAddr   string
+	BrokerAddr string
+	HTTPAddr   string
+	Join       []string
+	JoinWAN    []string
+}
+
 // Serf manages membership of Jocko cluster using Hashicorp Serf
 type Serf struct {
+	config      Config
 	logger      log.Logger
 	serf        *serf.Serf
-	addr        string
-	nodeID      int32
 	reconcileCh chan<- *jocko.ClusterMember
-	initMembers []string
 	shutdownCh  chan struct{}
-
-	peers    map[int32]*jocko.ClusterMember
-	peerLock sync.RWMutex
+	peers       map[int32]*jocko.ClusterMember
+	peerLock    sync.RWMutex
 }
 
 // New Serf object
-func New(opts ...OptionFn) (*Serf, error) {
+func New(config Config, logger log.Logger) (*Serf, error) {
 	b := &Serf{
-		peers:      make(map[int32]*jocko.ClusterMember),
-		shutdownCh: make(chan struct{}),
+		config:      config,
+		logger:      logger.With(log.Any("config", config)),
+		peers:       make(map[int32]*jocko.ClusterMember),
+		shutdownCh:  make(chan struct{}),
+		reconcileCh: make(chan *jocko.ClusterMember, 32),
 	}
-
-	for _, opt := range opts {
-		opt(b)
+	if err := b.setupSerf(); err != nil {
+		return nil, err
 	}
-
+	b.logger.Info("hello")
 	return b, nil
 }
 
-// Bootstrap saves the node metadata and starts the serf agent
-// Info of node updates is returned on reconcileCh channel
-func (s *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.ClusterMember) error {
-	addr, strPort, err := net.SplitHostPort(s.addr)
+func (s *Serf) setupSerf() error {
+	addr, strPort, err := net.SplitHostPort(s.config.Addr)
 	if err != nil {
 		return err
 	}
@@ -54,7 +61,6 @@ func (s *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 	if err != nil {
 		return err
 	}
-	s.nodeID = node.ID
 	eventCh := make(chan serf.Event, 256)
 	conf := serf.DefaultConfig()
 	conf.Init()
@@ -62,18 +68,16 @@ func (s *Serf) Bootstrap(node *jocko.ClusterMember, reconcileCh chan<- *jocko.Cl
 	conf.MemberlistConfig.BindPort = port
 	conf.EventCh = eventCh
 	conf.EnableNameConflictResolution = false
-	conf.NodeName = fmt.Sprintf("jocko-%03d", node.ID)
-	conf.Tags["id"] = strconv.Itoa(int(node.ID))
-	conf.Tags["port"] = strconv.Itoa(node.Port)
-	conf.Tags["raft_port"] = strconv.Itoa(node.RaftPort)
-	sserf, err := serf.Create(conf)
+	conf.NodeName = fmt.Sprintf("jocko-%03d", s.config.ID)
+	conf.Tags["id"] = strconv.Itoa(int(s.config.ID))
+	conf.Tags["raft_addr"] = s.config.RaftAddr
+	conf.Tags["broker_addr"] = s.config.BrokerAddr
+	conf.Tags["http_addr"] = s.config.HTTPAddr
+	s.serf, err = serf.Create(conf)
 	if err != nil {
 		return err
 	}
-	s.serf = sserf
-	s.reconcileCh = reconcileCh
-	if _, err := s.Join(s.initMembers...); err != nil {
-		// b.Shutdown()
+	if _, err := s.Join(s.config.Join...); err != nil {
 		return err
 	}
 
@@ -115,7 +119,6 @@ func (s *Serf) nodeJoinEvent(me serf.MemberEvent) {
 			s.logger.Error("failed to parse peer from serf member", log.Error("error", err), log.String("name", m.Name))
 			continue
 		}
-		s.logger.Info("adding peer", log.Any("peer", peer))
 		s.peerLock.Lock()
 		s.peers[peer.ID] = peer
 		s.peerLock.Unlock()
@@ -155,12 +158,12 @@ func (s *Serf) localMemberEvent(me serf.MemberEvent) error {
 
 // ID of this serf node
 func (s *Serf) ID() int32 {
-	return s.nodeID
+	return s.config.ID
 }
 
 // Addr of serf agent
 func (s *Serf) Addr() string {
-	return s.addr
+	return s.config.Addr
 }
 
 // Join an existing serf cluster
@@ -175,7 +178,6 @@ func (s *Serf) Join(addrs ...string) (int, error) {
 func (s *Serf) Cluster() []*jocko.ClusterMember {
 	s.peerLock.RLock()
 	defer s.peerLock.RUnlock()
-
 	cluster := make([]*jocko.ClusterMember, 0, len(s.peers))
 	for _, v := range s.peers {
 		cluster = append(cluster, v)
@@ -211,8 +213,11 @@ func (s *Serf) Shutdown() error {
 }
 
 func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
-	portStr := m.Tags["port"]
-	port, err := strconv.Atoi(portStr)
+	brokerIP, brokerPortS, err := net.SplitHostPort(m.Tags["broker_addr"])
+	if err != nil {
+		return nil, err
+	}
+	brokerPort, err := strconv.Atoi(brokerPortS)
 	if err != nil {
 		return nil, err
 	}
@@ -223,18 +228,13 @@ func clusterMember(m serf.Member) (*jocko.ClusterMember, error) {
 		return nil, err
 	}
 
-	raftPortStr := m.Tags["raft_port"]
-	raftPort, err := strconv.Atoi(raftPortStr)
-	if err != nil {
-		return nil, err
-	}
-
 	conn := &jocko.ClusterMember{
-		IP:       m.Addr.String(),
-		ID:       int32(id),
-		RaftPort: raftPort,
-		Port:     port,
-		Status:   status(m.Status),
+		ID:         int32(id),
+		BrokerPort: brokerPort,
+		BrokerIP:   brokerIP,
+		RaftAddr:   m.Tags["raft_addr"],
+		HTTPAddr:   m.Tags["http_addr"],
+		Status:     status(m.Status),
 	}
 
 	return conn, nil
@@ -255,4 +255,17 @@ func status(s serf.MemberStatus) jocko.MemberStatus {
 	default:
 		return jocko.StatusNone
 	}
+}
+
+func addrPort(addr string) (int, error) {
+	_, strPort, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return 0, err
+	}
+	return port, nil
 }
