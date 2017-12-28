@@ -25,6 +25,7 @@ var (
 	ErrInvalidArgument = errors.New("no logger set")
 )
 
+// Config holds the configuration for a Broker.
 type Config struct {
 	ID      int32
 	DataDir string
