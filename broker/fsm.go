@@ -27,7 +27,7 @@ func (b *Broker) raftApply(cmd jocko.RaftCmdType, data interface{}) error {
 		Cmd:  cmd,
 		Data: &r,
 	}
-	return b.raft.Apply(c)
+	return b.oldRaft.Apply(c)
 }
 
 // handleRaftCommands reads commands sent into the given channel to apply them.

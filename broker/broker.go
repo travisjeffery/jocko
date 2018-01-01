@@ -4,20 +4,31 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
-	"path"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/hashicorp/raft"
+	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/broker/fsm"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/server"
+)
+
+const (
+	serfLANSnapshot = "serf/local.snapshot"
+	raftState       = "raft/"
 )
 
 var (
@@ -27,10 +38,16 @@ var (
 
 // Config holds the configuration for a Broker.
 type Config struct {
-	ID      int32
-	DataDir string
-	DevMode bool
-	Addr    string
+	ID              int32
+	NodeName        string
+	DataDir         string
+	DevMode         bool
+	Addr            string
+	SerfLANConfig   *serf.Config
+	Bootstrap       bool
+	BootstrapExpect int
+	NonVoter        bool
+	RaftAddr        string
 }
 
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
@@ -42,9 +59,14 @@ type Broker struct {
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
 
-	raft         jocko.Raft
-	serf         jocko.Serf
+	oldRaft      jocko.Raft
+	oldSerf      jocko.Serf
 	raftCommands chan jocko.RaftCommand
+
+	raft       *raft.Raft
+	serf       *serf.Serf
+	fsm        *fsm.FSM
+	eventChLAN chan serf.Event
 
 	shutdownCh   chan struct{}
 	shutdown     bool
@@ -52,30 +74,93 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(config *Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*Broker, error) {
+func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:      config,
-		logger:      logger.With(log.Any("config", config)),
+		logger:      logger,
 		topicMap:    make(map[string][]*jocko.Partition),
 		replicators: make(map[*jocko.Partition]*Replicator),
 		shutdownCh:  make(chan struct{}),
-		serf:        serf,
-		raft:        raft,
+		eventChLAN:  make(chan serf.Event, 256),
+		oldSerf:     oldSerf,
+		oldRaft:     oldRaft,
 	}
 
 	if b.logger == nil {
 		return nil, ErrInvalidArgument
 	}
 
-	if b.raftCommands == nil {
-		b.raftCommands = make(chan jocko.RaftCommand, 16)
-	}
-
-	go b.handleRaftCommmands(b.raftCommands)
-
 	b.logger.Info("hello")
 
+	b.setupRaft()
+
+	var err error
+	b.serf, err = b.setupSerf(config.SerfLANConfig, b.eventChLAN, serfLANSnapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	go b.lanEventHandler()
+
 	return b, nil
+}
+
+func (s *Broker) setupSerf(config *serf.Config, ch chan serf.Event, path string) (*serf.Serf, error) {
+	config.Init()
+	config.NodeName = s.config.NodeName
+	config.Tags["role"] = "jocko"
+	config.Tags["id"] = string(s.config.ID)
+	if s.config.Bootstrap {
+		config.Tags["bootstrap"] = "1"
+	}
+	if s.config.BootstrapExpect != 0 {
+		config.Tags["bootstrap_expect"] = fmt.Sprintf("%d", s.config.BootstrapExpect)
+	}
+	if s.config.NonVoter {
+		config.Tags["non_voter"] = "1"
+	}
+	config.EventCh = ch
+	config.EnableNameConflictResolution = false
+	if !s.config.DevMode {
+		config.SnapshotPath = filepath.Join(s.config.DataDir, path)
+	}
+	if err := ensurePath(config.SnapshotPath, false); err != nil {
+		return nil, err
+	}
+	return serf.Create(config)
+}
+
+func (s *Broker) lanEventHandler() {
+	for {
+		select {
+		case e := <-s.eventChLAN:
+			spew.Dump("event", e)
+		case <-s.shutdownCh:
+			return
+		}
+	}
+}
+
+// // lanNodeJoin is used to handle join events on the LAN pool.
+// func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
+// 	for _, m := range me.Members {
+// 		p, ok := isBroker(m)
+// 		if !ok {
+// 			continue
+// 		}
+// 		if s.config.BootstrapExpect != 0 {
+// 			s.maybeBootstrap()
+// 		}
+// 	}
+// }
+
+func (s *Broker) setupRaft() error {
+	var err error
+	s.fsm, err = fsm.New(s.logger)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // jocko.Broker API.
@@ -123,8 +208,8 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, respons
 
 // Join is used to have the broker join the gossip ring.
 // The given address should be another broker listening on the Serf address.
-func (b *Broker) Join(addrs ...string) protocol.Error {
-	if _, err := b.serf.Join(addrs...); err != nil {
+func (b *Broker) JoinLAN(addrs ...string) protocol.Error {
+	if _, err := b.serf.Join(addrs, true); err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
 	return protocol.ErrNone
@@ -464,12 +549,12 @@ func (b *Broker) handleFetch(header *protocol.RequestHeader, r *protocol.FetchRe
 
 // clusterMembers is used to get a list of members in the cluster.
 func (b *Broker) clusterMembers() []*jocko.ClusterMember {
-	return b.serf.Cluster()
+	return b.oldSerf.Cluster()
 }
 
 // isController returns true if this is the cluster controller.
 func (b *Broker) isController() bool {
-	return b.raft.IsLeader()
+	return b.oldRaft.IsLeader()
 }
 
 // topicPartitions is used to get the partitions for the given topic.
@@ -509,7 +594,7 @@ func (b *Broker) createPartition(partition *jocko.Partition) error {
 
 // clusterMember is used to get a specific member in the cluster.
 func (b *Broker) clusterMember(id int32) *jocko.ClusterMember {
-	return b.serf.Member(id)
+	return b.oldSerf.Member(id)
 }
 
 // startReplica is used to start a replica on this, including creating its commit log.
@@ -530,7 +615,7 @@ func (b *Broker) startReplica(partition *jocko.Partition) protocol.Error {
 	}
 	if isLeader || isFollower {
 		commitLog, err := commitlog.New(commitlog.Options{
-			Path:            path.Join(b.config.DataDir, partition.String()),
+			Path:            filepath.Join(b.config.DataDir, "data", partition.String()),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
 		})
@@ -624,15 +709,15 @@ func (b *Broker) Shutdown() error {
 	b.shutdown = true
 	defer close(b.shutdownCh)
 
-	if b.serf != nil {
-		if err := b.serf.Shutdown(); err != nil {
+	if b.oldSerf != nil {
+		if err := b.oldSerf.Shutdown(); err != nil {
 			b.logger.Error("failed to shut down serf", log.Error("error", err))
 			return err
 		}
 	}
 
-	if b.raft != nil {
-		if err := b.raft.Shutdown(); err != nil {
+	if b.oldRaft != nil {
+		if err := b.oldRaft.Shutdown(); err != nil {
 			b.logger.Error("failed to shut down raft", log.Error("error", err))
 			return err
 		}
@@ -721,4 +806,12 @@ func unmarshalData(data *json.RawMessage, p interface{}) error {
 		return errors.Wrap(err, "json unmarshal failed")
 	}
 	return nil
+}
+
+// ensurePath is used to make sure a path exists
+func ensurePath(path string, dir bool) error {
+	if !dir {
+		path = filepath.Dir(path)
+	}
+	return os.MkdirAll(path, 0755)
 }
