@@ -473,7 +473,7 @@ func TestBroker_Run(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DevMode: tt.fields.loner,
 				DataDir: tt.fields.logDir,
@@ -565,7 +565,7 @@ func TestBroker_Join(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -618,7 +618,7 @@ func TestBroker_clusterMembers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -666,7 +666,7 @@ func TestBroker_isController(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -727,7 +727,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -779,7 +779,7 @@ func TestBroker_topics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -847,7 +847,7 @@ func TestBroker_partition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -911,7 +911,7 @@ func TestBroker_createPartition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -972,7 +972,7 @@ func TestBroker_clusterMember(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1066,7 +1066,7 @@ func TestBroker_startReplica(t *testing.T) {
 			tt.setFields(&fields)
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      fields.id,
 				DataDir: fields.logDir,
 				Addr:    fields.brokerAddr,
@@ -1123,7 +1123,7 @@ func TestBroker_createTopic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1164,7 +1164,7 @@ func TestBroker_deleteTopic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1205,7 +1205,7 @@ func TestBroker_deletePartitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1234,7 +1234,7 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1286,7 +1286,7 @@ func TestBroker_becomeFollower(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,
@@ -1329,7 +1329,7 @@ func TestBroker_becomeLeader(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := New(Config{
+			b, err := New(&Config{
 				ID:      tt.fields.id,
 				DataDir: tt.fields.logDir,
 				Addr:    tt.fields.brokerAddr,

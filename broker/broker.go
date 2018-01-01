@@ -37,7 +37,7 @@ type Config struct {
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
-	config Config
+	config *Config
 
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
@@ -52,7 +52,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(config Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*Broker, error) {
+func New(config *Config, serf jocko.Serf, raft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:      config,
 		logger:      logger.With(log.Any("config", config)),
