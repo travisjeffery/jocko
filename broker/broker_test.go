@@ -31,6 +31,8 @@ const (
 )
 
 func TestBroker_Run(t *testing.T) {
+	dir, config := testConfig(t)
+	defer os.RemoveAll(dir)
 	mustEncode := func(e protocol.Encoder) []byte {
 		var b []byte
 		var err error
@@ -318,7 +320,7 @@ func TestBroker_Run(t *testing.T) {
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 3},
 						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
-							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
+							Brokers: []*protocol.Broker{{NodeID: config.ID, Host: "localhost", Port: 9092}},
 							TopicMetadata: []*protocol.TopicMetadata{
 								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), ParititionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
 								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
@@ -481,16 +483,19 @@ func TestBroker_Run(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		dir, config := testConfig(t)
-		os.RemoveAll(dir)
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
 			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
+			require.NoError(t, err)
+			require.NotNil(t, b)
+			defer func() {
+				b.purge()
+				b.Leave()
+				b.Shutdown()
+
+			}()
 			if tt.fields.topicMap != nil {
 				b.topicMap = tt.fields.topicMap
 				for _, ps := range tt.fields.topicMap {
@@ -1463,6 +1468,7 @@ func defaultConfig() *Config {
 	}
 
 	conf := &Config{
+		DevMode:       true,
 		NodeName:      hostname,
 		SerfLANConfig: serfDefaultConfig(),
 	}

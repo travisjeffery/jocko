@@ -697,6 +697,19 @@ func (b *Broker) deletePartitions(tp *jocko.Partition) error {
 	return nil
 }
 
+// Leave is used to prepare for a graceful shutdown.
+func (s *Broker) Leave() error {
+	s.logger.Info("starting leave")
+
+	if s.serf != nil {
+		if err := s.serf.Leave(); err != nil {
+			s.logger.Error("failed to leave LAN serf cluster", log.Error("error", err))
+		}
+	}
+
+	return nil
+}
+
 // Shutdown is used to shutdown the broker, its serf, its raft, and so on.
 func (b *Broker) Shutdown() error {
 	b.logger.Info("shutting down broker")
@@ -708,6 +721,10 @@ func (b *Broker) Shutdown() error {
 	}
 	b.shutdown = true
 	defer close(b.shutdownCh)
+
+	if b.serf != nil {
+		b.serf.Shutdown()
+	}
 
 	if b.oldSerf != nil {
 		if err := b.oldSerf.Shutdown(); err != nil {
@@ -748,7 +765,7 @@ func (b *Broker) becomeFollower(topic string, partitionID int32, partitionState 
 	}
 	p.Leader = partitionState.Leader
 	p.Conn = b.clusterMember(p.LeaderID())
-	r := NewReplicator(ReplicatorConfig{}, p, b.config.ID, server.NewClient(p.Conn))
+	r := NewReplicator(ReplicatorConfig{}, p, b.config.ID, server.NewClient(p.Conn), b.logger)
 	b.replicators[p] = r
 	if !b.config.DevMode {
 		r.Replicate()
@@ -814,4 +831,18 @@ func ensurePath(path string, dir bool) error {
 		path = filepath.Dir(path)
 	}
 	return os.MkdirAll(path, 0755)
+}
+
+func (s *Broker) purge() error {
+	s.Lock()
+	defer s.Unlock()
+	for topic, partitions := range s.topicMap {
+		for _, p := range partitions {
+			if err := p.Delete(); err != nil {
+				return err
+			}
+		}
+		delete(s.topicMap, topic)
+	}
+	return nil
 }

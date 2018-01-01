@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/testutil"
 )
@@ -27,10 +28,12 @@ func TestBroker_Replicate(t *testing.T) {
 		CommitLog:       c,
 	}
 
+	logger := log.New()
+
 	replicator := broker.NewReplicator(broker.ReplicatorConfig{
 		MinBytes:    5,
 		MaxWaitTime: int32(250 * time.Millisecond),
-	}, p, 0, l)
+	}, p, 0, l, logger)
 	replicator.Replicate()
 
 	testutil.WaitForResult(func() (bool, error) {
