@@ -60,7 +60,10 @@ func NewPartition(topic string, id int32) *Partition {
 
 // Delete is used to delete the partition's data/commitlog.
 func (p *Partition) Delete() error {
-	return p.CommitLog.Delete()
+	if p.CommitLog != nil {
+		return p.CommitLog.Delete()
+	}
+	return nil
 }
 
 // NewReader is used to create a reader at the given offset and will

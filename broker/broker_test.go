@@ -15,6 +15,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/consul/testutil/retry"
+	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ const (
 )
 
 func TestBroker_Run(t *testing.T) {
+	// creating the config up here so we can set the nodeid in the expected test cases
 	dir, config := testConfig(t)
 	defer os.RemoveAll(dir)
 	mustEncode := func(e protocol.Encoder) []byte {
@@ -42,7 +44,6 @@ func TestBroker_Run(t *testing.T) {
 		return b
 	}
 	type args struct {
-		ctx        context.Context
 		requestCh  chan jocko.Request
 		responseCh chan jocko.Response
 		requests   []jocko.Request
@@ -494,7 +495,6 @@ func TestBroker_Run(t *testing.T) {
 				b.purge()
 				b.Leave()
 				b.Shutdown()
-
 			}()
 			if tt.fields.topicMap != nil {
 				b.topicMap = tt.fields.topicMap
@@ -1471,6 +1471,7 @@ func defaultConfig() *Config {
 		DevMode:       true,
 		NodeName:      hostname,
 		SerfLANConfig: serfDefaultConfig(),
+		RaftConfig:    raft.DefaultConfig(),
 	}
 
 	conf.SerfLANConfig.ReconnectTimeout = 3 * 24 * time.Hour
@@ -1497,6 +1498,10 @@ func testConfig(t *testing.T) (string, *Config) {
 	config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
+	config.RaftConfig.LeaderLeaseTimeout = 100 * time.Millisecond
+	config.RaftConfig.HeartbeatTimeout = 200 * time.Millisecond
+	config.RaftConfig.ElectionTimeout = 200 * time.Millisecond
+	config.RaftAddr = fmt.Sprintf("127.0.0.1:%d", ports[2])
 	return dir, config
 }
 
@@ -1524,4 +1529,19 @@ func tempDir(t *testing.T, name string) string {
 		t.Fatalf("err: %s", err)
 	}
 	return d
+}
+
+// purge is a helper function to delete all topics and partitions for this broker. likely only useful for tests.
+func (s *Broker) purge() error {
+	s.Lock()
+	defer s.Unlock()
+	for topic, partitions := range s.topicMap {
+		for _, p := range partitions {
+			if err := p.Delete(); err != nil {
+				return err
+			}
+		}
+		delete(s.topicMap, topic)
+	}
+	return nil
 }

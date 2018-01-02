@@ -16,6 +16,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
+	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
@@ -27,8 +28,10 @@ import (
 )
 
 const (
-	serfLANSnapshot = "serf/local.snapshot"
-	raftState       = "raft/"
+	serfLANSnapshot   = "serf/local.snapshot"
+	raftState         = "raft/"
+	raftLogCacheSize  = 512
+	snapshotsRetained = 2
 )
 
 var (
@@ -44,6 +47,7 @@ type Config struct {
 	DevMode         bool
 	Addr            string
 	SerfLANConfig   *serf.Config
+	RaftConfig      *raft.Config
 	Bootstrap       bool
 	BootstrapExpect int
 	NonVoter        bool
@@ -63,10 +67,20 @@ type Broker struct {
 	oldSerf      jocko.Serf
 	raftCommands chan jocko.RaftCommand
 
-	raft       *raft.Raft
-	serf       *serf.Serf
-	fsm        *fsm.FSM
-	eventChLAN chan serf.Event
+	// serverLookup tracks servers in the local datacenter.
+	serverLookup *serverLookup
+	// The raft instance is used among Jocko brokers within the DC to protect operations that require strong consistency.
+	raft          *raft.Raft
+	raftStore     *raftboltdb.BoltStore
+	raftTransport *raft.NetworkTransport
+	raftInmem     *raft.InmemStore
+	// raftNotifyCh ensures we get reliable leader transition notifications from the raft layer.
+	raftNotifyCh <-chan bool
+	// reconcileCh is used to pass events from the serf handler to the raft leader to update its state.
+	reconcileCh chan serf.Member
+	serf        *serf.Serf
+	fsm         *fsm.FSM
+	eventChLAN  chan serf.Event
 
 	shutdownCh   chan struct{}
 	shutdown     bool
@@ -76,14 +90,15 @@ type Broker struct {
 // New is used to instantiate a new broker.
 func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
-		config:      config,
-		logger:      logger,
-		topicMap:    make(map[string][]*jocko.Partition),
-		replicators: make(map[*jocko.Partition]*Replicator),
-		shutdownCh:  make(chan struct{}),
-		eventChLAN:  make(chan serf.Event, 256),
-		oldSerf:     oldSerf,
-		oldRaft:     oldRaft,
+		config:       config,
+		logger:       logger,
+		topicMap:     make(map[string][]*jocko.Partition),
+		replicators:  make(map[*jocko.Partition]*Replicator),
+		shutdownCh:   make(chan struct{}),
+		eventChLAN:   make(chan serf.Event, 256),
+		serverLookup: NewServerLookup(),
+		oldSerf:      oldSerf,
+		oldRaft:      oldRaft,
 	}
 
 	if b.logger == nil {
@@ -92,7 +107,10 @@ func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logg
 
 	b.logger.Info("hello")
 
-	b.setupRaft()
+	if err := b.setupRaft(); err != nil {
+		b.Shutdown()
+		return nil, fmt.Errorf("failed to start raft: %v", err)
+	}
 
 	var err error
 	b.serf, err = b.setupSerf(config.SerfLANConfig, b.eventChLAN, serfLANSnapshot)
@@ -101,6 +119,8 @@ func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logg
 	}
 
 	go b.lanEventHandler()
+
+	go b.monitorLeadership()
 
 	return b, nil
 }
@@ -141,6 +161,11 @@ func (s *Broker) lanEventHandler() {
 	}
 }
 
+type broker struct {
+	ID   int32
+	Addr net.Addr
+}
+
 // // lanNodeJoin is used to handle join events on the LAN pool.
 // func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
 // 	for _, m := range me.Members {
@@ -154,13 +179,98 @@ func (s *Broker) lanEventHandler() {
 // 	}
 // }
 
+// setupRaft is used to setup and initialize Raft.
 func (s *Broker) setupRaft() error {
+	defer func() {
+		if s.raft == nil && s.raftStore != nil {
+			if err := s.raftStore.Close(); err != nil {
+				s.logger.Error("failed to close raft store", log.Error("error", err))
+			}
+		}
+	}()
+
 	var err error
 	s.fsm, err = fsm.New(s.logger)
 	if err != nil {
 		return err
 	}
-	return nil
+
+	trans, err := raft.NewTCPTransport(s.config.RaftAddr, nil, 3, 10*time.Second, nil)
+	if err != nil {
+		return err
+	}
+	s.raftTransport = trans
+
+	s.config.RaftConfig.LocalID = raft.ServerID(trans.LocalAddr())
+
+	// build an in-memory setup for dev mode, disk-based otherwise.
+	var log raft.LogStore
+	var stable raft.StableStore
+	var snap raft.SnapshotStore
+	if s.config.DevMode {
+		store := raft.NewInmemStore()
+		s.raftInmem = store
+		stable = store
+		log = store
+		snap = raft.NewInmemSnapshotStore()
+	} else {
+		path := filepath.Join(s.config.DataDir, raftState)
+		if err := ensurePath(path, true); err != nil {
+			return err
+		}
+
+		// create the backend raft store for logs and stable storage.
+		store, err := raftboltdb.NewBoltStore(filepath.Join(path, "raft.db"))
+		if err != nil {
+			return err
+		}
+		s.raftStore = store
+
+		cacheStore, err := raft.NewLogCache(raftLogCacheSize, store)
+		if err != nil {
+			return err
+		}
+		log = cacheStore
+
+		snapshots, err := raft.NewFileSnapshotStore(path, snapshotsRetained, nil)
+		if err != nil {
+			return err
+		}
+		snap = snapshots
+	}
+
+	if s.config.Bootstrap || s.config.DevMode {
+		hasState, err := raft.HasExistingState(log, stable, snap)
+		if err != nil {
+			return err
+		}
+		if !hasState {
+			configuration := raft.Configuration{
+				Servers: []raft.Server{
+					raft.Server{
+						ID:      s.config.RaftConfig.LocalID,
+						Address: trans.LocalAddr(),
+					},
+				},
+			}
+			if err := raft.BootstrapCluster(s.config.RaftConfig, log, stable, snap, trans, configuration); err != nil {
+				return err
+			}
+		}
+	}
+
+	// setup up a channel for reliable leader notifications.
+	raftNotifyCh := make(chan bool, 1)
+	s.config.RaftConfig.NotifyCh = raftNotifyCh
+	s.raftNotifyCh = raftNotifyCh
+
+	// setup raft store
+	s.raft, err = raft.NewRaft(s.config.RaftConfig, s.fsm, log, stable, snap, trans)
+	return err
+}
+
+func (s *Broker) monitorLeadership() {
+
 }
 
 // jocko.Broker API.
@@ -726,6 +836,17 @@ func (b *Broker) Shutdown() error {
 		b.serf.Shutdown()
 	}
 
+	if b.raft != nil {
+		b.raftTransport.Close()
+		future := b.raft.Shutdown()
+		if err := future.Error(); err != nil {
+			b.logger.Error("failed to shutdown", log.Error("error", err))
+		}
+		if b.raftStore != nil {
+			b.raftStore.Close()
+		}
+	}
+
 	if b.oldSerf != nil {
 		if err := b.oldSerf.Shutdown(); err != nil {
 			b.logger.Error("failed to shut down serf", log.Error("error", err))
@@ -831,18 +952,4 @@ func ensurePath(path string, dir bool) error {
 		path = filepath.Dir(path)
 	}
 	return os.MkdirAll(path, 0755)
-}
-
-func (s *Broker) purge() error {
-	s.Lock()
-	defer s.Unlock()
-	for topic, partitions := range s.topicMap {
-		for _, p := range partitions {
-			if err := p.Delete(); err != nil {
-				return err
-			}
-		}
-		delete(s.topicMap, topic)
-	}
-	return nil
 }
