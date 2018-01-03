@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -21,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker/fsm"
+	"github.com/travisjeffery/jocko/broker/metadata"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
@@ -63,10 +65,13 @@ type Broker struct {
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
 
-	oldRaft      jocko.Raft
-	oldSerf      jocko.Serf
-	raftCommands chan jocko.RaftCommand
+	oldRaft jocko.Raft
+	oldSerf jocko.Serf
 
+	// readyForConsistentReads is used to track when the leader server is
+	// ready to serve consistent reads, after it has applied its initial
+	// barrier. This is updated atomically.
+	readyForConsistentReads int32
 	// serverLookup tracks servers in the local datacenter.
 	serverLookup *serverLookup
 	// The raft instance is used among Jocko brokers within the DC to protect operations that require strong consistency.
@@ -91,12 +96,13 @@ type Broker struct {
 func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:       config,
-		logger:       logger,
+		logger:       logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
 		topicMap:     make(map[string][]*jocko.Partition),
 		replicators:  make(map[*jocko.Partition]*Replicator),
 		shutdownCh:   make(chan struct{}),
 		eventChLAN:   make(chan serf.Event, 256),
 		serverLookup: NewServerLookup(),
+		reconcileCh:  make(chan serf.Member, 32),
 		oldSerf:      oldSerf,
 		oldRaft:      oldRaft,
 	}
@@ -129,16 +135,19 @@ func (s *Broker) setupSerf(config *serf.Config, ch chan serf.Event, path string)
 	config.Init()
 	config.NodeName = s.config.NodeName
 	config.Tags["role"] = "jocko"
-	config.Tags["id"] = string(s.config.ID)
+	config.Tags["id"] = fmt.Sprintf("%d", s.config.ID)
 	if s.config.Bootstrap {
 		config.Tags["bootstrap"] = "1"
 	}
 	if s.config.BootstrapExpect != 0 {
-		config.Tags["bootstrap_expect"] = fmt.Sprintf("%d", s.config.BootstrapExpect)
+		config.Tags["expect"] = fmt.Sprintf("%d", s.config.BootstrapExpect)
 	}
 	if s.config.NonVoter {
 		config.Tags["non_voter"] = "1"
 	}
+	config.Tags["raft_addr"] = s.config.RaftAddr
+	config.Tags["serf_lan_addr"] = fmt.Sprintf("%s:%d", s.config.SerfLANConfig.MemberlistConfig.BindAddr, s.config.SerfLANConfig.MemberlistConfig.BindPort)
+	config.Tags["broker_addr"] = s.config.Addr
 	config.EventCh = ch
 	config.EnableNameConflictResolution = false
 	if !s.config.DevMode {
@@ -154,30 +163,123 @@ func (s *Broker) lanEventHandler() {
 	for {
 		select {
 		case e := <-s.eventChLAN:
-			spew.Dump("event", e)
+			s.logger.Debug("lan event", log.Any("event", e))
+			switch e.EventType() {
+			case serf.EventMemberJoin:
+				s.lanNodeJoin(e.(serf.MemberEvent))
+				s.localMemberEvent(e.(serf.MemberEvent))
+			case serf.EventMemberLeave, serf.EventMemberFailed:
+				s.lanNodeFailed(e.(serf.MemberEvent))
+				s.localMemberEvent(e.(serf.MemberEvent))
+			}
 		case <-s.shutdownCh:
 			return
 		}
 	}
 }
 
-type broker struct {
-	ID   int32
-	Addr net.Addr
+// lanNodeJoin is used to handle join events on the LAN pool.
+func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
+	for _, m := range me.Members {
+		b, ok := metadata.IsBroker(m)
+		if !ok {
+			continue
+		}
+		// update server lookup
+		s.serverLookup.AddServer(b)
+		if s.config.BootstrapExpect != 0 {
+			s.maybeBootstrap()
+		}
+	}
 }
 
-// // lanNodeJoin is used to handle join events on the LAN pool.
-// func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
-// 	for _, m := range me.Members {
-// 		p, ok := isBroker(m)
-// 		if !ok {
-// 			continue
-// 		}
-// 		if s.config.BootstrapExpect != 0 {
-// 			s.maybeBootstrap()
-// 		}
-// 	}
-// }
+func (s *Broker) lanNodeFailed(me serf.MemberEvent) {
+	for _, m := range me.Members {
+		meta, ok := metadata.IsBroker(m)
+		if !ok {
+			continue
+		}
+		s.logger.Info("removing LAN server", log.Any("member", m))
+		s.serverLookup.RemoveServer(meta)
+	}
+}
+
+func (s *Broker) localMemberEvent(me serf.MemberEvent) {
+	if !s.isLeader() {
+		return
+	}
+
+	spew.Dump("member event", me)
+
+	for _, m := range me.Members {
+		select {
+		case s.reconcileCh <- m:
+		default:
+		}
+	}
+}
+
+func (s *Broker) maybeBootstrap() {
+	var index uint64
+	var err error
+	if s.config.DevMode {
+		index, err = s.raftInmem.LastIndex()
+	} else {
+		index, err = s.raftStore.LastIndex()
+	}
+	if err != nil {
+		s.logger.Error("failed to read last raft index", log.Error("error", err))
+		return
+	}
+	if index != 0 {
+		s.logger.Info("raft data found, disabling bootstrap mode")
+		s.config.BootstrapExpect = 0
+		return
+	}
+
+	members := s.LANMembers()
+	var brokers []metadata.Broker
+	spew.Dump("members", members)
+	for _, member := range members {
+		b, ok := metadata.IsBroker(member)
+		if !ok {
+			continue
+		}
+		if b.Expect != 0 && b.Expect != s.config.BootstrapExpect {
+			s.logger.Error("members expects conflicting node count", log.Any("member", member))
+			return
+		}
+		if b.Bootstrap {
+			s.logger.Error("member has bootstrap mode. expect disabled.", log.Any("member", member))
+			return
+		}
+		brokers = append(brokers, *b)
+	}
+
+	spew.Dump("brokers", brokers)
+	if len(brokers) < s.config.BootstrapExpect {
+		return
+	}
+
+	var configuration raft.Configuration
+	var addrs []string
+	for _, b := range brokers {
+		addr := b.RaftAddr
+		addrs = append(addrs, addr)
+		peer := raft.Server{
+			ID:      raft.ServerID(addr),
+			Address: raft.ServerAddress(addr),
+		}
+		configuration.Servers = append(configuration.Servers, peer)
+	}
+
+	s.logger.Info("found expected number of peers, attempting bootstrap", log.Any("addrs", addrs))
+	future := s.raft.BootstrapCluster(configuration)
+	if err := future.Error(); err != nil {
+		s.logger.Error("failed to bootstrap cluster", log.Error("error", err))
+	}
+	s.config.BootstrapExpect = 0
+}
 
 // setupRaft is used to setup and initialize Raft.
 func (s *Broker) setupRaft() error {
@@ -201,7 +303,7 @@ func (s *Broker) setupRaft() error {
 	}
 	s.raftTransport = trans
 
-	s.config.RaftConfig.LocalID = raft.ServerID(trans.LocalAddr())
+	s.config.RaftConfig.LocalID = raft.ServerID(s.config.RaftAddr)
 
 	// build an in-memory setup for dev mode, disk-based otherwise.
 	var log raft.LogStore
@@ -225,6 +327,7 @@ func (s *Broker) setupRaft() error {
 			return err
 		}
 		s.raftStore = store
+		stable = store
 
 		cacheStore, err := raft.NewLogCache(raftLogCacheSize, store)
 		if err != nil {
@@ -270,7 +373,232 @@ func (s *Broker) setupRaft() error {
 }
 
 func (s *Broker) monitorLeadership() {
+	raftNotifyCh := s.raftNotifyCh
+	var weAreLeaderCh chan struct{}
+	var leaderLoop sync.WaitGroup
+	for {
+		select {
+		case isLeader := <-raftNotifyCh:
+			switch {
+			case isLeader:
+				if weAreLeaderCh != nil {
+					s.logger.Error("attempted to start the leader loop while running")
+					continue
+				}
+				weAreLeaderCh = make(chan struct{})
+				leaderLoop.Add(1)
+				go func(ch chan struct{}) {
+					defer leaderLoop.Done()
+					s.leaderLoop(ch)
+				}(weAreLeaderCh)
+				s.logger.Info("cluster leadership acquired")
 
+			default:
+				if weAreLeaderCh == nil {
+					s.logger.Error("attempted to stop the leader loop while not running")
+					continue
+				}
+				s.logger.Debug("shutting down leader loop")
+				close(weAreLeaderCh)
+				leaderLoop.Wait()
+				weAreLeaderCh = nil
+				s.logger.Info("cluster leadership lost")
+			}
+		case <-s.shutdownCh:
+			return
+		}
+	}
+}
+
+func (s *Broker) revokeLeadership() error {
+	s.resetConsistentReadReady()
+	return nil
+}
+
+func (s *Broker) establishLeadership() error {
+	s.setConsistentReadReady()
+	return nil
+}
+
+// leaderLoop runs as long as we are the leader to run various maintenance activities.
+func (s *Broker) leaderLoop(stopCh chan struct{}) {
+	var reconcileCh chan serf.Member
+	establishedLeader := false
+
+RECONCILE:
+	reconcileCh = nil
+	interval := time.After(60 * time.Second)
+	// start := time.Now()
+	barrier := s.raft.Barrier(2 * time.Minute)
+	if err := barrier.Error(); err != nil {
+		s.logger.Error("failed to wait for barrier", log.Error("error", err))
+		goto WAIT
+	}
+
+	if !establishedLeader {
+		if err := s.establishLeadership(); err != nil {
+			s.logger.Error("failedto establish leader", log.Error("error", err))
+			goto WAIT
+		}
+		establishedLeader = true
+		defer func() {
+			if err := s.revokeLeadership(); err != nil {
+				s.logger.Error("failed to revoke leadership", log.Error("error", err))
+			}
+		}()
+	}
+
+	if err := s.reconcile(); err != nil {
+		s.logger.Error("failed to reconcile", log.Error("error", err))
+		goto WAIT
+	}
+
+	reconcileCh = s.reconcileCh
+
+WAIT:
+	for {
+		select {
+		case <-stopCh:
+			return
+		case <-s.shutdownCh:
+			return
+		case <-interval:
+			goto RECONCILE
+		case member := <-reconcileCh:
+			s.reconcileMember(member)
+		}
+	}
+}
+
+func (s *Broker) reconcile() error {
+	members := s.LANMembers()
+	for _, member := range members {
+		if err := s.reconcileMember(member); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Broker) reconcileMember(m serf.Member) error {
+	s.logger.Debug("reconcile member", log.Any("member", m), log.Any("status", m.Status))
+	var err error
+	switch m.Status {
+	case serf.StatusAlive:
+		err = s.handleAliveMember(m)
+	case serf.StatusFailed:
+		err = s.handleFailedMember(m)
+	case serf.StatusLeft:
+		err = s.handleLeftMember(m)
+	}
+	if err != nil {
+		s.logger.Error("failed to reconcile member", log.Any("member", m), log.Error("error", err))
+	}
+	return nil
+}
+
+func (s *Broker) handleAliveMember(m serf.Member) error {
+	if b, ok := metadata.IsBroker(m); ok {
+		if err := s.joinCluster(m, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Broker) handleLeftMember(m serf.Member) error {
+	if m.Name == s.config.RaftAddr {
+		s.logger.Debug("deregistering self should be done by follower")
+		return nil
+	}
+
+	if meta, ok := metadata.IsBroker(m); ok {
+		return s.removeServer(m, meta)
+	}
+	return nil
+}
+
+func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
+	if parts.Bootstrap {
+		members := s.LANMembers()
+		for _, member := range members {
+			p, ok := metadata.IsBroker(member)
+			if ok && member.Name != m.Name && p.Bootstrap {
+				s.logger.Error("multiple nodes in bootstrap mode. there can only be one.")
+				return nil
+			}
+		}
+	}
+
+	configFuture := s.raft.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		s.logger.Error("failed to get raft configuration", log.Error("error", err))
+		return err
+	}
+
+	if m.Name == s.config.NodeName {
+		if l := len(configFuture.Configuration().Servers); l < 3 {
+			s.logger.Debug("skipping self join since cluster is too small", log.String("member name", m.Name))
+			return nil
+		}
+	}
+
+	if parts.NonVoter {
+		addFuture := s.raft.AddNonvoter(raft.ServerID(parts.RaftAddr), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		if err := addFuture.Error(); err != nil {
+			s.logger.Error("failed to add raft peer", log.Error("error", err))
+			return err
+		}
+	} else {
+		addFuture := s.raft.AddVoter(raft.ServerID(parts.RaftAddr), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		if err := addFuture.Error(); err != nil {
+			s.logger.Error("failed to add raft peer", log.Error("error", err))
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Broker) handleFailedMember(m serf.Member) error {
+	return nil
+}
+
+func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
+	s.logger.Debug("remove server", log.Any("member", m))
+	configFuture := s.raft.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		s.logger.Error("failed to get raft configuration", log.Error("error", err))
+		return err
+	}
+	for _, server := range configFuture.Configuration().Servers {
+		s.logger.Info("removing server by id", log.Any("id", server.ID))
+		future := s.raft.RemoveServer(raft.ServerID(meta.RaftAddr), 0, 0)
+		if err := future.Error(); err != nil {
+			s.logger.Error("failed to remove server", log.Error("error", err))
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Broker) numPeers() (int, error) {
+	future := s.raft.GetConfiguration()
+	if err := future.Error(); err != nil {
+		return 0, err
+	}
+	raftConfig := future.Configuration()
+	var numPeers int
+	for _, server := range raftConfig.Servers {
+		if server.Suffrage == raft.Voter {
+			numPeers++
+		}
+	}
+	return numPeers, nil
+}
+
+func (s *Broker) LANMembers() []serf.Member {
+	return s.serf.Members()
 }
 
 // jocko.Broker API.
@@ -667,6 +995,10 @@ func (b *Broker) isController() bool {
 	return b.oldRaft.IsLeader()
 }
 
+func (b *Broker) isLeader() bool {
+	return b.raft.State() == raft.Leader
+}
+
 // topicPartitions is used to get the partitions for the given topic.
 func (b *Broker) topicPartitions(topic string) (found []*jocko.Partition, err protocol.Error) {
 	b.RLock()
@@ -809,11 +1141,50 @@ func (b *Broker) deletePartitions(tp *jocko.Partition) error {
 
 // Leave is used to prepare for a graceful shutdown.
 func (s *Broker) Leave() error {
-	s.logger.Info("starting leave")
+	s.logger.Info("broker: starting leave")
+
+	numPeers, err := s.numPeers()
+	if err != nil {
+		s.logger.Error("jocko: failed to check raft peers", log.Error("error", err))
+		return err
+	}
+
+	isLeader := s.isLeader()
+	if isLeader && numPeers > 1 {
+		future := s.raft.RemoveServer(raft.ServerID(s.config.RaftAddr), 0, 0)
+		if err := future.Error(); err != nil {
+			s.logger.Error("failed to remove ourself as raft peer", log.Error("error", err))
+		}
+	}
 
 	if s.serf != nil {
 		if err := s.serf.Leave(); err != nil {
 			s.logger.Error("failed to leave LAN serf cluster", log.Error("error", err))
+		}
+	}
+
+	if !isLeader {
+		left := false
+		limit := time.Now().Add(5 * time.Second)
+		for !left && time.Now().Before(limit) {
+			// Sleep a while before we check.
+			time.Sleep(50 * time.Millisecond)
+
+			// Get the latest configuration.
+			future := s.raft.GetConfiguration()
+			if err := future.Error(); err != nil {
+				s.logger.Error("failed to get raft configuration", log.Error("error", err))
+				break
+			}
+
+			// See if we are no longer included.
+			left = true
+			for _, server := range future.Configuration().Servers {
+				if server.Address == raft.ServerAddress(s.config.RaftAddr) {
+					left = false
+					break
+				}
+			}
 		}
 	}
 
@@ -952,4 +1323,19 @@ func ensurePath(path string, dir bool) error {
 		path = filepath.Dir(path)
 	}
 	return os.MkdirAll(path, 0755)
+}
+
+// Atomically sets a readiness state flag when leadership is obtained, to indicate that server is past its barrier write
+func (s *Broker) setConsistentReadReady() {
+	atomic.StoreInt32(&s.readyForConsistentReads, 1)
+}
+
+// Atomically reset readiness state flag on leadership revoke
+func (s *Broker) resetConsistentReadReady() {
+	atomic.StoreInt32(&s.readyForConsistentReads, 0)
+}
+
+// Returns true if this server is ready to serve consistent reads
+func (s *Broker) isReadyForConsistentReads() bool {
+	return atomic.LoadInt32(&s.readyForConsistentReads) == 1
 }

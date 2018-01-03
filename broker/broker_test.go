@@ -1444,8 +1444,80 @@ func TestBroker_JoinLAN(t *testing.T) {
 	joinLAN(t, b1, b2)
 
 	retry.Run(t, func(r *retry.R) {
-		require.Equal(t, 2, len(b1.serf.Members()))
-		require.Equal(t, 2, len(b2.serf.Members()))
+		require.Equal(t, 2, len(b1.LANMembers()))
+		require.Equal(t, 2, len(b2.LANMembers()))
+	})
+}
+
+func TestServer_LeaveLeader(t *testing.T) {
+	logger := log.New()
+	dir1, config1 := testConfig(t)
+	config1.Bootstrap = true
+	config1.BootstrapExpect = 3
+	b1, err := New(config1, nil, nil, logger)
+	require.NoError(t, err)
+	os.RemoveAll(dir1)
+
+	dir2, config2 := testConfig(t)
+	config2.Bootstrap = false
+	config2.BootstrapExpect = 3
+	b2, err := New(config2, nil, nil, logger)
+	os.RemoveAll(dir2)
+	require.NoError(t, err)
+
+	dir3, config3 := testConfig(t)
+	config3.Bootstrap = false
+	config3.BootstrapExpect = 3
+	b3, err := New(config3, nil, nil, logger)
+	os.RemoveAll(dir3)
+	require.NoError(t, err)
+
+	brokers := []*Broker{b1, b2, b3}
+
+	joinLAN(t, b2, b1)
+	joinLAN(t, b3, b1)
+
+	for _, b := range brokers {
+		retry.Run(t, func(r *retry.R) {
+			r.Check(wantPeers(b, 3))
+		})
+	}
+
+	var leader *Broker
+	for _, b := range brokers {
+		if b.isLeader() {
+			leader = b
+			break
+		}
+	}
+
+	if leader == nil {
+		t.Fatal("no leader")
+	}
+	if !leader.isReadyForConsistentReads() {
+		t.Fatal("leader should be ready for consistent reads")
+	}
+	leader.Leave()
+	if leader.isReadyForConsistentReads() {
+		t.Fatal("leader should not be ready for consistent reads")
+	}
+	leader.Shutdown()
+
+	for _, b := range brokers {
+		if b == leader {
+			continue
+		}
+		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(b, 2)) })
+	}
+}
+
+func waitForLeader(t *testing.T, brokers ...*Broker) {
+	retry.Run(t, func(r *retry.R) {
+		for _, b := range brokers {
+			if raft.Leader == b.raft.State() {
+				t.Fatal("no leader")
+			}
+		}
 	})
 }
 
@@ -1542,6 +1614,19 @@ func (s *Broker) purge() error {
 			}
 		}
 		delete(s.topicMap, topic)
+	}
+	return nil
+}
+
+// wantPeers determines whether the server has the given
+// number of voting raft peers.
+func wantPeers(s *Broker, peers int) error {
+	n, err := s.numPeers()
+	if err != nil {
+		return err
+	}
+	if got, want := n, peers; got != want {
+		return fmt.Errorf("got %d peers want %d", got, want)
 	}
 	return nil
 }
