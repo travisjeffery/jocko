@@ -5,29 +5,30 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
+	"github.com/travisjeffery/jocko/broker/metadata"
 )
 
 type serverLookup struct {
 	lock            sync.RWMutex
-	addressToServer map[raft.ServerAddress]*broker
-	idToServer      map[raft.ServerID]*broker
+	addressToServer map[raft.ServerAddress]*metadata.Broker
+	idToServer      map[raft.ServerID]*metadata.Broker
 }
 
 func NewServerLookup() *serverLookup {
 	return &serverLookup{
-		addressToServer: make(map[raft.ServerAddress]*broker),
-		idToServer:      make(map[raft.ServerID]*broker),
+		addressToServer: make(map[raft.ServerAddress]*metadata.Broker),
+		idToServer:      make(map[raft.ServerID]*metadata.Broker),
 	}
 }
 
-func (sl *serverLookup) AddServer(server *broker) {
+func (sl *serverLookup) AddServer(server *metadata.Broker) {
 	sl.lock.Lock()
 	defer sl.lock.Unlock()
-	sl.addressToServer[raft.ServerAddress(server.Addr.String())] = server
+	sl.addressToServer[raft.ServerAddress(server.RaftAddr)] = server
 	sl.idToServer[raft.ServerID(server.ID)] = server
 }
 
-func (sl *serverLookup) Server(addr raft.ServerAddress) *broker {
+func (sl *serverLookup) Server(addr raft.ServerAddress) *metadata.Broker {
 	sl.lock.RLock()
 	defer sl.lock.RUnlock()
 	svr, _ := sl.addressToServer[addr]
@@ -41,20 +42,20 @@ func (sl *serverLookup) ServerAddr(id raft.ServerID) (raft.ServerAddress, error)
 	if !ok {
 		return "", fmt.Errorf("no server for id %v", id)
 	}
-	return raft.ServerAddress(svr.Addr.String()), nil
+	return raft.ServerAddress(svr.RaftAddr), nil
 }
 
-func (sl *serverLookup) RemoveServer(server *broker) {
+func (sl *serverLookup) RemoveServer(server *metadata.Broker) {
 	sl.lock.Lock()
 	defer sl.lock.Unlock()
-	delete(sl.addressToServer, raft.ServerAddress(server.Addr.String()))
+	delete(sl.addressToServer, raft.ServerAddress(server.RaftAddr))
 	delete(sl.idToServer, raft.ServerID(server.ID))
 }
 
-func (sl *serverLookup) Servers() []*broker {
+func (sl *serverLookup) Servers() []*metadata.Broker {
 	sl.lock.RLock()
 	sl.lock.RUnlock()
-	var ret []*broker
+	var ret []*metadata.Broker
 	for _, svr := range sl.addressToServer {
 		ret = append(ret, svr)
 	}
