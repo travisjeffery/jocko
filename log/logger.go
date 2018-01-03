@@ -1,9 +1,10 @@
 package log
 
 import (
+	"time"
+
 	z "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"time"
 )
 
 type Logger interface {
@@ -19,7 +20,7 @@ type Logger interface {
 }
 
 func New() *logger {
-	l, _ := z.NewProduction(z.AddCallerSkip(1))
+	l, _ := z.NewDevelopment(z.AddCallerSkip(1))
 	return &logger{
 		Logger: l,
 	}
