@@ -31,14 +31,15 @@ func registerCommand(msg structs.MessageType, fn unboundCommand) {
 	commands[msg] = fn
 }
 
+// FSM implements a finite state machine used with Raft to provide strong consistency.
 type FSM struct {
 	logger    log.Logger
-	path      string
 	apply     map[structs.MessageType]command
 	stateLock sync.RWMutex
 	state     *Store
 }
 
+// New returns a new FSM instance.
 func New(logger log.Logger) (*FSM, error) {
 	store, err := NewStore(logger)
 	if err != nil {
@@ -65,11 +66,11 @@ func (c *FSM) State() *Store {
 	return c.state
 }
 
-func (c *FSM) Apply(log *raft.Log) interface{} {
-	buf := log.Data
+func (c *FSM) Apply(l *raft.Log) interface{} {
+	buf := l.Data
 	msgType := structs.MessageType(buf[0])
 	if fn := c.apply[msgType]; fn != nil {
-		return fn(buf[1:], log.Index)
+		return fn(buf[1:], l.Index)
 	}
 	return nil
 }
@@ -371,7 +372,7 @@ func maxIndexTxn(tx *memdb.Txn, tables ...string) uint64 {
 	return lindex
 }
 
-// SNapshot is used to provide a point-in-time snapshot. It works by startinga
+// Snapshot is used to provide a point-in-time snapshot. It works by startinga
 // read transaction against the whole state store.
 type Snapshot struct {
 	store     *Store

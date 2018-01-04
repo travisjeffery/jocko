@@ -23,6 +23,7 @@ import (
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/broker/fsm"
 	"github.com/travisjeffery/jocko/broker/metadata"
+	"github.com/travisjeffery/jocko/broker/structs"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
@@ -163,7 +164,6 @@ func (s *Broker) lanEventHandler() {
 	for {
 		select {
 		case e := <-s.eventChLAN:
-			s.logger.Debug("lan event", log.Any("event", e))
 			switch e.EventType() {
 			case serf.EventMemberJoin:
 				s.lanNodeJoin(e.(serf.MemberEvent))
@@ -481,7 +481,6 @@ func (s *Broker) reconcile() error {
 }
 
 func (s *Broker) reconcileMember(m serf.Member) error {
-	s.logger.Debug("reconcile member", log.Any("member", m), log.Any("status", m.Status))
 	var err error
 	switch m.Status {
 	case serf.StatusAlive:
@@ -498,12 +497,37 @@ func (s *Broker) reconcileMember(m serf.Member) error {
 }
 
 func (s *Broker) handleAliveMember(m serf.Member) error {
-	if b, ok := metadata.IsBroker(m); ok {
+	b, ok := metadata.IsBroker(m)
+	if ok {
 		if err := s.joinCluster(m, b); err != nil {
 			return err
 		}
 	}
-	return nil
+	state := s.fsm.State()
+	_, node, err := state.GetNode(b.RaftAddr)
+	if err != nil {
+		return err
+	}
+	if node != nil {
+		// TODO: should still register?
+		return nil
+	}
+	s.logger.Info("member joined, marking health alive", log.Any("member", m))
+	req := structs.RegisterRequest{Node: b.RaftAddr}
+	_, err = s.raftApply(structs.RegisterRequestType, &req)
+	return err
+}
+
+func (s *Broker) raftApply(t structs.MessageType, msg interface{}) (interface{}, error) {
+	buf, err := structs.Encode(t, msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode request: %v", err)
+	}
+	future := s.raft.Apply(buf, 30*time.Second)
+	if err := future.Error(); err != nil {
+		return nil, err
+	}
+	return future.Response(), nil
 }
 
 func (s *Broker) handleLeftMember(m serf.Member) error {
@@ -565,7 +589,6 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 }
 
 func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
-	s.logger.Debug("remove server", log.Any("member", m))
 	configFuture := s.raft.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
 		s.logger.Error("failed to get raft configuration", log.Error("error", err))
@@ -1031,7 +1054,8 @@ func (b *Broker) partition(topic string, partition int32) (*jocko.Partition, pro
 
 // createPartition is used to add a partition across the cluster.
 func (b *Broker) createPartition(partition *jocko.Partition) error {
-	return b.raftApply(createPartition, partition)
+	return nil
+	// return b.raftApply(createPartition, partition)
 }
 
 // clusterMember is used to get a specific member in the cluster.
@@ -1116,10 +1140,12 @@ func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replica
 
 // deleteTopic is used to delete the topic across the cluster.
 func (b *Broker) deleteTopic(topic string) protocol.Error {
-	if err := b.raftApply(deleteTopic, &jocko.Partition{Topic: topic}); err != nil {
-		return protocol.ErrUnknown.WithErr(err)
-	}
 	return protocol.ErrNone
+
+	// if err := b.raftApply(deleteTopic, &jocko.Partition{Topic: topic}); err != nil {
+	// 	return protocol.ErrUnknown.WithErr(err)
+	// }
+	// return protocol.ErrNone
 }
 
 // deletePartitions is used to delete the topic from this.
