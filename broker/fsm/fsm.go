@@ -213,6 +213,7 @@ func (s *Store) EnsureNode(idx uint64, node *structs.Node) error {
 	return nil
 }
 
+// DeleteNode is used to delete nodes.
 func (s *Store) DeleteNode(idx uint64, id string) error {
 	tx := s.db.Txn(true)
 	defer tx.Abort()
@@ -261,10 +262,10 @@ func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterRequest) err
 
 func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.RegisterRequest) error {
 	node := &structs.Node{
-		ID: req.ID,
+		Node: req.Node,
 	}
 
-	existing, err := tx.First("nodes", "id", node.ID)
+	existing, err := tx.First("nodes", "id", node.Node)
 	if err != nil {
 		s.logger.Error("node lookup failed", log.Error("error", err))
 		return err
@@ -282,27 +283,12 @@ func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.Regis
 // ensureNodeTxn is the inner function to actually create or modify a node.
 func (s *Store) ensureNodeTxn(tx *memdb.Txn, idx uint64, node *structs.Node) error {
 	var n *structs.Node
-	if node.ID != "" {
-		existing, err := tx.First("nodes", "uuid", string(node.ID))
-		if err != nil {
-			return fmt.Errorf("node lookup failed: %s", err)
-		}
-		if existing != nil {
-			n = existing.(*structs.Node)
-			if n.Node != node.Node {
-				return fmt.Errorf("node id %q for node %q aliases existing node %q", node.ID, node.Node, n.Node)
-			}
-		}
+	existing, err := tx.First("nodes", "id", node.Node)
+	if err != nil {
+		return fmt.Errorf("node lookup failed: %s", err)
 	}
-
-	if n == nil {
-		existing, err := tx.First("nodes", "id", node.Node)
-		if err != nil {
-			return fmt.Errorf("node lookup failed: %s", err)
-		}
-		if existing != nil {
-			n = existing.(*structs.Node)
-		}
+	if existing != nil {
+		n = existing.(*structs.Node)
 	}
 
 	if n != nil {

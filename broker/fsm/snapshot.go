@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/raft"
+	"github.com/travisjeffery/jocko/broker/structs"
 	"github.com/ugorji/go/codec"
 )
 
@@ -34,13 +35,13 @@ func registerPersister(fn persister) {
 type restorer func(header *snapshotHeader, restore *Restore, decoder *codec.Decoder) error
 
 // restorers is a map of restore functions by message type.
-var restorers map[MessageType]restorer
+var restorers map[structs.MessageType]restorer
 
 // registerRestorer adds a new helper. This should be called at package
 // init() time.
-func registerRestorer(msg MessageType, fn restorer) {
+func registerRestorer(msg structs.MessageType, fn restorer) {
 	if restorers == nil {
-		restorers = make(map[MessageType]restorer)
+		restorers = make(map[structs.MessageType]restorer)
 	}
 	if restorers[msg] != nil {
 		panic(fmt.Errorf("Message %d is already registered", msg))
