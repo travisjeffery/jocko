@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/log"
 )
 
 func testStore(t *testing.T) *Store {
-	s, err := NewStore()
+	s, err := NewStore(log.New())
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -55,5 +56,35 @@ func TestStore_Abandon(t *testing.T) {
 	case <-abandonCh:
 	default:
 		t.Fatalf("bad")
+	}
+}
+
+func TestStore_DeleteNode(t *testing.T) {
+	s := testStore(t)
+
+	// add the node
+	testRegisterNode(t, s, 0, "node1")
+
+	// delete the node
+	if err := s.DeleteNode(1, "node1"); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// check it's gone
+	if idx, n, err := s.GetNode("node1"); err != nil || n != nil || idx != 1 {
+		t.Fatalf("bad: %#v %d (err: %#v)", n, idx, err)
+	}
+
+	// index is updated
+	if idx := s.maxIndex("nodes"); idx != 1 {
+		t.Fatalf("bad index: %d", idx)
+	}
+
+	// deleting should be idempotent
+	if err := s.DeleteNode(4, "node1"); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if idx := s.maxIndex("nodes"); idx != 1 {
+		t.Fatalf("bad index: %d", idx)
 	}
 }

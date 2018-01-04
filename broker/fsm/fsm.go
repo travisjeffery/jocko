@@ -12,8 +12,6 @@ import (
 	"github.com/ugorji/go/codec"
 )
 
-type MessageType uint8
-
 type command func(buf []byte, index uint64) interface{}
 
 // unboundCommand is a command method on the FSM, not yet bound to an FSM
@@ -21,11 +19,11 @@ type command func(buf []byte, index uint64) interface{}
 type unboundCommand func(c *FSM, buf []byte, index uint64) interface{}
 
 // commands is a map from message type to unbound command.
-var commands map[MessageType]unboundCommand
+var commands map[structs.MessageType]unboundCommand
 
-func registerCommand(msg MessageType, fn unboundCommand) {
+func registerCommand(msg structs.MessageType, fn unboundCommand) {
 	if commands == nil {
-		commands = make(map[MessageType]unboundCommand)
+		commands = make(map[structs.MessageType]unboundCommand)
 	}
 	if commands[msg] != nil {
 		panic(fmt.Errorf("Message %d is already registered", msg))
@@ -36,18 +34,18 @@ func registerCommand(msg MessageType, fn unboundCommand) {
 type FSM struct {
 	logger    log.Logger
 	path      string
-	apply     map[MessageType]command
+	apply     map[structs.MessageType]command
 	stateLock sync.RWMutex
 	state     *Store
 }
 
 func New(logger log.Logger) (*FSM, error) {
-	store, err := NewStore()
+	store, err := NewStore(logger)
 	if err != nil {
 		return nil, err
 	}
 	fsm := &FSM{
-		apply:  make(map[MessageType]command),
+		apply:  make(map[structs.MessageType]command),
 		logger: logger,
 		state:  store,
 	}
@@ -69,7 +67,7 @@ func (c *FSM) State() *Store {
 
 func (c *FSM) Apply(log *raft.Log) interface{} {
 	buf := log.Data
-	msgType := MessageType(buf[0])
+	msgType := structs.MessageType(buf[0])
 	if fn := c.apply[msgType]; fn != nil {
 		return fn(buf[1:], log.Index)
 	}
@@ -79,7 +77,7 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	newState, err := NewStore()
+	newState, err := NewStore(c.logger)
 	if err != nil {
 		return err
 	}
@@ -103,7 +101,7 @@ func (c *FSM) Restore(old io.ReadCloser) error {
 			return err
 		}
 
-		msg := MessageType(msgType[0])
+		msg := structs.MessageType(msgType[0])
 		if fn := restorers[msg]; fn != nil {
 			if err := fn(&header, restore, dec); err != nil {
 				return err
@@ -141,6 +139,7 @@ func registerSchema(fn schemaFn) {
 }
 
 type Store struct {
+	logger log.Logger
 	schema *memdb.DBSchema
 	db     *memdb.MemDB
 	// abandonCh is used to signal watchers this store has been abandoned
@@ -148,7 +147,7 @@ type Store struct {
 	abandonCh chan struct{}
 }
 
-func NewStore() (*Store, error) {
+func NewStore(logger log.Logger) (*Store, error) {
 	dbSchema := &memdb.DBSchema{
 		Tables: make(map[string]*memdb.TableSchema),
 	}
@@ -167,6 +166,7 @@ func NewStore() (*Store, error) {
 		schema:    dbSchema,
 		db:        db,
 		abandonCh: make(chan struct{}),
+		logger:    logger,
 	}
 	return s, nil
 }
@@ -210,6 +210,72 @@ func (s *Store) EnsureNode(idx uint64, node *structs.Node) error {
 	}
 
 	tx.Commit()
+	return nil
+}
+
+func (s *Store) DeleteNode(idx uint64, id string) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.deleteNodeTxn(tx, idx, id); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id string) error {
+	node, err := tx.First("nodes", "id", id)
+	if err != nil {
+		s.logger.Error("failed node lookup", log.Error("error", err))
+		return err
+	}
+	if node == nil {
+		return nil
+	}
+	// todo: delete anything attached to the node
+	if err := tx.Delete("nodes", node); err != nil {
+		s.logger.Error("failed deleting node", log.Error("error", err))
+		return err
+	}
+	// update the index
+	if err := tx.Insert("index", &IndexEntry{"nodes", idx}); err != nil {
+		s.logger.Error("failed deleting index", log.Error("error", err))
+		return err
+	}
+	return nil
+}
+
+func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterRequest) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.ensureRegistration(tx, idx, req); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.RegisterRequest) error {
+	node := &structs.Node{
+		ID: req.ID,
+	}
+
+	existing, err := tx.First("nodes", "id", node.ID)
+	if err != nil {
+		s.logger.Error("node lookup failed", log.Error("error", err))
+		return err
+	}
+
+	if existing == nil {
+		if err := s.ensureNodeTxn(tx, idx, node); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
