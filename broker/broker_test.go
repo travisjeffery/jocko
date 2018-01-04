@@ -1483,6 +1483,83 @@ func TestBroker_RegisterMember(t *testing.T) {
 	})
 }
 
+func TestBroker_FailedMember(t *testing.T) {
+	logger := log.New()
+	dir1, config1 := testConfig(t)
+	config1.Bootstrap = true
+	config1.BootstrapExpect = 2
+	b1, err := New(config1, nil, nil, logger)
+	require.NoError(t, err)
+	os.RemoveAll(dir1)
+
+	dir2, config2 := testConfig(t)
+	config2.Bootstrap = false
+	config2.BootstrapExpect = 2
+	config2.NonVoter = true
+	b2, err := New(config2, nil, nil, logger)
+	os.RemoveAll(dir2)
+	require.NoError(t, err)
+
+	waitForLeader(t, b1, b2)
+
+	joinLAN(t, b2, b1)
+
+	// Fail the member
+	b2.Shutdown()
+
+	// Should be registered
+	state := b1.fsm.State()
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(b2.config.RaftAddr)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			r.Fatal("node not registered")
+		}
+	})
+
+	// todo: check have failed checks
+}
+
+func TestBroker_LeftMember(t *testing.T) {
+	logger := log.New()
+	dir1, config1 := testConfig(t)
+	config1.Bootstrap = true
+	config1.BootstrapExpect = 2
+	b1, err := New(config1, nil, nil, logger)
+	require.NoError(t, err)
+	os.RemoveAll(dir1)
+
+	dir2, config2 := testConfig(t)
+	config2.Bootstrap = false
+	config2.BootstrapExpect = 2
+	config2.NonVoter = true
+	b2, err := New(config2, nil, nil, logger)
+	os.RemoveAll(dir2)
+	require.NoError(t, err)
+
+	waitForLeader(t, b1, b2)
+
+	joinLAN(t, b2, b1)
+
+	// Fail the member
+	b2.Leave()
+	b2.Shutdown()
+
+	// Should be deregistered
+	state := b1.fsm.State()
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(b2.config.RaftAddr)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node != nil {
+			r.Fatal("node still registered")
+		}
+	})
+}
+
 func TestBroker_LeaveLeader(t *testing.T) {
 	logger := log.New()
 	dir1, config1 := testConfig(t)

@@ -209,8 +209,6 @@ func (s *Broker) localMemberEvent(me serf.MemberEvent) {
 		return
 	}
 
-	spew.Dump("member event", me)
-
 	for _, m := range me.Members {
 		select {
 		case s.reconcileCh <- m:
@@ -585,7 +583,11 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 }
 
 func (s *Broker) handleFailedMember(m serf.Member) error {
-	return nil
+	req := structs.RegisterRequest{
+		Node: m.Tags["raft_addr"],
+	}
+	_, err := s.raftApply(structs.RegisterRequestType, &req)
+	return err
 }
 
 func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
