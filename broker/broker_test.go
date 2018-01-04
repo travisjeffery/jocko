@@ -1494,21 +1494,47 @@ func TestServer_LeaveLeader(t *testing.T) {
 	if leader == nil {
 		t.Fatal("no leader")
 	}
+
 	if !leader.isReadyForConsistentReads() {
 		t.Fatal("leader should be ready for consistent reads")
 	}
-	leader.Leave()
+
+	err = leader.Leave()
+	require.NoError(t, err)
+
 	if leader.isReadyForConsistentReads() {
 		t.Fatal("leader should not be ready for consistent reads")
 	}
+
 	leader.Shutdown()
 
+	var remain *Broker
 	for _, b := range brokers {
 		if b == leader {
 			continue
 		}
+		remain = b
 		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(b, 2)) })
 	}
+
+	retry.Run(t, func(r *retry.R) {
+		for _, b := range brokers {
+			if leader == b && b.isLeader() {
+				r.Fatal("should have new leader")
+			}
+		}
+	})
+
+	state := remain.fsm.State()
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(leader.config.RaftAddr)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node != nil {
+			r.Fatal("leader should be deregistered")
+		}
+	})
 }
 
 func waitForLeader(t *testing.T, brokers ...*Broker) {
