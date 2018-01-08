@@ -243,7 +243,7 @@ func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id string) error {
 	}
 	// update the index
 	if err := tx.Insert("index", &IndexEntry{"nodes", idx}); err != nil {
-		s.logger.Error("failed deleting index", log.Error("error", err))
+		s.logger.Error("failed updating index", log.Error("error", err))
 		return err
 	}
 	return nil
@@ -307,6 +307,96 @@ func (s *Store) ensureNodeTxn(tx *memdb.Txn, idx uint64, node *structs.Node) err
 		return fmt.Errorf("failed updating index: %s", err)
 	}
 
+	return nil
+}
+
+func (s *Store) EnsureTopic(idx uint64, topic *structs.Topic) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+	if err := s.ensureTopicTxn(tx, idx, topic); err != nil {
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) ensureTopicTxn(tx *memdb.Txn, idx uint64, topic *structs.Topic) error {
+	var t *structs.Topic
+	existing, err := tx.First("topics", "id", topic.Topic)
+	if err != nil {
+		return fmt.Errorf("topic lookup failed: %s", err)
+	}
+
+	if existing != nil {
+		t = existing.(*structs.Topic)
+	}
+
+	if t != nil {
+		topic.CreateIndex = t.CreateIndex
+		topic.ModifyIndex = idx
+	} else {
+		topic.CreateIndex = idx
+		topic.ModifyIndex = idx
+	}
+
+	if err := tx.Insert("topics", topic); err != nil {
+		return fmt.Errorf("failed inserting topic: %s", err)
+	}
+
+	if err := tx.Insert("index", &IndexEntry{"topics", idx}); err != nil {
+		return fmt.Errorf("failed updating index: %s", err)
+	}
+
+	return nil
+}
+
+// GetTopic is used to get topics.
+func (s *Store) GetTopic(id string) (uint64, *structs.Topic, error) {
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "topics")
+
+	topic, err := tx.First("topics", "id", id)
+	if err != nil {
+		return 0, nil, fmt.Errorf("topic lookup failed: %s", err)
+	}
+	if topic != nil {
+		return idx, topic.(*structs.Topic), nil
+	}
+
+	return idx, nil, nil
+}
+
+// DeleteTopic is used to delete topics.
+func (s *Store) DeleteTopic(idx uint64, id string) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.deleteTopicTxn(tx, idx, id); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
+	topic, err := tx.First("topics", "id", id)
+	if err != nil {
+		s.logger.Error("failed topic lookup", log.Error("error", err))
+		return err
+	}
+	if topic == nil {
+		return nil
+	}
+	if err := tx.Delete("topics", topic); err != nil {
+		s.logger.Error("failed deleting topic", log.Error("error", err))
+		return err
+	}
+	if err := tx.Insert("index", &IndexEntry{"topics", idx}); err != nil {
+		s.logger.Error("failed updating index", log.Error("error", err))
+		return err
+	}
 	return nil
 }
 
@@ -489,89 +579,44 @@ func servicesTableSchema() *memdb.TableSchema {
 	}
 }
 
-// checksTableSchema returns a new table schema used for storing and indexing
-// health check information. Health checks have a number of different attributes
-// we want to filter by, so this table is a bit more complex.
-func checksTableSchema() *memdb.TableSchema {
+// topicsTableSchema returns a new table schema used for storing topic
+// information.
+func topicsTableSchema() *memdb.TableSchema {
 	return &memdb.TableSchema{
-		Name: "checks",
+		Name: "topics",
 		Indexes: map[string]*memdb.IndexSchema{
 			"id": &memdb.IndexSchema{
 				Name:         "id",
 				AllowMissing: false,
 				Unique:       true,
-				Indexer: &memdb.CompoundIndex{
-					Indexes: []memdb.Indexer{
-						&memdb.StringFieldIndex{
-							Field:     "Node",
-							Lowercase: true,
-						},
-						&memdb.StringFieldIndex{
-							Field:     "CheckID",
-							Lowercase: true,
-						},
-					},
+				Indexer: &memdb.StringFieldIndex{
+					Field:     "Topic",
+					Lowercase: true,
 				},
 			},
-			"status": &memdb.IndexSchema{
-				Name:         "status",
+		},
+	}
+}
+
+// partitionsTableSchema returns a new table schema used for storing partition
+// information.
+func partitionsTableSchema() *memdb.TableSchema {
+	return &memdb.TableSchema{
+		Name: "partitions",
+		Indexes: map[string]*memdb.IndexSchema{
+			"id": &memdb.IndexSchema{
+				Name:         "id",
 				AllowMissing: false,
-				Unique:       false,
+				Unique:       true,
 				Indexer: &memdb.StringFieldIndex{
-					Field:     "Status",
-					Lowercase: false,
-				},
-			},
-			"service": &memdb.IndexSchema{
-				Name:         "service",
-				AllowMissing: true,
-				Unique:       false,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "ServiceName",
+					Field:     "Partition",
 					Lowercase: true,
 				},
 			},
-			"node": &memdb.IndexSchema{
-				Name:         "node",
-				AllowMissing: true,
-				Unique:       false,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "Node",
-					Lowercase: true,
-				},
-			},
-			"node_service_check": &memdb.IndexSchema{
-				Name:         "node_service_check",
-				AllowMissing: true,
-				Unique:       false,
-				Indexer: &memdb.CompoundIndex{
-					Indexes: []memdb.Indexer{
-						&memdb.StringFieldIndex{
-							Field:     "Node",
-							Lowercase: true,
-						},
-						&memdb.FieldSetIndex{
-							Field: "ServiceID",
-						},
-					},
-				},
-			},
-			"node_service": &memdb.IndexSchema{
-				Name:         "node_service",
-				AllowMissing: true,
-				Unique:       false,
-				Indexer: &memdb.CompoundIndex{
-					Indexes: []memdb.Indexer{
-						&memdb.StringFieldIndex{
-							Field:     "Node",
-							Lowercase: true,
-						},
-						&memdb.StringFieldIndex{
-							Field:     "ServiceID",
-							Lowercase: true,
-						},
-					},
-				},
+			"partitions": &memdb.IndexSchema{
+				Name:         "partitions",
+				AllowMissing: false,
+				Indexer:      &memdb.StringSliceFieldIndex{Field: "Partitions"},
 			},
 		},
 	}
@@ -580,6 +625,6 @@ func checksTableSchema() *memdb.TableSchema {
 func init() {
 	registerSchema(indexTableSchema)
 	registerSchema(nodesTableSchema)
-	registerSchema(servicesTableSchema)
-	registerSchema(checksTableSchema)
+	registerSchema(topicsTableSchema)
+	registerSchema(partitionsTableSchema)
 }

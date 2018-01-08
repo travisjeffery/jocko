@@ -88,3 +88,45 @@ func TestStore_DeleteNode(t *testing.T) {
 		t.Fatalf("bad index: %d", idx)
 	}
 }
+
+func TestStore_RegisterTopic(t *testing.T) {
+	s := testStore(t)
+
+	testRegisterTopic(t, s, 0, "topic1")
+
+	// delete the topic
+	if err := s.DeleteTopic(1, "topic1"); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// check it's gone
+	if idx, top, err := s.GetTopic("topic1"); err != nil || top != nil || idx != 1 {
+		t.Fatalf("bad: %#v %d (err: %v)", top, idx, err)
+	}
+
+	// check index is updated
+	if idx := s.maxIndex("topics"); idx != 1 {
+		t.Fatalf("err: %v", idx)
+	}
+
+	// deleting should be idempotent
+	if err := s.DeleteTopic(2, "topic1"); err != nil {
+		t.Fatalf("err: %d", err)
+	}
+	if idx := s.maxIndex("topics"); idx != 1 {
+		t.Fatalf("err: %v", idx)
+	}
+}
+
+func testRegisterTopic(t *testing.T, s *Store, idx uint64, id string) {
+	s.EnsureTopic(idx, &structs.Topic{Topic: id})
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	top, err := tx.First("topics", "id", id)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if result, ok := top.(*structs.Topic); !ok || result.Topic != id {
+		t.Fatalf("bad topic: %#v", result)
+	}
+}

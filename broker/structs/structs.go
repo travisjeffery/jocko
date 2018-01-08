@@ -72,3 +72,15 @@ type HealthCheck struct {
 	ServiceTags []string
 	RaftIndex
 }
+
+// Topic
+type Topic struct {
+	// ID is ID or name of the topic
+	ID string
+	// Topic is the name of the topic
+	Topic string
+	// Partitions is a map of partition IDs to slice of replicas IDs.
+	Partitions map[int32][]int32
+
+	RaftIndex
+}
