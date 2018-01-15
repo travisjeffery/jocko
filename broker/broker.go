@@ -529,15 +529,40 @@ func (s *Broker) raftApply(t structs.MessageType, msg interface{}) (interface{},
 }
 
 func (s *Broker) handleLeftMember(m serf.Member) error {
-	if m.Name == s.config.RaftAddr {
+	return s.handleDeregisterMember("left", m)
+}
+
+// handleDeregisterMember is used to deregister a mmeber for a given reason.
+func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error {
+	if member.Name == s.config.RaftAddr {
 		s.logger.Debug("deregistering self should be done by follower")
 		return nil
 	}
 
-	if meta, ok := metadata.IsBroker(m); ok {
-		return s.removeServer(m, meta)
+	meta, ok := metadata.IsBroker(member)
+	if !ok {
+		return nil
 	}
-	return nil
+
+	if err := s.removeServer(member, meta); err != nil {
+		return err
+	}
+
+	state := s.fsm.State()
+	_, node, err := state.GetNode(meta.RaftAddr)
+	if err != nil {
+		return err
+	}
+	if node == nil {
+		return nil
+	}
+
+	s.logger.Info("member is deregistering", log.String("node", meta.RaftAddr), log.String("reason", reason))
+	req := structs.DeregisterRequest{
+		Node: meta.RaftAddr,
+	}
+	_, err = s.raftApply(structs.DeregisterRequestType, &req)
+	return err
 }
 
 func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {

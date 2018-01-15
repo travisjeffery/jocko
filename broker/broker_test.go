@@ -1567,20 +1567,20 @@ func TestBroker_LeaveLeader(t *testing.T) {
 	config1.BootstrapExpect = 3
 	b1, err := New(config1, nil, nil, logger)
 	require.NoError(t, err)
-	os.RemoveAll(dir1)
+	defer os.RemoveAll(dir1)
 
 	dir2, config2 := testConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
 	b2, err := New(config2, nil, nil, logger)
-	os.RemoveAll(dir2)
+	defer os.RemoveAll(dir2)
 	require.NoError(t, err)
 
 	dir3, config3 := testConfig(t)
 	config3.Bootstrap = false
 	config3.BootstrapExpect = 3
 	b3, err := New(config3, nil, nil, logger)
-	os.RemoveAll(dir3)
+	defer os.RemoveAll(dir3)
 	require.NoError(t, err)
 
 	brokers := []*Broker{b1, b2, b3}
