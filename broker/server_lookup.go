@@ -28,10 +28,17 @@ func (sl *serverLookup) AddServer(server *metadata.Broker) {
 	sl.idToServer[raft.ServerID(server.ID)] = server
 }
 
-func (sl *serverLookup) Server(addr raft.ServerAddress) *metadata.Broker {
+func (sl *serverLookup) ServerByAddr(addr raft.ServerAddress) *metadata.Broker {
 	sl.lock.RLock()
 	defer sl.lock.RUnlock()
 	svr, _ := sl.addressToServer[addr]
+	return svr
+}
+
+func (sl *serverLookup) ServerByID(id raft.ServerID) *metadata.Broker {
+	sl.lock.RLock()
+	defer sl.lock.RUnlock()
+	svr, _ := sl.idToServer[id]
 	return svr
 }
 

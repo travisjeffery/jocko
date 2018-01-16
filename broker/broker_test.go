@@ -17,7 +17,6 @@ import (
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	dynaport "github.com/travisjeffery/go-dynaport"
@@ -491,7 +490,7 @@ func TestBroker_Run(t *testing.T) {
 			if tt.setFields != nil {
 				tt.setFields(&tt.fields)
 			}
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 			defer func() {
@@ -499,7 +498,11 @@ func TestBroker_Run(t *testing.T) {
 				b.Leave()
 				b.Shutdown()
 			}()
-
+			retry.Run(t, func(r *retry.R) {
+				if len(b.serverLookup.Servers()) != 1 {
+					r.Fatal("server not added")
+				}
+			})
 			if tt.fields.topicMap != nil {
 				b.topicMap = tt.fields.topicMap
 				for _, ps := range tt.fields.topicMap {
@@ -587,7 +590,7 @@ func spewstr(v interface{}) string {
 // 				ID:      tt.fields.id,
 // 				DataDir: tt.fields.logDir,
 // 				Addr:    tt.fields.brokerAddr,
-// 			}, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+// 			},  tt.fields.logger)
 // 			if err != nil {
 // 				t.Error("expected no err")
 // 			}
@@ -600,54 +603,6 @@ func spewstr(v interface{}) string {
 // 		})
 // 	}
 // }
-
-func TestBroker_clusterMembers(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	members := []*jocko.ClusterMember{{ID: 1}}
-	tests := []struct {
-		name   string
-		fields fields
-		want   []*jocko.ClusterMember
-	}{
-		{
-			name: "found members ok",
-			fields: fields{
-				logger:     log.New(),
-				brokerAddr: "localhost:9092",
-				serf: &mock.Serf{
-					ClusterFunc: func() []*jocko.ClusterMember {
-						return members
-					},
-				},
-			},
-			want: members,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.clusterMembers(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.clusterMembers() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
 func TestBroker_topicPartitions(t *testing.T) {
 	type fields struct {
@@ -697,7 +652,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -747,7 +702,7 @@ func TestBroker_topics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -813,7 +768,7 @@ func TestBroker_partition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -868,7 +823,7 @@ func TestBroker_partition(t *testing.T) {
 // 		t.Run(tt.name, func(t *testing.T) {
 // 			dir, config := testConfig(t)
 // 			os.RemoveAll(dir)
-// 			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+// 			b, err := New(config,  tt.fields.logger)
 // 			if err != nil {
 // 				t.Error("expected no err")
 // 			}
@@ -881,65 +836,6 @@ func TestBroker_partition(t *testing.T) {
 // 		})
 // 	}
 // }
-
-func TestBroker_clusterMember(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	member := &jocko.ClusterMember{ID: 1}
-	serf := &mock.Serf{
-		MemberFunc: func(id int32) *jocko.ClusterMember {
-			if id != member.ID {
-				t.Errorf("serf.Member() id = %v, want %v", id, member.ID)
-			}
-			return member
-		},
-	}
-	type args struct {
-		id int32
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   *jocko.ClusterMember
-	}{
-		{
-			name: "found member",
-			fields: fields{
-				serf:   serf,
-				logger: log.New(),
-			},
-			args: args{id: 1},
-			want: member,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.clusterMember(tt.args.id); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.clusterMember() = %v, want %v", got, tt.want)
-			}
-			if !serf.MemberCalled() {
-				t.Errorf("serf.MemberCalled() = %v, want %v", serf.MemberCalled(), true)
-			}
-		})
-	}
-}
 
 func TestBroker_startReplica(t *testing.T) {
 	type args struct {
@@ -1019,7 +915,7 @@ func TestBroker_startReplica(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, fields.serf, fields.raft, fields.logger)
+			b, err := New(config, fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1074,7 +970,7 @@ func TestBroker_createTopic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1113,7 +1009,7 @@ func TestBroker_deleteTopic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1152,7 +1048,7 @@ func TestBroker_deletePartitions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1179,7 +1075,7 @@ func TestBroker_Shutdown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1188,12 +1084,6 @@ func TestBroker_Shutdown(t *testing.T) {
 			}
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Broker.Shutdown() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.fields.raft.ShutdownCalled() != true {
-				t.Errorf("did not shutdown raft")
-			}
-			if tt.fields.serf.ShutdownCalled() != true {
-				t.Errorf("did not shutdown raft")
 			}
 		})
 	}
@@ -1229,7 +1119,7 @@ func TestBroker_becomeFollower(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1270,7 +1160,7 @@ func TestBroker_becomeLeader(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
+			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
@@ -1318,55 +1208,6 @@ type fields struct {
 }
 
 func newFields() fields {
-	serf := &mock.Serf{
-		BootstrapFunc: func(n *jocko.ClusterMember, rCh chan<- *jocko.ClusterMember) error {
-			if n == nil {
-				return errors.New("*jocko.ClusterMember is nil")
-			}
-			if rCh == nil {
-				return errors.New("chan<- *jocko.ClusterMember is nil")
-			}
-			return nil
-		},
-		JoinFunc: func(addrs ...string) (int, error) {
-			return 1, nil
-		},
-		ClusterFunc: func() []*jocko.ClusterMember {
-			return []*jocko.ClusterMember{{ID: 1, BrokerPort: 9092, BrokerIP: "localhost"}}
-		},
-		MemberFunc: func(memberID int32) *jocko.ClusterMember {
-			return &jocko.ClusterMember{ID: 1}
-		},
-		ShutdownFunc: func() error {
-			return nil
-		},
-	}
-	raft := &mock.Raft{
-		AddrFunc: func() string {
-			return "localhost:9093"
-		},
-		BootstrapFunc: func(s jocko.Serf, sCh <-chan *jocko.ClusterMember, cCh chan<- jocko.RaftCommand) error {
-			if s == nil {
-				return errors.New("jocko.Serf is nil")
-			}
-			if sCh == nil {
-				return errors.New("<-chan *jocko.ClusterMember is nil")
-			}
-			if cCh == nil {
-				return errors.New("chan<- jocko.RaftCommand is nil")
-			}
-			return nil
-		},
-		IsLeaderFunc: func() bool {
-			return true
-		},
-		ApplyFunc: func(jocko.RaftCommand) error {
-			return nil
-		},
-		ShutdownFunc: func() error {
-			return nil
-		},
-	}
 	return fields{
 		topicMap:     make(map[string][]*jocko.Partition),
 		raftCommands: make(chan jocko.RaftCommand),
@@ -1374,8 +1215,6 @@ func newFields() fields {
 		logger:       log.New(),
 		logDir:       "/tmp/jocko/logs",
 		loner:        true,
-		serf:         serf,
-		raft:         raft,
 		brokerAddr:   "localhost:9092",
 		id:           1,
 	}
@@ -1384,12 +1223,12 @@ func newFields() fields {
 func TestBroker_JoinLAN(t *testing.T) {
 	logger := log.New()
 	dir1, config1 := testConfig(t)
-	b1, err := New(config1, nil, nil, logger)
+	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
 	dir2, config2 := testConfig(t)
-	b2, err := New(config2, nil, nil, logger)
+	b2, err := New(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 	joinLAN(t, b1, b2)
@@ -1405,14 +1244,14 @@ func TestBroker_RegisterMember(t *testing.T) {
 	dir1, config1 := testConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
-	b1, err := New(config1, nil, nil, logger)
+	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
 	dir2, config2 := testConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
-	b2, err := New(config2, nil, nil, logger)
+	b2, err := New(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -1446,7 +1285,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	dir1, config1 := testConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
-	b1, err := New(config1, nil, nil, logger)
+	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
@@ -1454,7 +1293,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
-	b2, err := New(config2, nil, nil, logger)
+	b2, err := New(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -1485,7 +1324,7 @@ func TestBroker_LeftMember(t *testing.T) {
 	dir1, config1 := testConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
-	b1, err := New(config1, nil, nil, logger)
+	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
@@ -1493,7 +1332,7 @@ func TestBroker_LeftMember(t *testing.T) {
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
-	b2, err := New(config2, nil, nil, logger)
+	b2, err := New(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -1523,21 +1362,21 @@ func TestBroker_LeaveLeader(t *testing.T) {
 	dir1, config1 := testConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
-	b1, err := New(config1, nil, nil, logger)
+	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir1)
 
 	dir2, config2 := testConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
-	b2, err := New(config2, nil, nil, logger)
+	b2, err := New(config2, logger)
 	defer os.RemoveAll(dir2)
 	require.NoError(t, err)
 
 	dir3, config3 := testConfig(t)
 	config3.Bootstrap = false
 	config3.BootstrapExpect = 3
-	b3, err := New(config3, nil, nil, logger)
+	b3, err := New(config3, logger)
 	defer os.RemoveAll(dir3)
 	require.NoError(t, err)
 
@@ -1669,6 +1508,7 @@ func testConfig(t *testing.T) (string, *Config) {
 	config.RaftConfig.HeartbeatTimeout = 200 * time.Millisecond
 	config.RaftConfig.ElectionTimeout = 200 * time.Millisecond
 	config.RaftAddr = fmt.Sprintf("127.0.0.1:%d", ports[2])
+	config.Addr = "localhost:9092"
 	return dir, config
 }
 

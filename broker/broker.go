@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
@@ -67,9 +66,6 @@ type Broker struct {
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
 
-	oldRaft jocko.Raft
-	oldSerf jocko.Serf
-
 	// readyForConsistentReads is used to track when the leader server is
 	// ready to serve consistent reads, after it has applied its initial
 	// barrier. This is updated atomically.
@@ -95,7 +91,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logger) (*Broker, error) {
+func New(config *Config, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:       config,
 		logger:       logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
@@ -105,8 +101,6 @@ func New(config *Config, oldSerf jocko.Serf, oldRaft jocko.Raft, logger log.Logg
 		eventChLAN:   make(chan serf.Event, 256),
 		serverLookup: NewServerLookup(),
 		reconcileCh:  make(chan serf.Member, 32),
-		oldSerf:      oldSerf,
-		oldRaft:      oldRaft,
 	}
 
 	if b.logger == nil {
@@ -186,6 +180,7 @@ func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
 		if !ok {
 			continue
 		}
+		s.logger.Info("adding LAN server", log.Any("meta", b))
 		// update server lookup
 		s.serverLookup.AddServer(b)
 		if s.config.BootstrapExpect != 0 {
@@ -238,7 +233,6 @@ func (s *Broker) maybeBootstrap() {
 
 	members := s.LANMembers()
 	var brokers []metadata.Broker
-	spew.Dump("members", members)
 	for _, member := range members {
 		b, ok := metadata.IsBroker(member)
 		if !ok {
@@ -255,7 +249,6 @@ func (s *Broker) maybeBootstrap() {
 		brokers = append(brokers, *b)
 	}
 
-	spew.Dump("brokers", brokers)
 	if len(brokers) < s.config.BootstrapExpect {
 		return
 	}
@@ -742,7 +735,7 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			}
 			continue
 		}
-		if req.ReplicationFactor > int16(len(b.clusterMembers())) {
+		if req.ReplicationFactor > int16(len(b.LANMembers())) {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
@@ -913,12 +906,25 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 }
 
 func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.MetadataRequest) *protocol.MetadataResponse {
-	brokers := make([]*protocol.Broker, 0, len(b.clusterMembers()))
-	for _, mem := range b.clusterMembers() {
+	brokers := make([]*protocol.Broker, 0, len(b.LANMembers()))
+	for _, mem := range b.LANMembers() {
+		m, ok := metadata.IsBroker(mem)
+		if !ok {
+			continue
+		}
+		// TODO: replace this -- just use the addr
+		host, portStr, err := net.SplitHostPort(m.BrokerAddr)
+		if err != nil {
+			panic(err)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			panic(err)
+		}
 		brokers = append(brokers, &protocol.Broker{
 			NodeID: b.config.ID,
-			Host:   mem.BrokerIP,
-			Port:   int32(mem.BrokerPort),
+			Host:   host,
+			Port:   int32(port),
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
@@ -1037,15 +1043,9 @@ func (b *Broker) handleFetch(header *protocol.RequestHeader, r *protocol.FetchRe
 	return fresp
 }
 
-// clusterMembers is used to get a list of members in the cluster.
-func (b *Broker) clusterMembers() []*jocko.ClusterMember {
-	return b.oldSerf.Cluster()
-}
-
 // isController returns true if this is the cluster controller.
 func (b *Broker) isController() bool {
 	return b.isLeader()
-	// return b.oldRaft.IsLeader()
 }
 
 func (b *Broker) isLeader() bool {
@@ -1086,11 +1086,6 @@ func (b *Broker) partition(topic string, partition int32) (*jocko.Partition, pro
 func (b *Broker) createPartition(partition *jocko.Partition) error {
 	return nil
 	// return b.raftApply(createPartition, partition)
-}
-
-// clusterMember is used to get a specific member in the cluster.
-func (b *Broker) clusterMember(id int32) *jocko.ClusterMember {
-	return b.oldSerf.Member(id)
 }
 
 // startReplica is used to start a replica on this, including creating its commit log.
@@ -1140,7 +1135,7 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 }
 
 func (b *Broker) partitionsToCreate(topic string, partitionsCount int32, replicationFactor int16) []*jocko.Partition {
-	mems := b.clusterMembers()
+	mems := b.serverLookup.Servers()
 	memCount := int32(len(mems))
 	var partitions []*jocko.Partition
 
@@ -1274,20 +1269,6 @@ func (b *Broker) Shutdown() error {
 		}
 	}
 
-	if b.oldSerf != nil {
-		if err := b.oldSerf.Shutdown(); err != nil {
-			b.logger.Error("failed to shut down serf", log.Error("error", err))
-			return err
-		}
-	}
-
-	if b.oldRaft != nil {
-		if err := b.oldRaft.Shutdown(); err != nil {
-			b.logger.Error("failed to shut down raft", log.Error("error", err))
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -1312,7 +1293,7 @@ func (b *Broker) becomeFollower(topic string, partitionID int32, partitionState 
 		return protocol.ErrUnknown.WithErr(err)
 	}
 	p.Leader = partitionState.Leader
-	p.Conn = b.clusterMember(p.LeaderID())
+	p.Conn = b.serverLookup.ServerByID(raft.ServerID(p.LeaderID()))
 	r := NewReplicator(ReplicatorConfig{}, p, b.config.ID, server.NewClient(p.Conn), b.logger)
 	b.replicators[p] = r
 	if !b.config.DevMode {
@@ -1334,7 +1315,7 @@ func (b *Broker) becomeLeader(topic string, partitionID int32, partitionState *p
 		}
 	}
 	p.Leader = b.config.ID
-	p.Conn = b.clusterMember(p.LeaderID())
+	p.Conn = b.serverLookup.ServerByID(raft.ServerID(p.LeaderID()))
 	p.ISR = partitionState.ISR
 	p.LeaderAndISRVersionInZK = partitionState.ZKVersion
 	return protocol.ErrNone
