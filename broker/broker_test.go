@@ -34,6 +34,9 @@ const (
 func TestBroker_Run(t *testing.T) {
 	// creating the config up here so we can set the nodeid in the expected test cases
 	dir, config := testConfig(t)
+	config.Bootstrap = true
+	config.BootstrapExpect = 1
+	config.StartAsLeader = true
 	defer os.RemoveAll(dir)
 	mustEncode := func(e protocol.Encoder) []byte {
 		var b []byte
@@ -496,6 +499,7 @@ func TestBroker_Run(t *testing.T) {
 				b.Leave()
 				b.Shutdown()
 			}()
+
 			if tt.fields.topicMap != nil {
 				b.topicMap = tt.fields.topicMap
 				for _, ps := range tt.fields.topicMap {
@@ -640,52 +644,6 @@ func TestBroker_clusterMembers(t *testing.T) {
 			}
 			if got := b.clusterMembers(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Broker.clusterMembers() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBroker_isController(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   bool
-	}{
-		{
-			name: "is leader",
-			fields: fields{
-				logger: log.New(),
-				raft: &mock.Raft{
-					IsLeaderFunc: func() bool {
-						return true
-					},
-				},
-			},
-			want: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.serf, tt.fields.raft, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.isController(); got != tt.want {
-				t.Errorf("Broker.isController() = %v, want %v", got, tt.want)
 			}
 		})
 	}

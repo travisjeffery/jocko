@@ -53,6 +53,7 @@ type Config struct {
 	RaftConfig      *raft.Config
 	Bootstrap       bool
 	BootstrapExpect int
+	StartAsLeader   bool
 	NonVoter        bool
 	RaftAddr        string
 }
@@ -302,6 +303,7 @@ func (s *Broker) setupRaft() error {
 	s.raftTransport = trans
 
 	s.config.RaftConfig.LocalID = raft.ServerID(s.config.RaftAddr)
+	s.config.RaftConfig.StartAsLeader = s.config.StartAsLeader
 
 	// build an in-memory setup for dev mode, disk-based otherwise.
 	var log raft.LogStore
@@ -1042,7 +1044,8 @@ func (b *Broker) clusterMembers() []*jocko.ClusterMember {
 
 // isController returns true if this is the cluster controller.
 func (b *Broker) isController() bool {
-	return b.oldRaft.IsLeader()
+	return b.isLeader()
+	// return b.oldRaft.IsLeader()
 }
 
 func (b *Broker) isLeader() bool {

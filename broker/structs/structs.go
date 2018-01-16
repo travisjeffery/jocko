@@ -84,3 +84,17 @@ type Topic struct {
 
 	RaftIndex
 }
+
+// Partition
+type Partition struct {
+	// ISR is a slice of replica IDs in ISR
+	ISR []int32
+	// Leader is the ID of the leader replica
+	Leader int32
+	// ControllerEpoch is the epoch of the controller that last updated
+	// the leader and ISR info. TODO: this will probably have to change to fit better.
+	ControllerEpoch int32
+	LeaderEpoch     int32
+
+	RaftIndex
+}
