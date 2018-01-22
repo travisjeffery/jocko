@@ -192,7 +192,6 @@ type Response struct {
 // Broker is the interface that wraps the Broker's methods.
 type Broker interface {
 	Run(context.Context, <-chan Request, chan<- Response)
-	Join(addr ...string) protocol.Error
 	Shutdown() error
 }
 

@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/broker/config"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/raft"
-	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
 )
 
@@ -114,39 +114,35 @@ func main() {
 }
 
 func setup(logger log.Logger) func() {
-	serf, err := serf.New(serf.Config{ID: brokerID, Addr: serfAddr, RaftAddr: raftAddr}, logger)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed starting serf: %v\n", err)
-		os.Exit(1)
+	ports := dynaport.Get(3)
+	config := &config.Config{
+		ID:              brokerID,
+		Bootstrap:       true,
+		BootstrapExpect: 1,
+		StartAsLeader:   true,
+		DataDir:         logDir + "/logs",
+		DevMode:         true,
+		Addr:            fmt.Sprintf("127.0.0.1:%d", ports[1]),
+		RaftAddr:        fmt.Sprintf("127.0.0.1:%d", ports[2]),
 	}
-
-	raft, err := raft.New(raft.Config{
-		Addr:              raftAddr,
-		DataDir:           logDir + "/raft",
-		DevMode:           true,
-		Bootstrap:         true,
-		BootstrapExpect:   1,
-		ReconcileInterval: time.Second * 5,
-	}, serf, logger)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed starting raft: %v\n", err)
-		os.Exit(1)
-	}
-
-	broker, err := broker.New(broker.Config{ID: brokerID, DataDir: logDir + "/logs", DevMode: true}, serf, raft, logger)
+	config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
+	config.SerfLANConfig.MemberlistConfig.BindPort = ports[1]
+	config.SerfLANConfig.MemberlistConfig.AdvertiseAddr = "127.0.0.1"
+	config.SerfLANConfig.MemberlistConfig.AdvertisePort = ports[1]
+	config.SerfLANConfig.MemberlistConfig.SuspicionMult = 2
+	config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
+	config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
+	config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
+	broker, err := broker.New(config, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting broker: %v\n", err)
 		os.Exit(1)
 	}
 
-	srv := server.New(server.Config{BrokerAddr: brokerAddr, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
+	srv := server.New(&server.Config{BrokerAddr: brokerAddr, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "failed starting server: %v\n", err)
 		os.Exit(1)
-	}
-
-	if _, err := raft.WaitForLeader(10 * time.Second); err != nil {
-		panic(err)
 	}
 
 	addr, err := net.ResolveTCPAddr("tcp", brokerAddr)

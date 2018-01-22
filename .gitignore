@@ -5,3 +5,4 @@ vendor/*
 .idea
 *.log
 *.index
+NOTES.txt

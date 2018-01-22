@@ -3,22 +3,22 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/broker"
+	"github.com/travisjeffery/jocko/broker/config"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/raft"
-	"github.com/travisjeffery/jocko/serf"
 	"github.com/travisjeffery/jocko/server"
+	"github.com/travisjeffery/jocko/testutil"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 )
 
 func TestBroker(t *testing.T) {
-	brokerPort, shutdown := setup(t)
+	bConfig, shutdown := setup(t)
 	defer shutdown()
 
 	t.Run("Sarama", func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestBroker(t *testing.T) {
 		config.Producer.Return.Successes = true
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Retry.Max = 10
-		brokers := []string{"127.0.0.1:" + brokerPort}
+		brokers := []string{bConfig.Addr}
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -72,7 +72,7 @@ func TestBroker(t *testing.T) {
 }
 
 func BenchmarkBroker(b *testing.B) {
-	brokerPort, shutdown := setup(b)
+	bConfig, shutdown := setup(b)
 	defer shutdown()
 
 	config := sarama.NewConfig()
@@ -80,7 +80,7 @@ func BenchmarkBroker(b *testing.B) {
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 3
-	brokers := []string{"127.0.0.1:" + brokerPort}
+	brokers := []string{bConfig.Addr}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
@@ -122,46 +122,30 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t require.TestingT) (string, func()) {
+func setup(t require.TestingT) (*config.Config, func()) {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	require.NoError(t, err)
-
-	ports := dynaport.GetS(4)
-	brokerPort := ports[0]
-
 	logger := log.New()
 
-	raftAddr := "127.0.0.1:" + ports[1]
-	brokerAddr := "127.0.0.1:" + brokerPort
-	httpAddr := "127.0.0.1:" + ports[3]
+	ports := dynaport.Get(3)
+	dir, cfg := testutil.TestConfig(t.(*testing.T))
+	defer os.RemoveAll(dir)
+	cfg.Bootstrap = true
+	cfg.BootstrapExpect = 1
+	cfg.StartAsLeader = true
 
-	serf, err := serf.New(serf.Config{ID: 0, Addr: "127.0.0.1:" + ports[2], BrokerAddr: brokerAddr, HTTPAddr: httpAddr, RaftAddr: raftAddr}, logger)
-	if err != nil {
-		panic(err)
-	}
-	raft, err := raft.New(raft.Config{
-		DataDir:           dataDir + "/raft",
-		Bootstrap:         true,
-		BootstrapExpect:   1,
-		DevMode:           true,
-		Addr:              raftAddr,
-		ReconcileInterval: time.Second * 5,
-	}, serf, logger)
-	if err != nil {
-		panic(err)
-	}
-	broker, err := broker.New(broker.Config{ID: 0, DataDir: dataDir + "/logs", DevMode: true, Addr: "127.0.0.1:" + brokerPort}, serf, raft, logger)
+	broker, err := broker.New(cfg, logger)
 	if err != nil {
 		panic(err)
 	}
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(server.Config{BrokerAddr: ":" + brokerPort, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
+	srv := server.New(&server.Config{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, mock.NewMetrics(), logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", "localhost:"+brokerPort)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.Addr)
 	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
@@ -184,7 +168,7 @@ func setup(t require.TestingT) (string, func()) {
 	require.NoError(t, err)
 	conn.Close()
 
-	return brokerPort, func() {
+	return cfg, func() {
 		defer func() {
 			logger.Info("removing data dir")
 			os.RemoveAll(dataDir)

@@ -5,34 +5,25 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
-	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/raft"
-	"github.com/hashicorp/serf/serf"
 	"github.com/stretchr/testify/require"
 
-	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-)
-
-const (
-	DefaultLANSerfPort = 8301
+	"github.com/travisjeffery/jocko/testutil"
 )
 
 func TestBroker_Run(t *testing.T) {
 	// creating the config up here so we can set the nodeid in the expected test cases
-	dir, config := testConfig(t)
+	dir, config := testutil.TestConfig(t)
 	config.Bootstrap = true
 	config.BootstrapExpect = 1
 	config.StartAsLeader = true
@@ -69,7 +60,7 @@ func TestBroker_Run(t *testing.T) {
 				}},
 				responses: []jocko.Response{{
 					Header:   &protocol.RequestHeader{CorrelationID: 1},
-					Response: &protocol.Response{CorrelationID: 1, Body: (&Broker{}).handleAPIVersions(nil, nil)},
+					Response: &protocol.Response{CorrelationID: 1, Body: APIVersions},
 				}},
 			},
 		},
@@ -595,7 +586,7 @@ func spewstr(v interface{}) string {
 // 				t.Error("expected no err")
 // 			}
 // 			if got := b.JoinLAN(tt.args.addrs...); !reflect.DeepEqual(got, tt.want) {
-// 				t.Errorf("Broker.Join() = %v, want %v", got, tt.want)
+// 				t.Errorf("Join() = %v, want %v", got, tt.want)
 // 			}
 // 			if !tt.fields.serf.JoinCalled() {
 // 				t.Error("expected serf join invoked; did not")
@@ -650,7 +641,7 @@ func TestBroker_topicPartitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
@@ -659,10 +650,10 @@ func TestBroker_topicPartitions(t *testing.T) {
 			b.topicMap = tt.fields.topicMap
 			gotFound, gotErr := b.topicPartitions(tt.args.topic)
 			if !reflect.DeepEqual(gotFound, tt.wantFound) {
-				t.Errorf("Broker.topicPartitions() gotFound = %v, want %v", gotFound, tt.wantFound)
+				t.Errorf("topicPartitions() gotFound = %v, want %v", gotFound, tt.wantFound)
 			}
 			if !reflect.DeepEqual(gotErr, tt.wantErr) {
-				t.Errorf("Broker.topicPartitions() gotErr = %v, want %v", gotErr, tt.wantErr)
+				t.Errorf("topicPartitions() gotErr = %v, want %v", gotErr, tt.wantErr)
 			}
 		})
 	}
@@ -700,7 +691,7 @@ func TestBroker_topics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
@@ -710,7 +701,7 @@ func TestBroker_topics(t *testing.T) {
 				b.topicMap = tt.fields.topicMap
 			}
 			if got := b.topics(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.topics() = %v, want %v", got, tt.want)
+				t.Errorf("topics() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -766,7 +757,7 @@ func TestBroker_partition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
@@ -777,10 +768,10 @@ func TestBroker_partition(t *testing.T) {
 			}
 			got, goterr := b.partition(tt.args.topic, tt.args.partition)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.partition() got = %v, want %v", got, tt.want)
+				t.Errorf("partition() got = %v, want %v", got, tt.want)
 			}
 			if !reflect.DeepEqual(goterr, tt.wanterr) {
-				t.Errorf("Broker.partition() goterr = %v, want %v", goterr, tt.wanterr)
+				t.Errorf("partition() goterr = %v, want %v", goterr, tt.wanterr)
 			}
 		})
 	}
@@ -821,17 +812,17 @@ func TestBroker_partition(t *testing.T) {
 // 	}
 // 	for _, tt := range tests {
 // 		t.Run(tt.name, func(t *testing.T) {
-// 			dir, config := testConfig(t)
+// 			dir, config := testutil.TestConfig(t)
 // 			os.RemoveAll(dir)
 // 			b, err := New(config,  tt.fields.logger)
 // 			if err != nil {
 // 				t.Error("expected no err")
 // 			}
 // 			if err := b.createPartition(tt.args.partition); (err != nil) != tt.wantErr {
-// 				t.Errorf("Broker.createPartition() error = %v, wantErr %v", err, tt.wantErr)
+// 				t.Errorf("createPartition() error = %v, wantErr %v", err, tt.wantErr)
 // 			}
 // 			if !raft.ApplyCalled() {
-// 				t.Errorf("Broker.createPartition() raft.ApplyCalled() = %v, want %v", raft.ApplyCalled(), true)
+// 				t.Errorf("createPartition() raft.ApplyCalled() = %v, want %v", raft.ApplyCalled(), true)
 // 			}
 // 		})
 // 	}
@@ -913,28 +904,28 @@ func TestBroker_startReplica(t *testing.T) {
 			tt.setFields(&fields)
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if got := b.startReplica(tt.args.partition); got.Error() != tt.want.Error() {
-				t.Errorf("Broker.startReplica() = %v, want %v", got, tt.want)
+				t.Errorf("startReplica() = %v, want %v", got, tt.want)
 			}
 			got, err := b.partition(tt.args.partition.Topic, tt.args.partition.ID)
 			if !reflect.DeepEqual(got, tt.args.partition) {
-				t.Errorf("Broker.partition() = %v, want %v", got, partition)
+				t.Errorf("partition() = %v, want %v", got, partition)
 			}
 			parts := map[int32]*jocko.Partition{}
 			for _, p := range b.topicMap[tt.args.partition.Topic] {
 				if _, ok := parts[p.ID]; ok {
-					t.Errorf("Broker.topicPartition contains dupes, dupe %v", p)
+					t.Errorf("topicPartition contains dupes, dupe %v", p)
 				}
 				parts[p.ID] = p
 			}
 			if err != protocol.ErrNone {
-				t.Errorf("Broker.partition() err = %v, want %v", err, protocol.ErrNone)
+				t.Errorf("partition() err = %v, want %v", err, protocol.ErrNone)
 			}
 		})
 	}
@@ -968,14 +959,14 @@ func TestBroker_createTopic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if got := b.createTopic(tt.args.topic, tt.args.partitions, tt.args.replicationFactor); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.createTopic() = %v, want %v", got, tt.want)
+				t.Errorf("createTopic() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1007,14 +998,14 @@ func TestBroker_deleteTopic(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if got := b.deleteTopic(tt.args.topic); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.deleteTopic() = %v, want %v", got, tt.want)
+				t.Errorf("deleteTopic() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1046,14 +1037,14 @@ func TestBroker_deletePartitions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if err := b.deletePartitions(tt.args.tp); (err != nil) != tt.wantErr {
-				t.Errorf("Broker.deletePartitions() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("deletePartitions() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -1073,17 +1064,17 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if err != nil {
-				t.Errorf("Broker.New() error = %v, wanted nil", err)
+				t.Errorf("New() error = %v, wanted nil", err)
 			}
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
-				t.Errorf("Broker.Shutdown() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -1117,14 +1108,14 @@ func TestBroker_becomeFollower(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if got := b.becomeFollower(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.becomeFollower() = %v, want %v", got, tt.want)
+				t.Errorf("becomeFollower() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1158,14 +1149,14 @@ func TestBroker_becomeLeader(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testConfig(t)
+			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
 			b, err := New(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if got := b.becomeLeader(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Broker.becomeLeader() = %v, want %v", got, tt.want)
+				t.Errorf("becomeLeader() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -1222,12 +1213,12 @@ func newFields() fields {
 
 func TestBroker_JoinLAN(t *testing.T) {
 	logger := log.New()
-	dir1, config1 := testConfig(t)
+	dir1, config1 := testutil.TestConfig(t)
 	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
-	dir2, config2 := testConfig(t)
+	dir2, config2 := testutil.TestConfig(t)
 	b2, err := New(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
@@ -1241,14 +1232,14 @@ func TestBroker_JoinLAN(t *testing.T) {
 
 func TestBroker_RegisterMember(t *testing.T) {
 	logger := log.New()
-	dir1, config1 := testConfig(t)
+	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
 	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
-	dir2, config2 := testConfig(t)
+	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
 	b2, err := New(config2, logger)
@@ -1282,14 +1273,14 @@ func TestBroker_RegisterMember(t *testing.T) {
 
 func TestBroker_FailedMember(t *testing.T) {
 	logger := log.New()
-	dir1, config1 := testConfig(t)
+	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
 	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
-	dir2, config2 := testConfig(t)
+	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
@@ -1321,14 +1312,14 @@ func TestBroker_FailedMember(t *testing.T) {
 
 func TestBroker_LeftMember(t *testing.T) {
 	logger := log.New()
-	dir1, config1 := testConfig(t)
+	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
 	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
-	dir2, config2 := testConfig(t)
+	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
@@ -1359,21 +1350,21 @@ func TestBroker_LeftMember(t *testing.T) {
 
 func TestBroker_LeaveLeader(t *testing.T) {
 	logger := log.New()
-	dir1, config1 := testConfig(t)
+	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
 	b1, err := New(config1, logger)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir1)
 
-	dir2, config2 := testConfig(t)
+	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
 	b2, err := New(config2, logger)
 	defer os.RemoveAll(dir2)
 	require.NoError(t, err)
 
-	dir3, config3 := testConfig(t)
+	dir3, config3 := testutil.TestConfig(t)
 	config3.Bootstrap = false
 	config3.BootstrapExpect = 3
 	b3, err := New(config3, logger)
@@ -1467,78 +1458,7 @@ func (nopReaderWriter) Read(b []byte) (int, error)  { return 0, nil }
 func (nopReaderWriter) Write(b []byte) (int, error) { return 0, nil }
 func newNopReaderWriter() io.ReadWriter             { return nopReaderWriter{} }
 
-func defaultConfig() *Config {
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-
-	conf := &Config{
-		DevMode:       true,
-		NodeName:      hostname,
-		SerfLANConfig: serfDefaultConfig(),
-		RaftConfig:    raft.DefaultConfig(),
-	}
-
-	conf.SerfLANConfig.ReconnectTimeout = 3 * 24 * time.Hour
-	conf.SerfLANConfig.MemberlistConfig.BindPort = DefaultLANSerfPort
-
-	return conf
-}
-
-var nodeID int32
-
-func testConfig(t *testing.T) (string, *Config) {
-	dir := tempDir(t, "jocko")
-	config := defaultConfig()
-	ports := dynaport.Get(3)
-	config.NodeName = uniqueNodeName(t.Name())
-	config.Bootstrap = true
-	config.DataDir = dir
-	config.ID = atomic.AddInt32(&nodeID, 1)
-	config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
-	config.SerfLANConfig.MemberlistConfig.BindPort = ports[1]
-	config.SerfLANConfig.MemberlistConfig.AdvertiseAddr = "127.0.0.1"
-	config.SerfLANConfig.MemberlistConfig.AdvertisePort = ports[1]
-	config.SerfLANConfig.MemberlistConfig.SuspicionMult = 2
-	config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
-	config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
-	config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
-	config.RaftConfig.LeaderLeaseTimeout = 100 * time.Millisecond
-	config.RaftConfig.HeartbeatTimeout = 200 * time.Millisecond
-	config.RaftConfig.ElectionTimeout = 200 * time.Millisecond
-	config.RaftAddr = fmt.Sprintf("127.0.0.1:%d", ports[2])
-	config.Addr = "localhost:9092"
-	return dir, config
-}
-
-var id int64
-
-func uniqueNodeName(name string) string {
-	return fmt.Sprintf("%s-node-%d", name, atomic.AddInt64(&id, 1))
-}
-
-func serfDefaultConfig() *serf.Config {
-	base := serf.DefaultConfig()
-	base.QueueDepthWarning = 1000000
-	return base
-}
-
-var tmpdir = "/tmp/jocko-test"
-
-func tempDir(t *testing.T, name string) string {
-	if t != nil && t.Name() != "" {
-		name = t.Name() + "-" + name
-	}
-	name = strings.Replace(name, "/", "_", -1)
-	d, err := ioutil.TempDir(tmpdir, name)
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-	return d
-}
-
-// purge is a helper function to delete all topics and partitions for this broker. likely only useful for tests.
+// purge is a helper function to delete all topics and partitions for this  likely only useful for tests.
 func (s *Broker) purge() error {
 	s.Lock()
 	defer s.Unlock()

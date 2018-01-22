@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/broker/config"
 	"github.com/travisjeffery/jocko/broker/fsm"
 	"github.com/travisjeffery/jocko/broker/metadata"
 	"github.com/travisjeffery/jocko/broker/structs"
@@ -41,27 +42,11 @@ var (
 	ErrInvalidArgument = errors.New("no logger set")
 )
 
-// Config holds the configuration for a Broker.
-type Config struct {
-	ID              int32
-	NodeName        string
-	DataDir         string
-	DevMode         bool
-	Addr            string
-	SerfLANConfig   *serf.Config
-	RaftConfig      *raft.Config
-	Bootstrap       bool
-	BootstrapExpect int
-	StartAsLeader   bool
-	NonVoter        bool
-	RaftAddr        string
-}
-
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
-	config *Config
+	config *config.Config
 
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
@@ -91,7 +76,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(config *Config, logger log.Logger) (*Broker, error) {
+func New(config *config.Config, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:       config,
 		logger:       logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
@@ -700,8 +685,8 @@ func (b *Broker) JoinLAN(addrs ...string) protocol.Error {
 
 // Request handling.
 
-func (b *Broker) handleAPIVersions(header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
-	return &protocol.APIVersionsResponse{
+var (
+	APIVersions = &protocol.APIVersionsResponse{
 		APIVersions: []protocol.APIVersion{
 			{APIKey: protocol.ProduceKey, MinVersion: 2, MaxVersion: 2},
 			{APIKey: protocol.FetchKey},
@@ -721,6 +706,10 @@ func (b *Broker) handleAPIVersions(header *protocol.RequestHeader, req *protocol
 			{APIKey: protocol.DeleteTopicsKey},
 		},
 	}
+)
+
+func (b *Broker) handleAPIVersions(header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
+	return APIVersions
 }
 
 func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
