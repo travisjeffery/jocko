@@ -89,6 +89,10 @@ func cmdBrokers() int {
 		log.String("raft addr", brokerCmdConfig.RaftConfig.Addr),
 	)
 
+	brokerCmdConfig.SerfConfig.BrokerAddr = brokerCmdConfig.ServerConfig.BrokerAddr
+	brokerCmdConfig.SerfConfig.HTTPAddr = brokerCmdConfig.ServerConfig.HTTPAddr
+	brokerCmdConfig.SerfConfig.RaftAddr = brokerCmdConfig.RaftConfig.Addr
+
 	serf, err := serf.New(*brokerCmdConfig.SerfConfig, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting serf: %v\n", err)
