@@ -2,10 +2,8 @@ package jocko
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/travisjeffery/jocko/protocol"
@@ -135,46 +133,6 @@ func (p *Partition) LeaderID() int32 {
 	return p.Leader
 }
 
-// MemberStatus is the state that a member is in.
-type MemberStatus int
-
-// Different possible states of serf member.
-const (
-	StatusNone MemberStatus = iota
-	StatusAlive
-	StatusLeaving
-	StatusLeft
-	StatusFailed
-	StatusReap
-)
-
-// Serf is the interface that wraps Serf methods and is used to manage
-// the cluster membership for Jocko nodes.
-type Serf interface {
-	Cluster() []*ClusterMember
-	Member(memberID int32) *ClusterMember
-	Join(addrs ...string) (int, error)
-	Shutdown() error
-	ID() int32
-}
-
-type RaftCmdType int
-
-type RaftCommand struct {
-	Cmd  RaftCmdType      `json:"type"`
-	Data *json.RawMessage `json:"data"`
-}
-
-// Raft is the interface that wraps Raft's methods and is used to
-// manage consensus for the Jocko cluster.
-type Raft interface {
-	Apply(cmd RaftCommand) error
-	IsLeader() bool
-	LeaderID() string
-	Shutdown() error
-	Addr() string
-}
-
 // Request represents an API request.
 type Request struct {
 	Conn    io.ReadWriter
@@ -195,55 +153,5 @@ type Broker interface {
 	Shutdown() error
 }
 
-// ClusterMember is used as a wrapper around a broker's info and a
-// connection to it.
-type ClusterMember struct {
-	ID         int32        `json:"id"`
-	BrokerPort int          `json:"broker_port"`
-	BrokerIP   string       `json:"broker_ip"`
-	HTTPAddr   string       `json:"http_addr"`
-	RaftAddr   string       `json:"-"`
-	Status     MemberStatus `json:"-"`
-	conn       net.Conn
-}
-
-// Addr is used to get the address of the member.
-func (b *ClusterMember) Addr() *net.TCPAddr {
-	return &net.TCPAddr{IP: net.ParseIP(b.BrokerIP), Port: b.BrokerPort}
-}
-
-// Write is used to write the member.
-func (b *ClusterMember) Write(p []byte) (int, error) {
-	if b.conn == nil {
-		if err := b.connect(); err != nil {
-			return 0, err
-		}
-	}
-	return b.conn.Write(p)
-}
-
-// Read is used to read from the member.
-func (b *ClusterMember) Read(p []byte) (int, error) {
-	if b.conn == nil {
-		if err := b.connect(); err != nil {
-			return 0, err
-		}
-	}
-	return b.conn.Read(p)
-}
-
-// connect opens a tcp connection to the cluster member.
-func (b *ClusterMember) connect() error {
-	addr := &net.TCPAddr{IP: net.ParseIP(b.BrokerIP), Port: b.BrokerPort}
-	conn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		return err
-	}
-	b.conn = conn
-	return nil
-}
-
 //go:generate mocker --prefix "" --out mock/broker.go --pkg mock . Broker
 //go:generate mocker --prefix "" --out mock/commitlog.go --pkg mock . CommitLog
-//go:generate mocker --prefix "" --out mock/serf.go --pkg mock . Serf
-//go:generate mocker --prefix "" --out mock/raft.go --pkg mock . Raft

@@ -16,7 +16,6 @@ import (
 
 	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/log"
-	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil"
 )
@@ -603,8 +602,6 @@ func TestBroker_topicPartitions(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -667,8 +664,6 @@ func TestBroker_topics(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -785,8 +780,6 @@ func TestBroker_partition(t *testing.T) {
 // 		replicators map[*jocko.Partition]*Replicator
 // 		brokerAddr  string
 // 		logDir      string
-// 		raft        jocko.Raft
-// 		serf        jocko.Serf
 // 		shutdownCh  chan struct{}
 // 		shutdown    bool
 // 	}
@@ -939,8 +932,6 @@ func TestBroker_createTopic(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -980,8 +971,6 @@ func TestBroker_deleteTopic(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -1019,8 +1008,6 @@ func TestBroker_deletePartitions(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -1088,8 +1075,6 @@ func TestBroker_becomeFollower(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -1129,8 +1114,6 @@ func TestBroker_becomeLeader(t *testing.T) {
 		replicators map[*jocko.Partition]*Replicator
 		brokerAddr  string
 		logDir      string
-		raft        jocko.Raft
-		serf        jocko.Serf
 		shutdownCh  chan struct{}
 		shutdown    bool
 	}
@@ -1184,30 +1167,26 @@ func Test_contains(t *testing.T) {
 }
 
 type fields struct {
-	id           int32
-	serf         *mock.Serf
-	raft         *mock.Raft
-	raftCommands chan jocko.RaftCommand
-	logger       log.Logger
-	topicMap     map[string][]*jocko.Partition
-	replicators  map[*jocko.Partition]*Replicator
-	brokerAddr   string
-	loner        bool
-	logDir       string
-	shutdownCh   chan struct{}
-	shutdown     bool
+	id          int32
+	logger      log.Logger
+	topicMap    map[string][]*jocko.Partition
+	replicators map[*jocko.Partition]*Replicator
+	brokerAddr  string
+	loner       bool
+	logDir      string
+	shutdownCh  chan struct{}
+	shutdown    bool
 }
 
 func newFields() fields {
 	return fields{
-		topicMap:     make(map[string][]*jocko.Partition),
-		raftCommands: make(chan jocko.RaftCommand),
-		replicators:  make(map[*jocko.Partition]*Replicator),
-		logger:       log.New(),
-		logDir:       "/tmp/jocko/logs",
-		loner:        true,
-		brokerAddr:   "localhost:9092",
-		id:           1,
+		topicMap:    make(map[string][]*jocko.Partition),
+		replicators: make(map[*jocko.Partition]*Replicator),
+		logger:      log.New(),
+		logDir:      "/tmp/jocko/logs",
+		loner:       true,
+		brokerAddr:  "localhost:9092",
+		id:          1,
 	}
 }
 
