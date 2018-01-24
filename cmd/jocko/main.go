@@ -50,7 +50,7 @@ type config struct {
 	ServerConfig *server.Config
 }
 
-func newBrokerOptions(cmd *kingpin.CmdClause) config {
+func newBrokerOptions(cmd *kingpin.CmdClause) *config {
 	conf := &config{RaftConfig: &raft.Config{}, SerfConfig: &serf.Config{}, ServerConfig: &server.Config{}, BrokerConfig: &broker.Config{}}
 	brokerCmd.Flag("raft-addr", "Address for Raft to bind and advertise on").Default("127.0.0.1:9093").StringVar(&conf.RaftConfig.Addr)
 	brokerCmd.Flag("data-dir", "A comma separated list of directories under which to store log files").Default("/tmp/jocko").StringVar(&conf.DataDir)
@@ -60,7 +60,7 @@ func newBrokerOptions(cmd *kingpin.CmdClause) config {
 	brokerCmd.Flag("join", "Address of an broker serf to join at start time. Can be specified multiple times.").StringsVar(&conf.SerfConfig.Join)
 	brokerCmd.Flag("join-wan", "Address of an broker serf to join -wan at start time. Can be specified multiple times.").StringsVar(&conf.SerfConfig.JoinWAN)
 	brokerCmd.Flag("id", "Broker ID").Int32Var(&conf.ID)
-	return *conf
+	return conf
 }
 
 type createTopicOptions struct {
@@ -70,8 +70,8 @@ type createTopicOptions struct {
 	ReplicationFactor int16
 }
 
-func newCreateTopicFlags(cmd *kingpin.CmdClause) createTopicOptions {
-	conf := createTopicOptions{}
+func newCreateTopicFlags(cmd *kingpin.CmdClause) *createTopicOptions {
+	conf := &createTopicOptions{}
 	createTopicCmd.Flag("broker-addr", "Address for Broker to bind on").Default("0.0.0.0:9092").StringVar(&conf.Addr)
 	createTopicCmd.Flag("topic", "Name of topic to create").StringVar(&conf.Topic)
 	createTopicCmd.Flag("partitions", "Number of partitions").Default("1").Int32Var(&conf.Partitions)
