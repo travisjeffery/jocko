@@ -35,6 +35,9 @@ func TestBroker_Run(t *testing.T) {
 		}
 		return b
 	}
+	type fields struct {
+		topics map[string][]*jocko.Partition
+	}
 	type args struct {
 		requestCh  chan jocko.Request
 		responseCh chan jocko.Response
@@ -42,14 +45,12 @@ func TestBroker_Run(t *testing.T) {
 		responses  []jocko.Response
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		setFields func(f *fields)
-		args      args
+		fields fields
+		name   string
+		args   args
 	}{
 		{
-			name:   "api versions",
-			fields: newFields(),
+			name: "api versions",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -64,8 +65,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "create topic ok",
-			fields: newFields(),
+			name: "create topic ok",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -86,8 +86,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "create topic invalid replication factor error",
-			fields: newFields(),
+			name: "create topic invalid replication factor error",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -108,8 +107,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "delete topic",
-			fields: newFields(),
+			name: "delete topic",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -136,8 +134,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "offsets",
-			fields: newFields(),
+			name: "offsets",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -204,8 +201,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "fetch",
-			fields: newFields(),
+			name: "fetch",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -266,8 +262,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "metadata",
-			fields: newFields(),
+			name: "metadata",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -324,8 +319,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "produce topic/partition doesn't exist error",
-			fields: newFields(),
+			name: "produce topic/partition doesn't exist error",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -347,8 +341,7 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "leader and isr leader new partition",
-			fields: newFields(),
+			name: "leader and isr leader new partition",
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
 				responseCh: make(chan jocko.Response, 2),
@@ -381,10 +374,9 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "leader and isr leader become leader",
-			fields: newFields(),
-			setFields: func(f *fields) {
-				f.topicMap = map[string][]*jocko.Partition{
+			name: "leader and isr leader become leader",
+			fields: fields{
+				topics: map[string][]*jocko.Partition{
 					"the-topic": []*jocko.Partition{{
 						Topic:                   "the-topic",
 						ID:                      1,
@@ -394,7 +386,7 @@ func TestBroker_Run(t *testing.T) {
 						PreferredLeader:         0,
 						LeaderAndISRVersionInZK: 0,
 					}},
-				}
+				},
 			},
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
@@ -428,10 +420,9 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
-			name:   "leader and isr leader become follower",
-			fields: newFields(),
-			setFields: func(f *fields) {
-				f.topicMap = map[string][]*jocko.Partition{
+			name: "leader and isr leader become follower",
+			fields: fields{
+				topics: map[string][]*jocko.Partition{
 					"the-topic": []*jocko.Partition{{
 						Topic:                   "the-topic",
 						ID:                      1,
@@ -441,7 +432,7 @@ func TestBroker_Run(t *testing.T) {
 						PreferredLeader:         1,
 						LeaderAndISRVersionInZK: 0,
 					}},
-				}
+				},
 			},
 			args: args{
 				requestCh:  make(chan jocko.Request, 2),
@@ -477,10 +468,8 @@ func TestBroker_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.setFields != nil {
-				tt.setFields(&tt.fields)
-			}
-			b, err := New(config, tt.fields.logger)
+			logger := log.New().With(log.String("test", tt.name))
+			b, err := New(config, logger)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 			defer func() {
@@ -493,11 +482,13 @@ func TestBroker_Run(t *testing.T) {
 					r.Fatal("server not added")
 				}
 			})
-			if tt.fields.topicMap != nil {
-				b.topicMap = tt.fields.topicMap
-				for _, ps := range tt.fields.topicMap {
+			if tt.fields.topics != nil {
+				b.topicMap = tt.fields.topics
+				for _, ps := range tt.fields.topics {
 					for _, p := range ps {
-						b.startReplica(p)
+						if err := b.startReplica(p); err != protocol.ErrNone {
+							t.Errorf("failed to start replica: %v", err)
+						}
 					}
 				}
 			}
@@ -540,59 +531,6 @@ func spewstr(v interface{}) string {
 	spew.Fdump(&buf, v)
 	return buf.String()
 }
-
-// func TestBroker_Join(t *testing.T) {
-// 	type args struct {
-// 		addrs []string
-// 	}
-// 	err := errors.New("mock serf join error")
-// 	tests := []struct {
-// 		name      string
-// 		fields    fields
-// 		setFields func(f *fields)
-// 		args      args
-// 		want      protocol.Error
-// 	}{
-// 		{
-// 			name:   "ok",
-// 			fields: newFields(),
-// 			args:   args{addrs: []string{"localhost:9082"}},
-// 			want:   protocol.ErrNone,
-// 		},
-// 		{
-// 			name:   "serf errr",
-// 			fields: newFields(),
-// 			setFields: func(f *fields) {
-// 				f.serf.JoinFunc = func(addrs ...string) (int, error) {
-// 					return -1, err
-// 				}
-// 			},
-// 			args: args{addrs: []string{"localhost:9082"}},
-// 			want: protocol.ErrUnknown.WithErr(err),
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			if tt.setFields != nil {
-// 				tt.setFields(&tt.fields)
-// 			}
-// 			b, err := New(&Config{
-// 				ID:      tt.fields.id,
-// 				DataDir: tt.fields.logDir,
-// 				Addr:    tt.fields.brokerAddr,
-// 			},  tt.fields.logger)
-// 			if err != nil {
-// 				t.Error("expected no err")
-// 			}
-// 			if got := b.JoinLAN(tt.args.addrs...); !reflect.DeepEqual(got, tt.want) {
-// 				t.Errorf("Join() = %v, want %v", got, tt.want)
-// 			}
-// 			if !tt.fields.serf.JoinCalled() {
-// 				t.Error("expected serf join invoked; did not")
-// 			}
-// 		})
-// 	}
-// }
 
 func TestBroker_topicPartitions(t *testing.T) {
 	type fields struct {
@@ -662,7 +600,6 @@ func TestBroker_topics(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -778,7 +715,6 @@ func TestBroker_partition(t *testing.T) {
 // 		id          int32
 // 		topicMap    map[string][]*jocko.Partition
 // 		replicators map[*jocko.Partition]*Replicator
-// 		brokerAddr  string
 // 		logDir      string
 // 		shutdownCh  chan struct{}
 // 		shutdown    bool
@@ -930,7 +866,6 @@ func TestBroker_createTopic(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -969,7 +904,6 @@ func TestBroker_deleteTopic(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -1006,7 +940,6 @@ func TestBroker_deletePartitions(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -1073,7 +1006,6 @@ func TestBroker_becomeFollower(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -1112,7 +1044,6 @@ func TestBroker_becomeLeader(t *testing.T) {
 		id          int32
 		topicMap    map[string][]*jocko.Partition
 		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
 		logDir      string
 		shutdownCh  chan struct{}
 		shutdown    bool
@@ -1171,8 +1102,6 @@ type fields struct {
 	logger      log.Logger
 	topicMap    map[string][]*jocko.Partition
 	replicators map[*jocko.Partition]*Replicator
-	brokerAddr  string
-	loner       bool
 	logDir      string
 	shutdownCh  chan struct{}
 	shutdown    bool
@@ -1184,8 +1113,6 @@ func newFields() fields {
 		replicators: make(map[*jocko.Partition]*Replicator),
 		logger:      log.New(),
 		logDir:      "/tmp/jocko/logs",
-		loner:       true,
-		brokerAddr:  "localhost:9092",
 		id:          1,
 	}
 }
