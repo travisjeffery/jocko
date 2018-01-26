@@ -87,6 +87,11 @@ type Topic struct {
 
 // Partition
 type Partition struct {
+	// ID identifies the partition. Is here cause memdb wants the indexed field separate.
+	ID        int32
+	Partition int32
+	// Topic is the topic this partition belongs to.
+	Topic string
 	// ISR is a slice of replica IDs in ISR
 	ISR []int32
 	// Leader is the ID of the leader replica

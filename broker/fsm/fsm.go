@@ -400,6 +400,96 @@ func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
 	return nil
 }
 
+func (s *Store) EnsurePartition(idx uint64, partition *structs.Partition) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+	if err := s.ensurePartitionTxn(tx, idx, partition); err != nil {
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) ensurePartitionTxn(tx *memdb.Txn, idx uint64, partition *structs.Partition) error {
+	var t *structs.Partition
+	existing, err := tx.First("partitions", "id", partition.Partition)
+	if err != nil {
+		return fmt.Errorf("partition lookup failed: %s", err)
+	}
+
+	if existing != nil {
+		t = existing.(*structs.Partition)
+	}
+
+	if t != nil {
+		partition.CreateIndex = t.CreateIndex
+		partition.ModifyIndex = idx
+	} else {
+		partition.CreateIndex = idx
+		partition.ModifyIndex = idx
+	}
+
+	if err := tx.Insert("partitions", partition); err != nil {
+		return fmt.Errorf("failed inserting partition: %s", err)
+	}
+
+	if err := tx.Insert("index", &IndexEntry{"partitions", idx}); err != nil {
+		return fmt.Errorf("failed updating index: %s", err)
+	}
+
+	return nil
+}
+
+// GetPartition is used to get partitions.
+func (s *Store) GetPartition(id int32) (uint64, *structs.Partition, error) {
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "partitions")
+
+	partition, err := tx.First("partitions", "id", id)
+	if err != nil {
+		return 0, nil, fmt.Errorf("partition lookup failed: %s", err)
+	}
+	if partition != nil {
+		return idx, partition.(*structs.Partition), nil
+	}
+
+	return idx, nil, nil
+}
+
+// DeletePartition is used to delete partitions.
+func (s *Store) DeletePartition(idx uint64, id int32) error {
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.deletePartitionTxn(tx, idx, id); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) deletePartitionTxn(tx *memdb.Txn, idx uint64, id int32) error {
+	partition, err := tx.First("partitions", "id", id)
+	if err != nil {
+		s.logger.Error("failed partition lookup", log.Error("error", err))
+		return err
+	}
+	if partition == nil {
+		return nil
+	}
+	if err := tx.Delete("partitions", partition); err != nil {
+		s.logger.Error("failed deleting partition", log.Error("error", err))
+		return err
+	}
+	if err := tx.Insert("index", &IndexEntry{"partitions", idx}); err != nil {
+		s.logger.Error("failed updating index", log.Error("error", err))
+		return err
+	}
+	return nil
+}
+
 // maxIndex is a helper used to retrieve the highest known index amongst a set of tables in the db.
 func (s *Store) maxIndex(tables ...string) uint64 {
 	tx := s.db.Txn(false)
@@ -534,51 +624,6 @@ func nodesTableSchema() *memdb.TableSchema {
 	}
 }
 
-// servicesTableSchema returns a new table schema used to store information
-// about services.
-func servicesTableSchema() *memdb.TableSchema {
-	return &memdb.TableSchema{
-		Name: "services",
-		Indexes: map[string]*memdb.IndexSchema{
-			"id": &memdb.IndexSchema{
-				Name:         "id",
-				AllowMissing: false,
-				Unique:       true,
-				Indexer: &memdb.CompoundIndex{
-					Indexes: []memdb.Indexer{
-						&memdb.StringFieldIndex{
-							Field:     "Node",
-							Lowercase: true,
-						},
-						&memdb.StringFieldIndex{
-							Field:     "ServiceID",
-							Lowercase: true,
-						},
-					},
-				},
-			},
-			"node": &memdb.IndexSchema{
-				Name:         "node",
-				AllowMissing: false,
-				Unique:       false,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "Node",
-					Lowercase: true,
-				},
-			},
-			"service": &memdb.IndexSchema{
-				Name:         "service",
-				AllowMissing: true,
-				Unique:       false,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "ServiceName",
-					Lowercase: true,
-				},
-			},
-		},
-	}
-}
-
 // topicsTableSchema returns a new table schema used for storing topic
 // information.
 func topicsTableSchema() *memdb.TableSchema {
@@ -600,6 +645,7 @@ func topicsTableSchema() *memdb.TableSchema {
 
 // partitionsTableSchema returns a new table schema used for storing partition
 // information.
+// TODO: may want to index the topic field.
 func partitionsTableSchema() *memdb.TableSchema {
 	return &memdb.TableSchema{
 		Name: "partitions",
@@ -608,15 +654,9 @@ func partitionsTableSchema() *memdb.TableSchema {
 				Name:         "id",
 				AllowMissing: false,
 				Unique:       true,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "Partition",
-					Lowercase: true,
+				Indexer: &IntFieldIndex{
+					Field: "Partition",
 				},
-			},
-			"partitions": &memdb.IndexSchema{
-				Name:         "partitions",
-				AllowMissing: false,
-				Indexer:      &memdb.StringSliceFieldIndex{Field: "Partitions"},
 			},
 		},
 	}

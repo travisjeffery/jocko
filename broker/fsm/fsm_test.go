@@ -130,3 +130,45 @@ func testRegisterTopic(t *testing.T, s *Store, idx uint64, id string) {
 		t.Fatalf("bad topic: %#v", result)
 	}
 }
+
+func TestStore_RegisterPartition(t *testing.T) {
+	s := testStore(t)
+
+	testRegisterPartition(t, s, 0, 1)
+
+	// delete the partition
+	if err := s.DeletePartition(1, 1); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// check it's gone
+	if idx, top, err := s.GetPartition(1); err != nil || top != nil || idx != 1 {
+		t.Fatalf("bad: %#v %d (err: %v)", top, idx, err)
+	}
+
+	// check index is updated
+	if idx := s.maxIndex("partitions"); idx != 1 {
+		t.Fatalf("err: %v", idx)
+	}
+
+	// deleting should be idempotent
+	if err := s.DeletePartition(2, 1); err != nil {
+		t.Fatalf("err: %d", err)
+	}
+	if idx := s.maxIndex("partitions"); idx != 1 {
+		t.Fatalf("err: %v", idx)
+	}
+}
+
+func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32) {
+	s.EnsurePartition(idx, &structs.Partition{Partition: id})
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	top, err := tx.First("partitions", "id", id)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if result, ok := top.(*structs.Partition); !ok || result.Partition != id {
+		t.Fatalf("bad partition: %#v", result)
+	}
+}
