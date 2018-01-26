@@ -67,7 +67,7 @@ func TestStore_DeleteNode(t *testing.T) {
 
 	// delete the node
 	if err := s.DeleteNode(1, "node1"); err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
@@ -82,7 +82,7 @@ func TestStore_DeleteNode(t *testing.T) {
 
 	// deleting should be idempotent
 	if err := s.DeleteNode(4, "node1"); err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf("err: %s", err)
 	}
 	if idx := s.maxIndex("nodes"); idx != 1 {
 		t.Fatalf("bad index: %d", idx)
@@ -96,17 +96,17 @@ func TestStore_RegisterTopic(t *testing.T) {
 
 	// delete the topic
 	if err := s.DeleteTopic(1, "topic1"); err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
 	if idx, top, err := s.GetTopic("topic1"); err != nil || top != nil || idx != 1 {
-		t.Fatalf("bad: %#v %d (err: %v)", top, idx, err)
+		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
 	// check index is updated
 	if idx := s.maxIndex("topics"); idx != 1 {
-		t.Fatalf("err: %v", idx)
+		t.Fatalf("err: %s", idx)
 	}
 
 	// deleting should be idempotent
@@ -114,12 +114,14 @@ func TestStore_RegisterTopic(t *testing.T) {
 		t.Fatalf("err: %d", err)
 	}
 	if idx := s.maxIndex("topics"); idx != 1 {
-		t.Fatalf("err: %v", idx)
+		t.Fatalf("err: %s", idx)
 	}
 }
 
 func testRegisterTopic(t *testing.T, s *Store, idx uint64, id string) {
-	s.EnsureTopic(idx, &structs.Topic{Topic: id})
+	if err := s.EnsureTopic(idx, &structs.Topic{Topic: id}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 	top, err := tx.First("topics", "id", id)
@@ -138,17 +140,17 @@ func TestStore_RegisterPartition(t *testing.T) {
 
 	// delete the partition
 	if err := s.DeletePartition(1, 1); err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
 	if idx, top, err := s.GetPartition(1); err != nil || top != nil || idx != 1 {
-		t.Fatalf("bad: %#v %d (err: %v)", top, idx, err)
+		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
 	// check index is updated
 	if idx := s.maxIndex("partitions"); idx != 1 {
-		t.Fatalf("err: %v", idx)
+		t.Fatalf("err: %s", idx)
 	}
 
 	// deleting should be idempotent
@@ -156,12 +158,14 @@ func TestStore_RegisterPartition(t *testing.T) {
 		t.Fatalf("err: %d", err)
 	}
 	if idx := s.maxIndex("partitions"); idx != 1 {
-		t.Fatalf("err: %v", idx)
+		t.Fatalf("err: %s", idx)
 	}
 }
 
 func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32) {
-	s.EnsurePartition(idx, &structs.Partition{Partition: id})
+	if err := s.EnsurePartition(idx, &structs.Partition{Partition: id}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 	top, err := tx.First("partitions", "id", id)
