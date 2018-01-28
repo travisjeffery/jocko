@@ -249,7 +249,7 @@ func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id string) error {
 	return nil
 }
 
-func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterRequest) error {
+func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterNodeRequest) error {
 	tx := s.db.Txn(true)
 	defer tx.Abort()
 
@@ -261,19 +261,15 @@ func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterRequest) err
 	return nil
 }
 
-func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.RegisterRequest) error {
-	node := &structs.Node{
-		Node: req.Node,
-	}
-
-	existing, err := tx.First("nodes", "id", node.Node)
+func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.RegisterNodeRequest) error {
+	existing, err := tx.First("nodes", "id", req.Node.Node)
 	if err != nil {
 		s.logger.Error("node lookup failed", log.Error("error", err))
 		return err
 	}
 
 	if existing == nil {
-		if err := s.ensureNodeTxn(tx, idx, node); err != nil {
+		if err := s.ensureNodeTxn(tx, idx, &req.Node); err != nil {
 			return err
 		}
 	}

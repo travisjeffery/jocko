@@ -14,10 +14,10 @@ func TestRegisterNode(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	req := structs.RegisterRequest{
-		Node: "node1",
+	req := structs.RegisterNodeRequest{
+		Node: structs.Node{Node: "node1"},
 	}
-	buf, err := structs.Encode(structs.RegisterRequestType, req)
+	buf, err := structs.Encode(structs.RegisterNodeRequestType, req)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

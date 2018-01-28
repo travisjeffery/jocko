@@ -9,16 +9,36 @@ import (
 type MessageType uint8
 
 const (
-	RegisterRequestType   MessageType = 0
-	DeregisterRequestType             = 1
+	RegisterNodeRequestType        MessageType = 0
+	DeregisterNodeRequestType                  = 1
+	RegisterTopicRequestType                   = 2
+	DeregisterTopicRequestType                 = 3
+	RegisterPartitionRequestType               = 4
+	DeregisterPartitionRequestType             = 4
 )
 
-type RegisterRequest struct {
-	Node string
+type RegisterNodeRequest struct {
+	Node Node
 }
 
-type DeregisterRequest struct {
-	Node string
+type DeregisterNodeRequest struct {
+	Node Node
+}
+
+type RegisterTopicRequest struct {
+	Topic Topic
+}
+
+type DeregisterTopicRequest struct {
+	Topic Topic
+}
+
+type RegisterPartitionRequest struct {
+	Partition Partition
+}
+
+type DeregisterPartitionRequest struct {
+	Partition Partition
 }
 
 // msgpackHandle is a shared handle for encoding/decoding of structs

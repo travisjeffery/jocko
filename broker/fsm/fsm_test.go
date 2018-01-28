@@ -106,15 +106,15 @@ func TestStore_RegisterTopic(t *testing.T) {
 
 	// check index is updated
 	if idx := s.maxIndex("topics"); idx != 1 {
-		t.Fatalf("err: %s", idx)
+		t.Fatalf("err: %v", idx)
 	}
 
 	// deleting should be idempotent
 	if err := s.DeleteTopic(2, "topic1"); err != nil {
-		t.Fatalf("err: %d", err)
+		t.Fatalf("err: %s", err)
 	}
 	if idx := s.maxIndex("topics"); idx != 1 {
-		t.Fatalf("err: %s", idx)
+		t.Fatalf("err: %v", idx)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestStore_RegisterPartition(t *testing.T) {
 
 	// check index is updated
 	if idx := s.maxIndex("partitions"); idx != 1 {
-		t.Fatalf("err: %s", idx)
+		t.Fatalf("err: %d", idx)
 	}
 
 	// deleting should be idempotent
@@ -158,7 +158,7 @@ func TestStore_RegisterPartition(t *testing.T) {
 		t.Fatalf("err: %d", err)
 	}
 	if idx := s.maxIndex("partitions"); idx != 1 {
-		t.Fatalf("err: %s", idx)
+		t.Fatalf("err: %d", idx)
 	}
 }
 

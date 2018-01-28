@@ -248,8 +248,8 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 		return nil
 	}
 	s.logger.Info("member joined, marking health alive", log.Any("member", m))
-	req := structs.RegisterRequest{Node: b.RaftAddr}
-	_, err = s.raftApply(structs.RegisterRequestType, &req)
+	req := structs.RegisterNodeRequest{Node: structs.Node{Node: b.RaftAddr}}
+	_, err = s.raftApply(structs.RegisterNodeRequestType, &req)
 	return err
 }
 
@@ -295,10 +295,10 @@ func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error
 	}
 
 	s.logger.Info("member is deregistering", log.String("node", meta.RaftAddr), log.String("reason", reason))
-	req := structs.DeregisterRequest{
-		Node: meta.RaftAddr,
+	req := structs.DeregisterNodeRequest{
+		Node: structs.Node{Node: meta.RaftAddr},
 	}
-	_, err = s.raftApply(structs.DeregisterRequestType, &req)
+	_, err = s.raftApply(structs.DeregisterNodeRequestType, &req)
 	return err
 }
 
@@ -345,10 +345,10 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 }
 
 func (s *Broker) handleFailedMember(m serf.Member) error {
-	req := structs.RegisterRequest{
-		Node: m.Tags["raft_addr"],
+	req := structs.RegisterNodeRequest{
+		Node: structs.Node{Node: m.Tags["raft_addr"]},
 	}
-	_, err := s.raftApply(structs.RegisterRequestType, &req)
+	_, err := s.raftApply(structs.RegisterNodeRequestType, &req)
 	return err
 }
 
