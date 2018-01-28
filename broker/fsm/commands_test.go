@@ -39,6 +39,68 @@ func TestRegisterNode(t *testing.T) {
 	}
 }
 
+func TestRegisterTopic(t *testing.T) {
+	fsm, err := New(log.New())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	req := structs.RegisterTopicRequest{
+		Topic: structs.Topic{Topic: "topic1"},
+	}
+	buf, err := structs.Encode(structs.RegisterTopicRequestType, req)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	resp := fsm.Apply(makeLog(buf))
+	if resp != nil {
+		t.Fatalf("resp: %v", resp)
+	}
+
+	_, topic, err := fsm.state.GetTopic("topic1")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if topic == nil {
+		t.Fatalf("topic not found")
+	}
+	if topic.ModifyIndex != 1 {
+		t.Fatalf("bad index: %d", topic.ModifyIndex)
+	}
+}
+
+func TestRegisterPartition(t *testing.T) {
+	fsm, err := New(log.New())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	req := structs.RegisterPartitionRequest{
+		Partition: structs.Partition{Partition: 1},
+	}
+	buf, err := structs.Encode(structs.RegisterPartitionRequestType, req)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	resp := fsm.Apply(makeLog(buf))
+	if resp != nil {
+		t.Fatalf("resp: %v", resp)
+	}
+
+	_, partition, err := fsm.state.GetPartition(1)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if partition == nil {
+		t.Fatalf("partition not found")
+	}
+	if partition.ModifyIndex != 1 {
+		t.Fatalf("bad index: %d", partition.ModifyIndex)
+	}
+}
+
 func makeLog(buf []byte) *raft.Log {
 	return &raft.Log{
 		Index: 1,

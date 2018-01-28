@@ -14,7 +14,7 @@ const (
 	RegisterTopicRequestType                   = 2
 	DeregisterTopicRequestType                 = 3
 	RegisterPartitionRequestType               = 4
-	DeregisterPartitionRequestType             = 4
+	DeregisterPartitionRequestType             = 5
 )
 
 type RegisterNodeRequest struct {
