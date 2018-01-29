@@ -48,6 +48,7 @@ func TestBroker_Run(t *testing.T) {
 		fields fields
 		name   string
 		args   args
+		handle func(*testing.T, jocko.Request, jocko.Response) jocko.Response
 	}{
 		{
 			name: "api versions",
@@ -199,6 +200,15 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
+			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+				switch res := res.Response.(*protocol.Response).Body.(type) {
+				// handle timestamp explicitly since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponses:
+					handleProduceResponse(t, res)
+				}
+				return res
+			},
 		},
 		{
 			name: "fetch",
@@ -260,6 +270,15 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
+			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+				switch res := res.Response.(*protocol.Response).Body.(type) {
+				// handle timestamp explicitly since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponses:
+					handleProduceResponse(t, res)
+				}
+				return res
+			},
 		},
 		{
 			name: "metadata",
@@ -317,6 +336,15 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
+			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+				switch res := res.Response.(*protocol.Response).Body.(type) {
+				// handle timestamp explicitly since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponses:
+					handleProduceResponse(t, res)
+				}
+				return res
+			},
 		},
 		{
 			name: "produce topic/partition doesn't exist error",
@@ -338,6 +366,15 @@ func TestBroker_Run(t *testing.T) {
 							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrUnknownTopicOrPartition.Code()}},
 						}},
 					}}}},
+			},
+			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+				switch res := res.Response.(*protocol.Response).Body.(type) {
+				// handle timestamp explicitly since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponses:
+					handleProduceResponse(t, res)
+				}
+				return res
 			},
 		},
 		{
@@ -499,21 +536,8 @@ func TestBroker_Run(t *testing.T) {
 				tt.args.requestCh <- tt.args.requests[i]
 				response := <-tt.args.responseCh
 
-				switch res := response.Response.(*protocol.Response).Body.(type) {
-				// handle timestamp explicitly since we don't know what
-				// it'll be set to
-				case *protocol.ProduceResponses:
-					for _, response := range res.Responses {
-						for _, pr := range response.PartitionResponses {
-							if pr.ErrorCode != protocol.ErrNone.Code() {
-								break
-							}
-							if pr.Timestamp == 0 {
-								t.Error("expected timestamp not to be 0")
-							}
-							pr.Timestamp = 0
-						}
-					}
+				if tt.handle != nil {
+					response = tt.handle(t, tt.args.requests[i], response)
 				}
 
 				if !reflect.DeepEqual(response.Response, tt.args.responses[i].Response) {
@@ -1390,4 +1414,18 @@ func wantPeers(s *Broker, peers int) error {
 		return fmt.Errorf("got %d peers want %d", got, want)
 	}
 	return nil
+}
+
+func handleProduceResponse(t *testing.T, res *protocol.ProduceResponses) {
+	for _, response := range res.Responses {
+		for _, pr := range response.PartitionResponses {
+			if pr.ErrorCode != protocol.ErrNone.Code() {
+				break
+			}
+			if pr.Timestamp == 0 {
+				t.Error("expected timestamp not to be 0")
+			}
+			pr.Timestamp = 0
+		}
+	}
 }
