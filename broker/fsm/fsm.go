@@ -363,6 +363,21 @@ func (s *Store) GetTopic(id string) (uint64, *structs.Topic, error) {
 	return idx, nil, nil
 }
 
+func (s *Store) GetTopics() (uint64, []*structs.Topic, error) {
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "topics")
+	it, err := tx.Get("topics", "id")
+	if err != nil {
+		return 0, nil, err
+	}
+	var topics []*structs.Topic
+	for next := it.Next(); next != nil; next = it.Next() {
+		topics = append(topics, next.(*structs.Topic))
+	}
+	return idx, topics, nil
+}
+
 // DeleteTopic is used to delete topics.
 func (s *Store) DeleteTopic(idx uint64, id string) error {
 	tx := s.db.Txn(true)

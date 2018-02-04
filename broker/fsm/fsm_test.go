@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/travisjeffery/jocko/broker/structs"
@@ -93,6 +94,10 @@ func TestStore_RegisterTopic(t *testing.T) {
 	s := testStore(t)
 
 	testRegisterTopic(t, s, 0, "topic1")
+
+	if idx, topics, err := s.GetTopics(); err != nil || idx != 0 || !reflect.DeepEqual(topics, []*structs.Topic{{Topic: "topic1"}}) {
+		t.Fatalf("err: %s", err)
+	}
 
 	// delete the topic
 	if err := s.DeleteTopic(1, "topic1"); err != nil {
