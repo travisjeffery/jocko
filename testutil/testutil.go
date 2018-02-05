@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,14 +37,21 @@ func TestConfig(t *testing.T) (string, *config.Config) {
 	return dir, config
 }
 
-var tmpdir = "/tmp/jocko-test"
+var tmpDir = "/tmp/jocko-test"
+
+func init() {
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		fmt.Printf("Cannot create %s. Reverting to /tmp\n", tmpDir)
+		tmpDir = "/tmp"
+	}
+}
 
 func tempDir(t *testing.T, name string) string {
 	if t != nil && t.Name() != "" {
 		name = t.Name() + "-" + name
 	}
 	name = strings.Replace(name, "/", "_", -1)
-	d, err := ioutil.TempDir(tmpdir, name)
+	d, err := ioutil.TempDir(tmpDir, name)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
