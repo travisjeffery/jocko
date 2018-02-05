@@ -114,6 +114,8 @@ type Partition struct {
 	Topic string
 	// ISR is a slice of replica IDs in ISR
 	ISR []int32
+	// All assigned replicas
+	AR []int32
 	// Leader is the ID of the leader replica
 	Leader int32
 	// ControllerEpoch is the epoch of the controller that last updated
