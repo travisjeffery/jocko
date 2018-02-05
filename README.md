@@ -50,8 +50,6 @@ Kafka/distributed commit log service in Go.
 │   ├── cluster   example booting up a 3-broker Jocko cluster
 │   └── sarama    example producing/consuming with Sarama
 ├── protocol      golang implementation of Kafka's protocol
-├── raft          wrapper around Hashicorp's Raft lib to handle consensus
-├── serf          wrapper around Hashicorp's Serf lib to handle service discovery
 ├── prometheus    wrapper around Prometheus' client lib to handle metrics
 ├── server        API subsystem
 └── testutil      test utils
