@@ -38,7 +38,7 @@ func DefaultConfig() *Config {
 	}
 
 	conf := &Config{
-		DevMode:       true,
+		DevMode:       false,
 		NodeName:      hostname,
 		SerfLANConfig: serfDefaultConfig(),
 		RaftConfig:    raft.DefaultConfig(),
