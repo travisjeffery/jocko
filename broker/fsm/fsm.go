@@ -423,7 +423,7 @@ func (s *Store) EnsurePartition(idx uint64, partition *structs.Partition) error 
 
 func (s *Store) ensurePartitionTxn(tx *memdb.Txn, idx uint64, partition *structs.Partition) error {
 	var t *structs.Partition
-	existing, err := tx.First("partitions", "id", partition.Partition)
+	existing, err := tx.First("partitions", "id", partition.Topic, partition.Partition)
 	if err != nil {
 		return fmt.Errorf("partition lookup failed: %s", err)
 	}
@@ -452,12 +452,12 @@ func (s *Store) ensurePartitionTxn(tx *memdb.Txn, idx uint64, partition *structs
 }
 
 // GetPartition is used to get partitions.
-func (s *Store) GetPartition(id int32) (uint64, *structs.Partition, error) {
+func (s *Store) GetPartition(topic string, id int32) (uint64, *structs.Partition, error) {
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 	idx := maxIndexTxn(tx, "partitions")
 
-	partition, err := tx.First("partitions", "id", id)
+	partition, err := tx.First("partitions", "id", topic, id)
 	if err != nil {
 		return 0, nil, fmt.Errorf("partition lookup failed: %s", err)
 	}
@@ -469,11 +469,11 @@ func (s *Store) GetPartition(id int32) (uint64, *structs.Partition, error) {
 }
 
 // DeletePartition is used to delete partitions.
-func (s *Store) DeletePartition(idx uint64, id int32) error {
+func (s *Store) DeletePartition(idx uint64, topic string, partition int32) error {
 	tx := s.db.Txn(true)
 	defer tx.Abort()
 
-	if err := s.deletePartitionTxn(tx, idx, id); err != nil {
+	if err := s.deletePartitionTxn(tx, idx, topic, partition); err != nil {
 		return err
 	}
 
@@ -481,8 +481,8 @@ func (s *Store) DeletePartition(idx uint64, id int32) error {
 	return nil
 }
 
-func (s *Store) deletePartitionTxn(tx *memdb.Txn, idx uint64, id int32) error {
-	partition, err := tx.First("partitions", "id", id)
+func (s *Store) deletePartitionTxn(tx *memdb.Txn, idx uint64, topic string, id int32) error {
+	partition, err := tx.First("partitions", "id", topic, id)
 	if err != nil {
 		s.logger.Error("failed partition lookup", log.Error("error", err))
 		return err
@@ -662,11 +662,29 @@ func partitionsTableSchema() *memdb.TableSchema {
 		Name: "partitions",
 		Indexes: map[string]*memdb.IndexSchema{
 			"id": &memdb.IndexSchema{
-				Name:         "id",
+				Name:   "id",
+				Unique: true,
+				Indexer: &memdb.CompoundIndex{
+					Indexes: []memdb.Indexer{
+						&memdb.StringFieldIndex{Field: "Topic"},
+						&IntFieldIndex{Field: "Partition"},
+					},
+				},
+			},
+			"partition": &memdb.IndexSchema{
+				Name:         "partition",
 				AllowMissing: false,
-				Unique:       true,
+				Unique:       false,
 				Indexer: &IntFieldIndex{
 					Field: "Partition",
+				},
+			},
+			"topic": &memdb.IndexSchema{
+				Name:         "topic",
+				AllowMissing: false,
+				Unique:       false,
+				Indexer: &memdb.StringFieldIndex{
+					Field: "Topic",
 				},
 			},
 		},

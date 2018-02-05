@@ -77,7 +77,7 @@ func TestRegisterPartition(t *testing.T) {
 	}
 
 	req := structs.RegisterPartitionRequest{
-		Partition: structs.Partition{Partition: 1},
+		Partition: structs.Partition{Partition: 1, Topic: "test-topic"},
 	}
 	buf, err := structs.Encode(structs.RegisterPartitionRequestType, req)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestRegisterPartition(t *testing.T) {
 		t.Fatalf("resp: %v", resp)
 	}
 
-	_, partition, err := fsm.state.GetPartition(1)
+	_, partition, err := fsm.state.GetPartition("test-topic", 1)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

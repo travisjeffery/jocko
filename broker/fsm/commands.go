@@ -92,7 +92,7 @@ func (c *FSM) applyDeregisterPartition(buf []byte, index uint64) interface{} {
 		panic(fmt.Errorf("failed to decode request: %v", err))
 	}
 
-	if err := c.state.DeletePartition(index, req.Partition.Partition); err != nil {
+	if err := c.state.DeletePartition(index, req.Partition.Topic, req.Partition.Partition); err != nil {
 		c.logger.Error("DeletePartition failed", log.Error("error", err))
 		return err
 	}

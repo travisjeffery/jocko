@@ -93,6 +93,10 @@ func TestStore_DeleteNode(t *testing.T) {
 func TestStore_RegisterTopic(t *testing.T) {
 	s := testStore(t)
 
+	if _, topic, err := s.GetTopic("unknown-topic"); topic != nil && err != nil {
+		t.Fatalf("err: %s, topic: %v", err, topic)
+	}
+
 	testRegisterTopic(t, s, 0, "topic1")
 
 	if idx, topics, err := s.GetTopics(); err != nil || idx != 0 || !reflect.DeepEqual(topics, []*structs.Topic{{Topic: "topic1"}}) {
@@ -141,15 +145,19 @@ func testRegisterTopic(t *testing.T, s *Store, idx uint64, id string) {
 func TestStore_RegisterPartition(t *testing.T) {
 	s := testStore(t)
 
-	testRegisterPartition(t, s, 0, 1)
+	testRegisterPartition(t, s, 0, 1, "test-topic")
+
+	if _, p, err := s.GetPartition("test-topic", 1); err != nil || p == nil {
+		t.Fatalf("err: %s, partition: %v", err, p)
+	}
 
 	// delete the partition
-	if err := s.DeletePartition(1, 1); err != nil {
+	if err := s.DeletePartition(1, "test-topic", 1); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
-	if idx, top, err := s.GetPartition(1); err != nil || top != nil || idx != 1 {
+	if idx, top, err := s.GetPartition("test-topic", 1); err != nil || top != nil || idx != 1 {
 		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
@@ -159,7 +167,7 @@ func TestStore_RegisterPartition(t *testing.T) {
 	}
 
 	// deleting should be idempotent
-	if err := s.DeletePartition(2, 1); err != nil {
+	if err := s.DeletePartition(2, "test-topic", 1); err != nil {
 		t.Fatalf("err: %d", err)
 	}
 	if idx := s.maxIndex("partitions"); idx != 1 {
@@ -167,13 +175,13 @@ func TestStore_RegisterPartition(t *testing.T) {
 	}
 }
 
-func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32) {
-	if err := s.EnsurePartition(idx, &structs.Partition{Partition: id}); err != nil {
+func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic string) {
+	if err := s.EnsurePartition(idx, &structs.Partition{Partition: id, Topic: topic}); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 	tx := s.db.Txn(false)
 	defer tx.Abort()
-	top, err := tx.First("partitions", "id", id)
+	top, err := tx.First("partitions", "id", topic, id)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
