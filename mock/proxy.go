@@ -47,3 +47,7 @@ func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequ
 func (p *Client) CreateTopics(clientID string, createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
 	return nil, nil
 }
+
+func (p *Client) LeaderAndISR(clientID string, request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error) {
+	return nil, nil
+}
