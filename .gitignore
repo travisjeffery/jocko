@@ -6,3 +6,4 @@ vendor/*
 *.log
 *.index
 NOTES.txt
+.dir-locals.el
