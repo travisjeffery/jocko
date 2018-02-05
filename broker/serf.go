@@ -65,7 +65,7 @@ func (s *Broker) lanNodeJoin(me serf.MemberEvent) {
 		}
 		s.logger.Info("adding LAN server", log.Any("meta", b))
 		// update server lookup
-		s.serverLookup.AddServer(b)
+		s.brokerLookup.AddBroker(b)
 		if s.config.BootstrapExpect != 0 {
 			s.maybeBootstrap()
 		}
@@ -79,7 +79,7 @@ func (s *Broker) lanNodeFailed(me serf.MemberEvent) {
 			continue
 		}
 		s.logger.Info("removing LAN server", log.Any("member", m))
-		s.serverLookup.RemoveServer(meta)
+		s.brokerLookup.RemoveBroker(meta)
 	}
 }
 

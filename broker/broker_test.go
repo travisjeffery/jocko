@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/travisjeffery/jocko"
+	"github.com/travisjeffery/jocko/broker/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil"
@@ -22,11 +23,6 @@ import (
 
 func TestBroker_Run(t *testing.T) {
 	// creating the config up here so we can set the nodeid in the expected test cases
-	dir, config := testutil.TestConfig(t)
-	config.Bootstrap = true
-	config.BootstrapExpect = 1
-	config.StartAsLeader = true
-	defer os.RemoveAll(dir)
 	mustEncode := func(e protocol.Encoder) []byte {
 		var b []byte
 		var err error
@@ -36,7 +32,7 @@ func TestBroker_Run(t *testing.T) {
 		return b
 	}
 	type fields struct {
-		topics map[string][]*jocko.Partition
+		topics map[*structs.Topic][]*structs.Partition
 	}
 	type args struct {
 		requestCh  chan jocko.Request
@@ -48,7 +44,7 @@ func TestBroker_Run(t *testing.T) {
 		fields fields
 		name   string
 		args   args
-		handle func(*testing.T, jocko.Request, jocko.Response) jocko.Response
+		handle func(*testing.T, *Broker, jocko.Request, jocko.Response)
 	}{
 		{
 			name: "api versions",
@@ -200,14 +196,13 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
 					handleProduceResponse(t, res)
 				}
-				return res
 			},
 		},
 		{
@@ -270,14 +265,13 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
 					handleProduceResponse(t, res)
 				}
-				return res
 			},
 		},
 		{
@@ -327,7 +321,7 @@ func TestBroker_Run(t *testing.T) {
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 3},
 						Response: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
-							Brokers: []*protocol.Broker{{NodeID: config.ID, Host: "localhost", Port: 9092}},
+							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
 							TopicMetadata: []*protocol.TopicMetadata{
 								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), ParititionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
 								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
@@ -336,14 +330,13 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
 					handleProduceResponse(t, res)
 				}
-				return res
 			},
 		},
 		{
@@ -367,164 +360,51 @@ func TestBroker_Run(t *testing.T) {
 						}},
 					}}}},
 			},
-			handle: func(t *testing.T, req jocko.Request, res jocko.Response) jocko.Response {
+			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
 					handleProduceResponse(t, res)
 				}
-				return res
-			},
-		},
-		{
-			name: "leader and isr leader new partition",
-			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Request: &protocol.LeaderAndISRRequest{
-						PartitionStates: []*protocol.PartitionState{
-							{
-								Topic:     "the-topic",
-								Partition: 1,
-								ISR:       []int32{1},
-								Replicas:  []int32{1},
-								Leader:    1,
-								ZKVersion: 1,
-							},
-						},
-					}},
-				},
-				responses: []jocko.Response{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.LeaderAndISRResponse{
-						Partitions: []*protocol.LeaderAndISRPartition{
-							{
-								ErrorCode: protocol.ErrNone.Code(),
-								Partition: 1,
-								Topic:     "the-topic",
-							},
-						},
-					}}}},
-			},
-		},
-		{
-			name: "leader and isr leader become leader",
-			fields: fields{
-				topics: map[string][]*jocko.Partition{
-					"the-topic": []*jocko.Partition{{
-						Topic:                   "the-topic",
-						ID:                      1,
-						Replicas:                nil,
-						ISR:                     nil,
-						Leader:                  0,
-						PreferredLeader:         0,
-						LeaderAndISRVersionInZK: 0,
-					}},
-				},
-			},
-			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Request: &protocol.LeaderAndISRRequest{
-						PartitionStates: []*protocol.PartitionState{
-							{
-								Topic:     "the-topic",
-								Partition: 1,
-								ISR:       []int32{1},
-								Replicas:  []int32{1},
-								Leader:    1,
-								ZKVersion: 1,
-							},
-						},
-					}},
-				},
-				responses: []jocko.Response{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.LeaderAndISRResponse{
-						Partitions: []*protocol.LeaderAndISRPartition{
-							{
-								ErrorCode: protocol.ErrNone.Code(),
-								Partition: 1,
-								Topic:     "the-topic",
-							},
-						},
-					}}}},
-			},
-		},
-		{
-			name: "leader and isr leader become follower",
-			fields: fields{
-				topics: map[string][]*jocko.Partition{
-					"the-topic": []*jocko.Partition{{
-						Topic:                   "the-topic",
-						ID:                      1,
-						Replicas:                nil,
-						ISR:                     nil,
-						Leader:                  1,
-						PreferredLeader:         1,
-						LeaderAndISRVersionInZK: 0,
-					}},
-				},
-			},
-			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Request: &protocol.LeaderAndISRRequest{
-						PartitionStates: []*protocol.PartitionState{
-							{
-								Topic:     "the-topic",
-								Partition: 1,
-								ISR:       []int32{1},
-								Replicas:  []int32{1},
-								Leader:    0,
-								ZKVersion: 1,
-							},
-						},
-					}},
-				},
-				responses: []jocko.Response{{
-					Header: &protocol.RequestHeader{CorrelationID: 2},
-					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.LeaderAndISRResponse{
-						Partitions: []*protocol.LeaderAndISRPartition{
-							{
-								ErrorCode: protocol.ErrNone.Code(),
-								Partition: 1,
-								Topic:     "the-topic",
-							},
-						},
-					}}}},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			dir, config := testutil.TestConfig(t)
+			config.ID = 1
+			config.Bootstrap = true
+			config.BootstrapExpect = 1
+			config.StartAsLeader = true
+			defer os.RemoveAll(dir)
 			logger := log.New().With(log.String("test", tt.name))
 			b, err := New(config, logger)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 			defer func() {
-				b.purge()
 				b.Leave()
 				b.Shutdown()
 			}()
 			retry.Run(t, func(r *retry.R) {
-				if len(b.serverLookup.Servers()) != 1 {
+				if len(b.brokerLookup.Brokers()) != 1 {
 					r.Fatal("server not added")
 				}
 			})
 			if tt.fields.topics != nil {
-				b.topicMap = tt.fields.topics
-				for _, ps := range tt.fields.topics {
+				for topic, ps := range tt.fields.topics {
+					_, err := b.raftApply(structs.RegisterTopicRequestType, structs.RegisterTopicRequest{
+						Topic: *topic,
+					})
+					if err != nil {
+						t.Fatalf("err: %s", err)
+					}
 					for _, p := range ps {
-						if err := b.startReplica(p); err != protocol.ErrNone {
-							t.Errorf("failed to start replica: %v", err)
+						_, err = b.raftApply(structs.RegisterPartitionRequestType, structs.RegisterPartitionRequest{
+							Partition: *p,
+						})
+						if err != nil {
+							t.Fatalf("err: %s", err)
 						}
 					}
 				}
@@ -537,7 +417,7 @@ func TestBroker_Run(t *testing.T) {
 				response := <-tt.args.responseCh
 
 				if tt.handle != nil {
-					response = tt.handle(t, tt.args.requests[i], response)
+					tt.handle(t, b, tt.args.requests[i], response)
 				}
 
 				if !reflect.DeepEqual(response.Response, tt.args.responses[i].Response) {
@@ -554,444 +434,6 @@ func spewstr(v interface{}) string {
 	var buf bytes.Buffer
 	spew.Fdump(&buf, v)
 	return buf.String()
-}
-
-func TestBroker_topicPartitions(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		brokerAddr  string
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		topic string
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		wantFound []*jocko.Partition
-		wantErr   protocol.Error
-	}{
-		{
-			name: "partitions found",
-			fields: fields{
-				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
-				logger:   log.New(),
-			},
-			args:      args{topic: "topic"},
-			wantFound: []*jocko.Partition{{ID: 1}},
-			wantErr:   protocol.ErrNone,
-		},
-		{
-			name: "partitions not found",
-			fields: fields{
-				topicMap: map[string][]*jocko.Partition{"topic": []*jocko.Partition{{ID: 1}}},
-				logger:   log.New(),
-			},
-			args:      args{topic: "not_topic"},
-			wantFound: nil,
-			wantErr:   protocol.ErrUnknownTopicOrPartition,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			b.topicMap = tt.fields.topicMap
-			gotFound, gotErr := b.topicPartitions(tt.args.topic)
-			if !reflect.DeepEqual(gotFound, tt.wantFound) {
-				t.Errorf("topicPartitions() gotFound = %v, want %v", gotFound, tt.wantFound)
-			}
-			if !reflect.DeepEqual(gotErr, tt.wantErr) {
-				t.Errorf("topicPartitions() gotErr = %v, want %v", gotErr, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestBroker_topics(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	topicMap := map[string][]*jocko.Partition{
-		"topic": []*jocko.Partition{{ID: 1}},
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   map[string][]*jocko.Partition
-	}{
-		{
-			name: "topic map returned",
-			fields: fields{
-				topicMap: topicMap,
-				logger:   log.New(),
-			},
-			want: topicMap,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if tt.fields.topicMap != nil {
-				b.topicMap = tt.fields.topicMap
-			}
-			if got := b.topics(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("topics() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBroker_partition(t *testing.T) {
-	f := newFields()
-	f.topicMap = map[string][]*jocko.Partition{
-		"the-topic":   []*jocko.Partition{{ID: 1}},
-		"empty-topic": []*jocko.Partition{},
-	}
-	type args struct {
-		topic     string
-		partition int32
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *jocko.Partition
-		wanterr protocol.Error
-	}{
-		{
-			name:   "found partitions",
-			fields: f,
-			args: args{
-				topic:     "the-topic",
-				partition: 1,
-			},
-			want:    f.topicMap["the-topic"][0],
-			wanterr: protocol.ErrNone,
-		},
-		{
-			name:   "no partitions",
-			fields: f,
-			args: args{
-				topic:     "not-the-topic",
-				partition: 1,
-			},
-			want:    nil,
-			wanterr: protocol.ErrUnknownTopicOrPartition,
-		},
-		{
-			name:   "empty partitions",
-			fields: f,
-			args: args{
-				topic:     "empty-topic",
-				partition: 1,
-			},
-			want:    nil,
-			wanterr: protocol.ErrUnknownTopicOrPartition,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if tt.fields.topicMap != nil {
-				b.topicMap = tt.fields.topicMap
-			}
-			got, goterr := b.partition(tt.args.topic, tt.args.partition)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("partition() got = %v, want %v", got, tt.want)
-			}
-			if !reflect.DeepEqual(goterr, tt.wanterr) {
-				t.Errorf("partition() goterr = %v, want %v", goterr, tt.wanterr)
-			}
-		})
-	}
-}
-
-// func TestBroker_createPartition(t *testing.T) {
-// 	type fields struct {
-// 		logger      log.Logger
-// 		id          int32
-// 		topicMap    map[string][]*jocko.Partition
-// 		replicators map[*jocko.Partition]*Replicator
-// 		logDir      string
-// 		shutdownCh  chan struct{}
-// 		shutdown    bool
-// 	}
-// 	type args struct {
-// 		partition *jocko.Partition
-// 	}
-// 	raft := &mock.Raft{}
-// 	tests := []struct {
-// 		name    string
-// 		fields  fields
-// 		args    args
-// 		wantErr bool
-// 	}{
-// 		{
-// 			name: "called apply",
-// 			fields: fields{
-// 				raft:   raft,
-// 				logger: log.New(),
-// 			},
-// 			args:    args{partition: &jocko.Partition{ID: 1}},
-// 			wantErr: false,
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			dir, config := testutil.TestConfig(t)
-// 			os.RemoveAll(dir)
-// 			b, err := New(config,  tt.fields.logger)
-// 			if err != nil {
-// 				t.Error("expected no err")
-// 			}
-// 			if err := b.createPartition(tt.args.partition); (err != nil) != tt.wantErr {
-// 				t.Errorf("createPartition() error = %v, wantErr %v", err, tt.wantErr)
-// 			}
-// 			if !raft.ApplyCalled() {
-// 				t.Errorf("createPartition() raft.ApplyCalled() = %v, want %v", raft.ApplyCalled(), true)
-// 			}
-// 		})
-// 	}
-// }
-
-func TestBroker_startReplica(t *testing.T) {
-	type args struct {
-		partition *jocko.Partition
-	}
-	partition := &jocko.Partition{
-		Topic:  "the-topic",
-		ID:     1,
-		Leader: 1,
-	}
-	tests := []struct {
-		name      string
-		setFields func(f *fields)
-		args      args
-		want      protocol.Error
-	}{
-		{
-			name: "started replica as leader",
-			args: args{
-				partition: partition,
-			},
-			want: protocol.ErrNone,
-		},
-		{
-			name: "started replica as follower",
-			args: args{
-				partition: &jocko.Partition{
-					ID:       1,
-					Topic:    "replica-topic",
-					Replicas: []int32{1},
-					Leader:   2,
-				},
-			},
-			want: protocol.ErrNone,
-		},
-		{
-			name: "started replica with existing topic",
-			setFields: func(f *fields) {
-				f.topicMap["existing-topic"] = []*jocko.Partition{
-					{
-						ID:    1,
-						Topic: "existing-topic",
-					},
-				}
-			},
-			args: args{
-				partition: &jocko.Partition{ID: 2, Topic: "existing-topic"},
-			},
-			want: protocol.ErrNone,
-		},
-		// TODO: Possible bug. If a duplicate partition is added,
-		//   the partition will be appended to the partitions as a duplicate.
-		// {
-		// 	name:   "started replica with dupe partition",
-		// 	fields: f,
-		// 	args: args{
-		// 		partition: &jocko.Partition{ID: 1, Topic: "existing-topic"},
-		// 	},
-		// 	want: protocol.ErrNone,
-		// },
-		// {
-		// 	name: "started replica with commitlog error",
-		// 	setFields: func(f *fields) {
-		// 		f.logDir = ""
-		// 	},
-		// 	args: args{
-		// 		partition: &jocko.Partition{Leader: 1},
-		// 	},
-		// 	want: protocol.ErrUnknown.WithErr(errors.New("mkdir failed: mkdir /0: permission denied")),
-		// },
-	}
-	for _, tt := range tests {
-		fields := newFields()
-		if tt.setFields != nil {
-			tt.setFields(&fields)
-		}
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.startReplica(tt.args.partition); got.Error() != tt.want.Error() {
-				t.Errorf("startReplica() = %v, want %v", got, tt.want)
-			}
-			got, err := b.partition(tt.args.partition.Topic, tt.args.partition.ID)
-			if !reflect.DeepEqual(got, tt.args.partition) {
-				t.Errorf("partition() = %v, want %v", got, partition)
-			}
-			parts := map[int32]*jocko.Partition{}
-			for _, p := range b.topicMap[tt.args.partition.Topic] {
-				if _, ok := parts[p.ID]; ok {
-					t.Errorf("topicPartition contains dupes, dupe %v", p)
-				}
-				parts[p.ID] = p
-			}
-			if err != protocol.ErrNone {
-				t.Errorf("partition() err = %v, want %v", err, protocol.ErrNone)
-			}
-		})
-	}
-}
-
-func TestBroker_createTopic(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		topic             string
-		partitions        int32
-		replicationFactor int16
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.createTopic(tt.args.topic, tt.args.partitions, tt.args.replicationFactor); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("createTopic() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBroker_deleteTopic(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		topic string
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.deleteTopic(tt.args.topic); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("deleteTopic() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBroker_deletePartitions(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		tp *jocko.Partition
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if err := b.deletePartitions(tt.args.tp); (err != nil) != tt.wantErr {
-				t.Errorf("deletePartitions() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
 }
 
 func TestBroker_Shutdown(t *testing.T) {
@@ -1024,82 +466,6 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 }
 
-func TestBroker_becomeFollower(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		topic          string
-		partitionID    int32
-		partitionState *protocol.PartitionState
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.becomeFollower(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("becomeFollower() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBroker_becomeLeader(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		id          int32
-		topicMap    map[string][]*jocko.Partition
-		replicators map[*jocko.Partition]*Replicator
-		logDir      string
-		shutdownCh  chan struct{}
-		shutdown    bool
-	}
-	type args struct {
-		topic          string
-		partitionID    int32
-		partitionState *protocol.PartitionState
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   protocol.Error
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if got := b.becomeLeader(tt.args.topic, tt.args.partitionID, tt.args.partitionState); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("becomeLeader() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_contains(t *testing.T) {
 	type args struct {
 		rs []int32
@@ -1122,22 +488,18 @@ func Test_contains(t *testing.T) {
 }
 
 type fields struct {
-	id          int32
-	logger      log.Logger
-	topicMap    map[string][]*jocko.Partition
-	replicators map[*jocko.Partition]*Replicator
-	logDir      string
-	shutdownCh  chan struct{}
-	shutdown    bool
+	id         int32
+	logger     log.Logger
+	logDir     string
+	shutdownCh chan struct{}
+	shutdown   bool
 }
 
 func newFields() fields {
 	return fields{
-		topicMap:    make(map[string][]*jocko.Partition),
-		replicators: make(map[*jocko.Partition]*Replicator),
-		logger:      log.New(),
-		logDir:      "/tmp/jocko/logs",
-		id:          1,
+		logger: log.New(),
+		logDir: "/tmp/jocko/logs",
+		id:     1,
 	}
 }
 
@@ -1387,21 +749,6 @@ type nopReaderWriter struct{}
 func (nopReaderWriter) Read(b []byte) (int, error)  { return 0, nil }
 func (nopReaderWriter) Write(b []byte) (int, error) { return 0, nil }
 func newNopReaderWriter() io.ReadWriter             { return nopReaderWriter{} }
-
-// purge is a helper function to delete all topics and partitions for this  likely only useful for tests.
-func (s *Broker) purge() error {
-	s.Lock()
-	defer s.Unlock()
-	for topic, partitions := range s.topicMap {
-		for _, p := range partitions {
-			if err := p.Delete(); err != nil {
-				return err
-			}
-		}
-		delete(s.topicMap, topic)
-	}
-	return nil
-}
 
 // wantPeers determines whether the server has the given
 // number of voting raft peers.

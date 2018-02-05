@@ -12,8 +12,7 @@ import (
 type Replicator struct {
 	config              ReplicatorConfig
 	logger              log.Logger
-	replicaID           int32
-	partition           *jocko.Partition
+	replica             *Replica
 	clientID            string
 	minBytes            int32
 	fetchSize           int32
@@ -31,16 +30,15 @@ type ReplicatorConfig struct {
 }
 
 // NewReplicator returns a new replicator instance.
-func NewReplicator(config ReplicatorConfig, partition *jocko.Partition, replicaID int32, leader jocko.Client, logger log.Logger) *Replicator {
+func NewReplicator(config ReplicatorConfig, replica *Replica, leader jocko.Client, logger log.Logger) *Replicator {
 	r := &Replicator{
-		config:    config,
-		logger:    logger,
-		partition: partition,
-		replicaID: replicaID,
-		clientID:  fmt.Sprintf("Replicator-%d", replicaID),
-		leader:    leader,
-		done:      make(chan struct{}, 2),
-		msgs:      make(chan []byte, 2),
+		config:   config,
+		logger:   logger,
+		replica:  replica,
+		clientID: fmt.Sprintf("Replicator-%d", replica.BrokerID),
+		leader:   leader,
+		done:     make(chan struct{}, 2),
+		msgs:     make(chan []byte, 2),
 	}
 	return r
 }
@@ -57,13 +55,13 @@ func (r *Replicator) fetchMessages() {
 			return
 		default:
 			fetchRequest := &protocol.FetchRequest{
-				ReplicaID:   r.replicaID,
+				ReplicaID:   r.replica.BrokerID,
 				MaxWaitTime: r.maxWaitTime,
 				MinBytes:    r.minBytes,
 				Topics: []*protocol.FetchTopic{{
-					Topic: r.partition.Topic,
+					Topic: r.replica.Partition.Topic,
 					Partitions: []*protocol.FetchPartition{{
-						Partition:   r.partition.ID,
+						Partition:   r.replica.Partition.ID,
 						FetchOffset: r.offset,
 					}},
 				}},
@@ -94,7 +92,7 @@ func (r *Replicator) appendMessages() {
 		case <-r.done:
 			return
 		case msg := <-r.msgs:
-			_, err := r.partition.Append(msg)
+			_, err := r.replica.Log.Append(msg)
 			if err != nil {
 				panic(err)
 			}
