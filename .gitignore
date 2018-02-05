@@ -5,3 +5,5 @@ vendor/*
 .idea
 *.log
 *.index
+NOTES.txt
+.dir-locals.el

@@ -76,3 +76,16 @@ func (p *Client) CreateTopics(clientID string, createRequests *protocol.CreateTo
 	}
 	return createResponse, nil
 }
+
+func (p *Client) LeaderAndISR(clientID string, request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error) {
+	req := &protocol.Request{
+		CorrelationID: rand.Int31(),
+		ClientID:      clientID,
+		Body:          request,
+	}
+	resp := new(protocol.LeaderAndISRResponse)
+	if err := p.makeRequest(req, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}

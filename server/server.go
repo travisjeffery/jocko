@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -25,7 +24,7 @@ type Config struct {
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	config     Config
+	config     *Config
 	protocolLn *net.TCPListener
 	httpLn     *net.TCPListener
 	logger     log.Logger
@@ -37,7 +36,7 @@ type Server struct {
 	server     http.Server
 }
 
-func New(config Config, broker jocko.Broker, metrics *jocko.Metrics, logger log.Logger) *Server {
+func New(config *Config, broker jocko.Broker, metrics *jocko.Metrics, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
 		broker:     broker,
@@ -72,7 +71,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// TODO: clean this up. setup metrics via dependency injection or use them
 	// through a channel or something.
 	r := mux.NewRouter()
-	r.Path("/join").Methods("POST").HandlerFunc(s.handleJoin)
 	r.Handle("/metrics", promhttp.Handler())
 	r.PathPrefix("").HandlerFunc(s.handleNotFound)
 
@@ -212,23 +210,6 @@ func (s *Server) handleRequest(conn net.Conn) {
 			Conn:    conn,
 		}
 	}
-}
-
-func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
-	b := new(jocko.ClusterMember)
-	if err := json.NewDecoder(r.Body).Decode(&b); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	// TODO: change join to take a broker
-	if err := s.broker.Join(b.HTTPAddr); err != protocol.ErrNone {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) write(resp jocko.Response) error {

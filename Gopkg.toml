@@ -43,7 +43,7 @@
 
 [[constraint]]
   name = "github.com/hashicorp/serf"
-  version = "=0.8.1"
+  revision = "911b3cc29e11db3e4c6ed4543c4c721e4e179752"
 
 [[constraint]]
   name = "github.com/pkg/errors"
@@ -65,6 +65,3 @@
   branch = "master"
   name = "github.com/tysontate/gommap"
 
-[[constraint]]
-  name = "gopkg.in/alecthomas/kingpin.v2"
-  version = "2.2.5"
