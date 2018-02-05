@@ -46,6 +46,10 @@
   revision = "911b3cc29e11db3e4c6ed4543c4c721e4e179752"
 
 [[constraint]]
+  name = "github.com/hashicorp/go-memdb"
+  revision = "75ff99613d288868d8888ec87594525906815dbc"
+
+[[constraint]]
   name = "github.com/pkg/errors"
   version = "=0.8.0"
 

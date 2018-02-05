@@ -98,7 +98,6 @@
   revision = "8aac2701530899b64bdea735a1de8da899815220"
 
 [[projects]]
-  branch = "master"
   name = "github.com/hashicorp/go-memdb"
   packages = ["."]
   revision = "75ff99613d288868d8888ec87594525906815dbc"
@@ -321,6 +320,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "fe9de2fdf47197d1c6ac46fb0ffd2e251220285248222eef043caf8f1389b77b"
+  inputs-digest = "b571e386ce2e4f3d6478e1be305141f4c6d8bba7b77cfb88a2db7fbd29086378"
   solver-name = "gps-cdcl"
   solver-version = 1
