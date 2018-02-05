@@ -61,7 +61,7 @@ func (sl *brokerLookup) RemoveBroker(broker *metadata.Broker) {
 
 func (sl *brokerLookup) Brokers() []*metadata.Broker {
 	sl.lock.RLock()
-	sl.lock.RUnlock()
+	defer sl.lock.RUnlock()
 	var ret []*metadata.Broker
 	for _, svr := range sl.addressToBroker {
 		ret = append(ret, svr)
