@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"reflect"
 	"testing"
@@ -488,11 +487,9 @@ func Test_contains(t *testing.T) {
 }
 
 type fields struct {
-	id         int32
-	logger     log.Logger
-	logDir     string
-	shutdownCh chan struct{}
-	shutdown   bool
+	id     int32
+	logger log.Logger
+	logDir string
 }
 
 func newFields() fields {
@@ -743,12 +740,6 @@ func joinLAN(t *testing.T, b1 *Broker, b2 *Broker) {
 	err := b1.JoinLAN(addr)
 	require.Equal(t, err, protocol.ErrNone)
 }
-
-type nopReaderWriter struct{}
-
-func (nopReaderWriter) Read(b []byte) (int, error)  { return 0, nil }
-func (nopReaderWriter) Write(b []byte) (int, error) { return 0, nil }
-func newNopReaderWriter() io.ReadWriter             { return nopReaderWriter{} }
 
 // wantPeers determines whether the server has the given
 // number of voting raft peers.

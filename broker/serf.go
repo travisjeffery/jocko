@@ -142,7 +142,7 @@ func (s *Broker) maybeBootstrap() {
 		addr := b.RaftAddr
 		addrs = append(addrs, addr)
 		peer := raft.Server{
-			ID:      raft.ServerID(addr),
+			ID:      raft.ServerID(fmt.Sprintf("%d", b.ID)),
 			Address: raft.ServerAddress(addr),
 		}
 		configuration.Servers = append(configuration.Servers, peer)
