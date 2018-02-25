@@ -1,4 +1,4 @@
-package config
+package jocko
 
 import (
 	"os"
@@ -13,7 +13,7 @@ const (
 )
 
 // Config holds the configuration for a Broker.
-type Config struct {
+type BrokerConfig struct {
 	ID                int32
 	NodeName          string
 	DataDir           string
@@ -31,13 +31,13 @@ type Config struct {
 }
 
 // DefaultConfig creates/returns a default configuration.
-func DefaultConfig() *Config {
+func DefaultBrokerConfig() *BrokerConfig {
 	hostname, err := os.Hostname()
 	if err != nil {
 		panic(err)
 	}
 
-	conf := &Config{
+	conf := &BrokerConfig{
 		DevMode:       false,
 		NodeName:      hostname,
 		SerfLANConfig: serfDefaultConfig(),

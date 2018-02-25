@@ -8,3 +8,4 @@ vendor/*
 NOTES.txt
 .dir-locals.el
 .#*
+.DS_Store

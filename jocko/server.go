@@ -1,4 +1,4 @@
-package server
+package jocko
 
 import (
 	"context"
@@ -11,40 +11,45 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-type Config struct {
+type ServerConfig struct {
 	BrokerAddr string
 	HTTPAddr   string
+}
+
+// Broker is the interface that wraps the Broker's methods.
+type broker interface {
+	Run(context.Context, <-chan Request, chan<- Response)
+	Shutdown() error
 }
 
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	config     *Config
+	config     *ServerConfig
 	protocolLn *net.TCPListener
 	httpLn     *net.TCPListener
 	logger     log.Logger
-	broker     jocko.Broker
+	broker     *Broker
 	shutdownCh chan struct{}
-	metrics    *jocko.Metrics
-	requestCh  chan jocko.Request
-	responseCh chan jocko.Response
+	metrics    *Metrics
+	requestCh  chan Request
+	responseCh chan Response
 	server     http.Server
 }
 
-func New(config *Config, broker jocko.Broker, metrics *jocko.Metrics, logger log.Logger) *Server {
+func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
 		broker:     broker,
 		logger:     logger.With(log.Any("config", config)),
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
-		requestCh:  make(chan jocko.Request, 32),
-		responseCh: make(chan jocko.Response, 32),
+		requestCh:  make(chan Request, 32),
+		responseCh: make(chan Response, 32),
 	}
 	s.logger.Info("hello")
 	return s
@@ -134,7 +139,6 @@ func (s *Server) Close() {
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
-	s.metrics.RequestsHandled.Inc()
 	defer conn.Close()
 
 	header := new(protocol.RequestHeader)
@@ -204,7 +208,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			panic(err)
 		}
 
-		s.requestCh <- jocko.Request{
+		s.requestCh <- Request{
 			Header:  header,
 			Request: req,
 			Conn:    conn,
@@ -212,7 +216,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	}
 }
 
-func (s *Server) write(resp jocko.Response) error {
+func (s *Server) write(resp Response) error {
 	s.logger.Debug("response", log.Int32("correlation id", resp.Header.CorrelationID), log.Int16("api key", resp.Header.APIKey))
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {

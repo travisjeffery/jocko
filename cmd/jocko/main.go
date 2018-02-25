@@ -9,11 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 	gracefully "github.com/tj/go-gracefully"
-	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/broker/config"
+	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/server"
 )
 
 var (
@@ -27,11 +26,11 @@ var (
 	brokerCfg = struct {
 		ID      int32
 		DataDir string
-		Broker  *config.Config
-		Server  *server.Config
+		Broker  *config.BrokerConfig
+		Server  *jocko.ServerConfig
 	}{
-		Broker: config.DefaultConfig(),
-		Server: &server.Config{},
+		Broker: config.DefaultBrokerConfig(),
+		Server: &jocko.ServerConfig{},
 	}
 
 	topicCfg = struct {
@@ -75,13 +74,13 @@ func run(cmd *cobra.Command, args []string) {
 		log.String("raft addr", brokerCfg.Broker.RaftAddr),
 	)
 
-	broker, err := broker.New(brokerCfg.Broker, logger)
+	broker, err := jocko.NewBroker(brokerCfg.Broker, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
 		os.Exit(1)
 	}
 
-	srv := server.New(brokerCfg.Server, broker, nil, logger)
+	srv := jocko.NewServer(brokerCfg.Server, broker, nil, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)
@@ -111,7 +110,7 @@ func createTopic(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	client := server.NewClient(conn)
+	client := jocko.NewClient(conn)
 	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topicCfg.Topic,
@@ -132,7 +131,6 @@ func createTopic(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 	}
-
 	fmt.Printf("created topic: %v\n", topicCfg.Topic)
 }
 

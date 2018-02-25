@@ -1,4 +1,4 @@
-package broker
+package jocko
 
 import (
 	"bytes"
@@ -18,15 +18,13 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
 	"github.com/pkg/errors"
-	"github.com/travisjeffery/jocko"
-	"github.com/travisjeffery/jocko/broker/config"
-	"github.com/travisjeffery/jocko/broker/fsm"
-	"github.com/travisjeffery/jocko/broker/metadata"
-	"github.com/travisjeffery/jocko/broker/structs"
 	"github.com/travisjeffery/jocko/commitlog"
+	"github.com/travisjeffery/jocko/jocko/config"
+	"github.com/travisjeffery/jocko/jocko/fsm"
+	"github.com/travisjeffery/jocko/jocko/metadata"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/server"
 )
 
 const (
@@ -45,7 +43,7 @@ var (
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
-	config *config.Config
+	config *config.BrokerConfig
 
 	// readyForConsistentReads is used to track when the leader server is
 	// ready to serve consistent reads, after it has applied its initial
@@ -73,7 +71,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func New(config *config.Config, logger log.Logger) (*Broker, error) {
+func NewBroker(config *config.BrokerConfig, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:        config,
 		logger:        logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
@@ -108,10 +106,10 @@ func New(config *config.Config, logger log.Logger) (*Broker, error) {
 	return b, nil
 }
 
-// jocko.Broker API.
+// Broker API.
 
 // Run starts a loop to handle requests send back responses.
-func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, responsec chan<- jocko.Response) {
+func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec chan<- Response) {
 	var conn io.ReadWriter
 	var header *protocol.RequestHeader
 	var resp protocol.ResponseBody
@@ -144,7 +142,7 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan jocko.Request, respons
 			return
 		}
 
-		responsec <- jocko.Response{Conn: conn, Header: header, Response: &protocol.Response{
+		responsec <- Response{Conn: conn, Header: header, Response: &protocol.Response{
 			CorrelationID: header.CorrelationID,
 			Body:          resp,
 		}}
@@ -645,7 +643,7 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}
 		} else {
-			c := server.NewClient(s)
+			c := NewClient(s)
 			_, err := c.LeaderAndISR(fmt.Sprintf("%d", b.config.ID), req)
 			if err != nil {
 				// handle err and responses
@@ -784,7 +782,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 		return protocol.ErrUnknown.WithErr(err)
 	}
 	conn := b.brokerLookup.BrokerByID(raft.ServerID(cmd.Leader))
-	r := NewReplicator(ReplicatorConfig{}, replica, server.NewClient(conn), b.logger)
+	r := NewReplicator(ReplicatorConfig{}, replica, NewClient(conn), b.logger)
 	replica.Replicator = r
 	if !b.config.DevMode {
 		r.Replicate()
@@ -864,7 +862,7 @@ type Replica struct {
 	BrokerID   int32
 	Partition  structs.Partition
 	IsLocal    bool
-	Log        jocko.CommitLog
+	Log        CommitLog
 	Hw         int64
 	Leo        int64
 	Replicator *Replicator

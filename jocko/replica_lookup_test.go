@@ -1,10 +1,10 @@
-package broker
+package jocko
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/jocko/structs"
 )
 
 func TestNewReplicaLookup(t *testing.T) {

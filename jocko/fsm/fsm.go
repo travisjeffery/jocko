@@ -7,7 +7,7 @@ import (
 
 	memdb "github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/raft"
-	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/ugorji/go/codec"
 )

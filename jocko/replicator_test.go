@@ -1,4 +1,4 @@
-package broker_test
+package jocko_test
 
 import (
 	"bytes"
@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/broker/structs"
+
+	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/testutil"
@@ -19,7 +20,7 @@ func TestBroker_Replicate(t *testing.T) {
 	c := newCommitLog()
 	l := mock.NewClient(4)
 
-	replica := &broker.Replica{
+	replica := &jocko.Replica{
 		Partition: structs.Partition{
 			Topic:  "test",
 			ID:     0,
@@ -32,7 +33,7 @@ func TestBroker_Replicate(t *testing.T) {
 
 	logger := log.New()
 
-	replicator := broker.NewReplicator(broker.ReplicatorConfig{
+	replicator := jocko.NewReplicator(jocko.ReplicatorConfig{
 		MinBytes:    5,
 		MaxWaitTime: int32(250 * time.Millisecond),
 	}, replica, l, logger)

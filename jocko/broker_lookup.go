@@ -1,11 +1,11 @@
-package broker
+package jocko
 
 import (
 	"fmt"
 	"sync"
 
 	"github.com/hashicorp/raft"
-	"github.com/travisjeffery/jocko/broker/metadata"
+	"github.com/travisjeffery/jocko/jocko/metadata"
 )
 
 type brokerLookup struct {

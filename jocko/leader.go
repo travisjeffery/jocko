@@ -1,4 +1,4 @@
-package broker
+package jocko
 
 import (
 	"fmt"
@@ -9,9 +9,9 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
-	"github.com/travisjeffery/jocko/broker/fsm"
-	"github.com/travisjeffery/jocko/broker/metadata"
-	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/jocko/fsm"
+	"github.com/travisjeffery/jocko/jocko/metadata"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 )
 

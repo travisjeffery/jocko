@@ -1,4 +1,4 @@
-package broker
+package jocko
 
 import (
 	"bytes"
@@ -13,8 +13,7 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/require"
 
-	"github.com/travisjeffery/jocko"
-	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/travisjeffery/jocko/testutil"
@@ -34,27 +33,27 @@ func TestBroker_Run(t *testing.T) {
 		topics map[*structs.Topic][]*structs.Partition
 	}
 	type args struct {
-		requestCh  chan jocko.Request
-		responseCh chan jocko.Response
-		requests   []jocko.Request
-		responses  []jocko.Response
+		requestCh  chan Request
+		responseCh chan Response
+		requests   []Request
+		responses  []Response
 	}
 	tests := []struct {
 		fields fields
 		name   string
 		args   args
-		handle func(*testing.T, *Broker, jocko.Request, jocko.Response)
+		handle func(*testing.T, *Broker, Request, Response)
 	}{
 		{
 			name: "api versions",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
 					Header:  &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.APIVersionsRequest{},
 				}},
-				responses: []jocko.Response{{
+				responses: []Response{{
 					Header:   &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: APIVersions},
 				}},
@@ -63,9 +62,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "create topic ok",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -73,7 +72,7 @@ func TestBroker_Run(t *testing.T) {
 						ReplicationFactor: 1,
 					}}}},
 				},
-				responses: []jocko.Response{{
+				responses: []Response{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
@@ -84,9 +83,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "create topic invalid replication factor error",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -94,7 +93,7 @@ func TestBroker_Run(t *testing.T) {
 						ReplicationFactor: 2,
 					}}}},
 				},
-				responses: []jocko.Response{{
+				responses: []Response{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
@@ -105,9 +104,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "delete topic",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -117,7 +116,7 @@ func TestBroker_Run(t *testing.T) {
 					Header:  &protocol.RequestHeader{CorrelationID: 2},
 					Request: &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
 				},
-				responses: []jocko.Response{{
+				responses: []Response{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
@@ -132,9 +131,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "offsets",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -159,7 +158,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
 					},
 				},
-				responses: []jocko.Response{
+				responses: []Response{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -195,7 +194,7 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
+			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
@@ -207,9 +206,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "fetch",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -230,7 +229,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
 					},
 				},
-				responses: []jocko.Response{
+				responses: []Response{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -264,7 +263,7 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
+			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
@@ -276,9 +275,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "metadata",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -299,7 +298,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
 					},
 				},
-				responses: []jocko.Response{
+				responses: []Response{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -329,7 +328,7 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
+			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
@@ -341,16 +340,16 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "produce topic/partition doesn't exist error",
 			args: args{
-				requestCh:  make(chan jocko.Request, 2),
-				responseCh: make(chan jocko.Response, 2),
-				requests: []jocko.Request{{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
 					Header: &protocol.RequestHeader{CorrelationID: 2},
 					Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
 						Topic: "another-topic",
 						Data: []*protocol.Data{{
 							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
 				},
-				responses: []jocko.Response{{
+				responses: []Response{{
 					Header: &protocol.RequestHeader{CorrelationID: 2},
 					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
 						Responses: []*protocol.ProduceResponse{{
@@ -359,7 +358,7 @@ func TestBroker_Run(t *testing.T) {
 						}},
 					}}}},
 			},
-			handle: func(t *testing.T, _ *Broker, req jocko.Request, res jocko.Response) {
+			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
 				switch res := res.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
@@ -376,15 +375,20 @@ func TestBroker_Run(t *testing.T) {
 			config.Bootstrap = true
 			config.BootstrapExpect = 1
 			config.StartAsLeader = true
+
 			defer os.RemoveAll(dir)
+
 			logger := log.New().With(log.String("test", tt.name))
-			b, err := New(config, logger)
+
+			b, err := NewBroker(config, logger)
 			require.NoError(t, err)
 			require.NotNil(t, b)
+
 			defer func() {
 				b.Leave()
 				b.Shutdown()
 			}()
+
 			retry.Run(t, func(r *retry.R) {
 				if len(b.brokerLookup.Brokers()) != 1 {
 					r.Fatal("server not added")
@@ -451,12 +455,12 @@ func TestBroker_Shutdown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir, config := testutil.TestConfig(t)
 			os.RemoveAll(dir)
-			b, err := New(config, tt.fields.logger)
+			b, err := NewBroker(config, tt.fields.logger)
 			if err != nil {
 				t.Error("expected no err")
 			}
 			if err != nil {
-				t.Errorf("New() error = %v, wanted nil", err)
+				t.Errorf("NewBroker() error = %v, wanted nil", err)
 			}
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
@@ -503,12 +507,12 @@ func newFields() fields {
 func TestBroker_JoinLAN(t *testing.T) {
 	logger := log.New()
 	dir1, config1 := testutil.TestConfig(t)
-	b1, err := New(config1, logger)
+	b1, err := NewBroker(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
 	dir2, config2 := testutil.TestConfig(t)
-	b2, err := New(config2, logger)
+	b2, err := NewBroker(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 	joinLAN(t, b1, b2)
@@ -524,14 +528,14 @@ func TestBroker_RegisterMember(t *testing.T) {
 	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
-	b1, err := New(config1, logger)
+	b1, err := NewBroker(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
 	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
-	b2, err := New(config2, logger)
+	b2, err := NewBroker(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -565,7 +569,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
-	b1, err := New(config1, logger)
+	b1, err := NewBroker(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
@@ -573,7 +577,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
-	b2, err := New(config2, logger)
+	b2, err := NewBroker(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -604,7 +608,7 @@ func TestBroker_LeftMember(t *testing.T) {
 	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 2
-	b1, err := New(config1, logger)
+	b1, err := NewBroker(config1, logger)
 	require.NoError(t, err)
 	os.RemoveAll(dir1)
 
@@ -612,7 +616,7 @@ func TestBroker_LeftMember(t *testing.T) {
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 2
 	config2.NonVoter = true
-	b2, err := New(config2, logger)
+	b2, err := NewBroker(config2, logger)
 	os.RemoveAll(dir2)
 	require.NoError(t, err)
 
@@ -642,21 +646,21 @@ func TestBroker_LeaveLeader(t *testing.T) {
 	dir1, config1 := testutil.TestConfig(t)
 	config1.Bootstrap = true
 	config1.BootstrapExpect = 3
-	b1, err := New(config1, logger)
+	b1, err := NewBroker(config1, logger)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir1)
 
 	dir2, config2 := testutil.TestConfig(t)
 	config2.Bootstrap = false
 	config2.BootstrapExpect = 3
-	b2, err := New(config2, logger)
+	b2, err := NewBroker(config2, logger)
 	defer os.RemoveAll(dir2)
 	require.NoError(t, err)
 
 	dir3, config3 := testutil.TestConfig(t)
 	config3.Bootstrap = false
 	config3.BootstrapExpect = 3
-	b3, err := New(config3, logger)
+	b3, err := NewBroker(config3, logger)
 	defer os.RemoveAll(dir3)
 	require.NoError(t, err)
 

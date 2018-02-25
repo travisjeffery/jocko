@@ -1,4 +1,4 @@
-package broker
+package jocko
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
-	"github.com/travisjeffery/jocko/broker/metadata"
+	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/log"
 )
 

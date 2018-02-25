@@ -10,12 +10,12 @@ import (
 	"time"
 
 	dynaport "github.com/travisjeffery/go-dynaport"
-	"github.com/travisjeffery/jocko/broker/config"
+	"github.com/travisjeffery/jocko/jocko/config"
 )
 
-func TestConfig(t *testing.T) (string, *config.Config) {
+func TestConfig(t *testing.T) (string, *config.BrokerConfig) {
 	dir := tempDir(t, "jocko")
-	config := config.DefaultConfig()
+	config := config.DefaultBrokerConfig()
 	ports := dynaport.Get(3)
 	config.NodeName = uniqueNodeName(t.Name())
 	config.Bootstrap = true

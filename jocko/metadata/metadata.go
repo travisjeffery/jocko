@@ -61,6 +61,7 @@ func (b *Broker) connect() error {
 	return nil
 }
 
+// IsBroker checks if the given serf.Member is a broker, building and returning Broker instance from the Member's tags if so.
 func IsBroker(m serf.Member) (*Broker, bool) {
 	if m.Tags["role"] != "jocko" {
 		return nil, false

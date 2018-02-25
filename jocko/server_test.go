@@ -1,4 +1,4 @@
-package server_test
+package jocko_test
 
 import (
 	"bytes"
@@ -12,12 +12,10 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/require"
 	dynaport "github.com/travisjeffery/go-dynaport"
-	"github.com/travisjeffery/jocko/broker"
-	"github.com/travisjeffery/jocko/broker/config"
+	"github.com/travisjeffery/jocko/jocko"
+	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
-	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/server"
 	"github.com/travisjeffery/jocko/testutil"
 )
 
@@ -122,7 +120,7 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t require.TestingT) (*config.Config, func()) {
+func setup(t require.TestingT) (*config.BrokerConfig, func()) {
 	dataDir, err := ioutil.TempDir("", "server_test")
 	require.NoError(t, err)
 	logger := log.New()
@@ -134,14 +132,14 @@ func setup(t require.TestingT) (*config.Config, func()) {
 	cfg.BootstrapExpect = 1
 	cfg.StartAsLeader = true
 
-	broker, err := broker.New(cfg, logger)
+	broker, err := jocko.NewBroker(cfg, logger)
 	if err != nil {
 		panic(err)
 	}
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := server.New(&server.Config{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, mock.NewMetrics(), logger)
+	srv := jocko.NewServer(&jocko.ServerConfig{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, nil, logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 
@@ -151,7 +149,7 @@ func setup(t require.TestingT) (*config.Config, func()) {
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	require.NoError(t, err)
 
-	client := server.NewClient(conn)
+	client := jocko.NewClient(conn)
 	_, err = client.CreateTopics("testclient", &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,

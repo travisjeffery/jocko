@@ -1,12 +1,19 @@
-package broker
+package jocko
 
 import (
 	"fmt"
 
-	"github.com/travisjeffery/jocko"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
+
+// Client is used to request other brokers.
+type client interface {
+	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
+	CreateTopics(clientID string, createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error)
+	LeaderAndISR(clientID string, request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error)
+	// others
+}
 
 // Replicator fetches from the partition's leader producing to itself the follower, thereby replicating the partition.
 type Replicator struct {
@@ -21,7 +28,7 @@ type Replicator struct {
 	offset              int64
 	msgs                chan []byte
 	done                chan struct{}
-	leader              jocko.Client
+	leader              client
 }
 
 type ReplicatorConfig struct {
@@ -30,7 +37,7 @@ type ReplicatorConfig struct {
 }
 
 // NewReplicator returns a new replicator instance.
-func NewReplicator(config ReplicatorConfig, replica *Replica, leader jocko.Client, logger log.Logger) *Replicator {
+func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, logger log.Logger) *Replicator {
 	r := &Replicator{
 		config:   config,
 		logger:   logger,

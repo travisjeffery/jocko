@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/travisjeffery/jocko/broker/structs"
+	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 )
 

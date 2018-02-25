@@ -1,11 +1,11 @@
-package broker
+package jocko
 
 import (
 	"testing"
 
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/require"
-	"github.com/travisjeffery/jocko/broker/metadata"
+	"github.com/travisjeffery/jocko/jocko/metadata"
 )
 
 func TestNewBrokerLookup(t *testing.T) {
