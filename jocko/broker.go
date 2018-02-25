@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
@@ -28,6 +30,13 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+var (
+	brokerVerboseLogs bool
+
+	ErrTopicExists     = errors.New("topic exists already")
+	ErrInvalidArgument = errors.New("no logger set")
+)
+
 const (
 	serfLANSnapshot   = "serf/local.snapshot"
 	raftState         = "raft/"
@@ -35,10 +44,14 @@ const (
 	snapshotsRetained = 2
 )
 
-var (
-	ErrTopicExists     = errors.New("topic exists already")
-	ErrInvalidArgument = errors.New("no logger set")
-)
+func init() {
+	spew.Config.Indent = ""
+
+	e := os.Getenv("JOCKODEBUG")
+	if strings.Contains(e, "broker=1") {
+		brokerVerboseLogs = true
+	}
+}
 
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
@@ -117,36 +130,38 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 	var conn io.ReadWriter
 	var header *protocol.RequestHeader
 	var resp protocol.ResponseBody
+	var reqCtx context.Context
 
 	for {
 		select {
 		case request := <-requestc:
 			conn = request.Conn
 			header = request.Header
+			reqCtx = request.Ctx
 
 			switch req := request.Request.(type) {
 			case *protocol.APIVersionsRequest:
-				resp = b.handleAPIVersions(header, req)
+				resp = b.handleAPIVersions(reqCtx, header, req)
 			case *protocol.ProduceRequest:
-				resp = b.handleProduce(header, req)
+				resp = b.handleProduce(reqCtx, header, req)
 			case *protocol.FetchRequest:
-				resp = b.handleFetch(header, req)
+				resp = b.handleFetch(reqCtx, header, req)
 			case *protocol.OffsetsRequest:
-				resp = b.handleOffsets(header, req)
+				resp = b.handleOffsets(reqCtx, header, req)
 			case *protocol.MetadataRequest:
-				resp = b.handleMetadata(header, req)
+				resp = b.handleMetadata(reqCtx, header, req)
 			case *protocol.CreateTopicRequests:
-				resp = b.handleCreateTopic(header, req)
+				resp = b.handleCreateTopic(reqCtx, header, req)
 			case *protocol.DeleteTopicsRequest:
-				resp = b.handleDeleteTopics(header, req)
+				resp = b.handleDeleteTopics(reqCtx, header, req)
 			case *protocol.LeaderAndISRRequest:
-				resp = b.handleLeaderAndISR(header, req)
+				resp = b.handleLeaderAndISR(reqCtx, header, req)
 			}
 		case <-ctx.Done():
 			return
 		}
 
-		responsec <- Response{Conn: conn, Header: header, Response: &protocol.Response{
+		responsec <- Response{Ctx: reqCtx, Conn: conn, Header: header, Response: &protocol.Response{
 			CorrelationID: header.CorrelationID,
 			Body:          resp,
 		}}
@@ -187,11 +202,28 @@ var (
 	}
 )
 
-func (b *Broker) handleAPIVersions(header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
+func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing.Span {
+	if ctx == nil {
+		// only done for unit tests
+		return tracer.StartSpan(op)
+	}
+	parentSpan := opentracing.SpanFromContext(ctx)
+	if parentSpan == nil {
+		// only done for unit tests
+		return tracer.StartSpan(op)
+	}
+	return tracer.StartSpan(op, opentracing.ChildOf(parentSpan.Context()))
+}
+
+func (b *Broker) handleAPIVersions(ctx context.Context, header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
+	sp := span(ctx, b.tracer, "api versions")
+	defer sp.Finish()
 	return APIVersions
 }
 
-func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
+func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
+	sp := span(ctx, b.tracer, "create topic")
+	defer sp.Finish()
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := b.isController()
@@ -210,7 +242,7 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			}
 			continue
 		}
-		err := b.createTopic(req.Topic, req.NumPartitions, req.ReplicationFactor)
+		err := b.createTopic(ctx, req.Topic, req.NumPartitions, req.ReplicationFactor)
 		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 			Topic:     req.Topic,
 			ErrorCode: err.Code(),
@@ -219,7 +251,9 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 	return resp
 }
 
-func (b *Broker) handleDeleteTopics(header *protocol.RequestHeader, reqs *protocol.DeleteTopicsRequest) *protocol.DeleteTopicsResponse {
+func (b *Broker) handleDeleteTopics(ctx context.Context, header *protocol.RequestHeader, reqs *protocol.DeleteTopicsRequest) *protocol.DeleteTopicsResponse {
+	sp := span(ctx, b.tracer, "delete topics")
+	defer sp.Finish()
 	resp := new(protocol.DeleteTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Topics))
 	isController := b.isController()
@@ -252,7 +286,9 @@ func (b *Broker) handleDeleteTopics(header *protocol.RequestHeader, reqs *protoc
 	return resp
 }
 
-func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) *protocol.LeaderAndISRResponse {
+func (b *Broker) handleLeaderAndISR(ctx context.Context, header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) *protocol.LeaderAndISRResponse {
+	sp := span(ctx, b.tracer, "leader and isr")
+	defer sp.Finish()
 	resp := &protocol.LeaderAndISRResponse{
 		Partitions: make([]*protocol.LeaderAndISRPartition, len(req.PartitionStates)),
 	}
@@ -305,7 +341,9 @@ func (b *Broker) handleLeaderAndISR(header *protocol.RequestHeader, req *protoco
 	return resp
 }
 
-func (b *Broker) handleOffsets(header *protocol.RequestHeader, req *protocol.OffsetsRequest) *protocol.OffsetsResponse {
+func (b *Broker) handleOffsets(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetsRequest) *protocol.OffsetsResponse {
+	sp := span(ctx, b.tracer, "offsets")
+	defer sp.Finish()
 	oResp := new(protocol.OffsetsResponse)
 	oResp.Responses = make([]*protocol.OffsetResponse, len(req.Topics))
 	for i, t := range req.Topics {
@@ -334,7 +372,9 @@ func (b *Broker) handleOffsets(header *protocol.RequestHeader, req *protocol.Off
 	return oResp
 }
 
-func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.ProduceRequest) *protocol.ProduceResponses {
+func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHeader, req *protocol.ProduceRequest) *protocol.ProduceResponses {
+	sp := span(ctx, b.tracer, "produce")
+	defer sp.Finish()
 	resp := new(protocol.ProduceResponses)
 	resp.Responses = make([]*protocol.ProduceResponse, len(req.TopicData))
 	for i, td := range req.TopicData {
@@ -381,7 +421,9 @@ func (b *Broker) handleProduce(header *protocol.RequestHeader, req *protocol.Pro
 	return resp
 }
 
-func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.MetadataRequest) *protocol.MetadataResponse {
+func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHeader, req *protocol.MetadataRequest) *protocol.MetadataResponse {
+	sp := span(ctx, b.tracer, "metadata")
+	defer sp.Finish()
 	state := b.fsm.State()
 	brokers := make([]*protocol.Broker, 0, len(b.LANMembers()))
 	for _, mem := range b.LANMembers() {
@@ -471,7 +513,9 @@ func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.Me
 	return resp
 }
 
-func (b *Broker) handleFetch(header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {
+func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {
+	sp := span(ctx, b.tracer, "fetch")
+	defer sp.Finish()
 	fresp := &protocol.FetchResponses{
 		Responses: make([]*protocol.FetchResponse, len(r.Topics)),
 	}
@@ -560,7 +604,6 @@ func (b *Broker) createPartition(partition structs.Partition) error {
 func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
-	b.logger.Debug("start replica", log.String("replica/partition", dump(replica.Partition)))
 	state := b.fsm.State()
 	_, topic, err := state.GetTopic(replica.Partition.Topic)
 	if err != nil {
@@ -595,7 +638,7 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 }
 
 // createTopic is used to create the topic across the cluster.
-func (b *Broker) createTopic(topic string, partitions int32, replicationFactor int16) protocol.Error {
+func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32, replicationFactor int16) protocol.Error {
 	state := b.fsm.State()
 	_, t, _ := state.GetTopic(topic)
 	if t != nil {
@@ -636,7 +679,7 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 	// TODO: can optimize this
 	for _, s := range b.brokerLookup.Brokers() {
 		if s.ID == b.config.ID {
-			errCode := b.handleLeaderAndISR(nil, req).ErrorCode
+			errCode := b.handleLeaderAndISR(ctx, nil, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}

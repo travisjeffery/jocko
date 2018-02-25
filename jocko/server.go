@@ -4,23 +4,30 @@ import (
 	"context"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+var (
+	serverVerboseLogs bool
+)
+
+func init() {
+	spew.Config.Indent = ""
+
+	e := os.Getenv("JOCKODEBUG")
+	if strings.Contains(e, "server=1") {
+		serverVerboseLogs = true
+	}
+}
+
 type ServerConfig struct {
 	BrokerAddr string
-	HTTPAddr   string
 }
 
 // Broker is the interface that wraps the Broker's methods.
@@ -34,7 +41,6 @@ type broker interface {
 type Server struct {
 	config     *ServerConfig
 	protocolLn *net.TCPListener
-	httpLn     *net.TCPListener
 	logger     log.Logger
 	broker     *Broker
 	shutdownCh chan struct{}
@@ -42,10 +48,10 @@ type Server struct {
 	requestCh  chan Request
 	responseCh chan Response
 	tracer     opentracing.Tracer
-	server     http.Server
+	close      func() error
 }
 
-func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, logger log.Logger) *Server {
+func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
 		broker:     broker,
@@ -55,6 +61,7 @@ func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer op
 		requestCh:  make(chan Request, 32),
 		responseCh: make(chan Response, 32),
 		tracer:     tracer,
+		close:      close,
 	}
 	s.logger.Info("hello")
 	return s
@@ -68,25 +75,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	if s.protocolLn, err = net.ListenTCP("tcp", protocolAddr); err != nil {
 		return err
-	}
-
-	httpAddr, err := net.ResolveTCPAddr("tcp", s.config.HTTPAddr)
-	if err != nil {
-		return err
-	}
-	if s.httpLn, err = net.ListenTCP("tcp", httpAddr); err != nil {
-		return err
-	}
-
-	// TODO: clean this up. setup metrics via dependency injection or use them
-	// through a channel or something.
-	r := mux.NewRouter()
-	r.Handle("/metrics", promhttp.Handler())
-	r.PathPrefix("").HandlerFunc(s.handleNotFound)
-
-	loggedRouter := handlers.LoggingHandler(os.Stdout, r)
-	s.server = http.Server{
-		Handler: loggedRouter,
 	}
 
 	go func() {
@@ -116,7 +104,7 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.shutdownCh:
 				break
 			case resp := <-s.responseCh:
-				if err := s.write(resp); err != nil {
+				if err := s.handleResponse(resp); err != nil {
 					s.logger.Error("failed to write response", log.Error("error", err))
 				}
 			}
@@ -125,22 +113,14 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.broker.Run(ctx, s.requestCh, s.responseCh)
 
-	go func() {
-		err := s.server.Serve(s.httpLn)
-		if err != nil {
-			s.logger.Error("serve failed", log.Error("error", err))
-		}
-	}()
-
 	return nil
 }
 
 // Close closes the service.
 func (s *Server) Close() {
 	close(s.shutdownCh)
-	s.server.Close()
-	s.httpLn.Close()
 	s.protocolLn.Close()
+	s.close()
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
@@ -150,12 +130,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 	p := make([]byte, 4)
 
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		if err != nil {
-			s.logger.Error("read deadline failed", log.Error("error", err))
-			continue
-		}
-		_, err = io.ReadFull(conn, p[:])
+		_, err := io.ReadFull(conn, p[:])
 		if err == io.EOF {
 			break
 		}
@@ -163,6 +138,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 			s.logger.Error("conn read failed", log.Error("error", err))
 			break
 		}
+
+		span := s.tracer.StartSpan("request")
 
 		size := protocol.Encoding.Uint32(p)
 		if size == 0 {
@@ -174,14 +151,16 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		if _, err = io.ReadFull(conn, b[4:]); err != nil {
 			// TODO: handle request
-			s.logger.Error("failed to read from connection", log.Error("error", err))
+			span.LogKV("msg", "failed to read from connection", "err", err)
+			span.Finish()
 			panic(err)
 		}
 
 		d := protocol.NewDecoder(b)
 		if err := header.Decode(d); err != nil {
 			// TODO: handle err
-			s.logger.Error("failed to decode header", log.Error("error", err))
+			span.LogKV("msg", "failed to decode header", "err", err)
+			span.Finish()
 			panic(err)
 		}
 
@@ -206,16 +185,16 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		if err := req.Decode(d); err != nil {
-			// TODO: handle err
-			s.logger.Error("failed to decode request", log.Error("error", err))
+			span.LogKV("msg", "failed to decode request", "err", err)
+			span.Finish()
 			panic(err)
 		}
 
-		span := s.tracer.StartSpan("request")
 		span.SetTag("api_key", header.APIKey)
 		span.SetTag("correlation_id", header.CorrelationID)
 		span.SetTag("client_id", header.ClientID)
 		span.SetTag("size", size)
+		s.vlog(span, "request", req)
 
 		ctx := opentracing.ContextWithSpan(context.Background(), span)
 
@@ -228,8 +207,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 	}
 }
 
-func (s *Server) write(resp Response) error {
-	s.logger.Debug("response", log.Int32("correlation id", resp.Header.CorrelationID), log.Int16("api key", resp.Header.APIKey), log.String("request", dump(resp.Response)))
+func (s *Server) handleResponse(resp Response) error {
+	psp := opentracing.SpanFromContext(resp.Ctx)
+	sp := s.tracer.StartSpan("response", opentracing.ChildOf(psp.Context()))
+	s.vlog(sp, "response", resp.Response)
+	defer psp.Finish()
+	defer sp.Finish()
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err
@@ -243,14 +226,12 @@ func (s *Server) Addr() net.Addr {
 	return s.protocolLn.Addr()
 }
 
-func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-}
-
-func init() {
-	spew.Config.Indent = ""
-}
-
 func dump(i interface{}) string {
 	return strings.Replace(spew.Sdump(i), "\n", "", -1)
+}
+
+func (s *Server) vlog(span opentracing.Span, k string, i interface{}) {
+	if serverVerboseLogs {
+		span.LogKV(k, dump(i))
+	}
 }

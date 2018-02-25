@@ -120,37 +120,6 @@ func main() {
 }
 
 func setup(logger log.Logger) (*jocko.Server, func()) {
-	// ports := dynaport.Get(3)
-	// config := &config.Config{
-	// 	ID:              brokerID,
-	// 	Bootstrap:       true,
-	// 	BootstrapExpect: 1,
-	// 	StartAsLeader:   true,
-	// 	DataDir:         logDir + "/logs",
-	// 	DevMode:         true,
-	// 	Addr:            fmt.Sprintf("127.0.0.1:%d", ports[1]),
-	// 	RaftAddr:        fmt.Sprintf("127.0.0.1:%d", ports[2]),
-	// }
-	// config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
-	// config.SerfLANConfig.MemberlistConfig.BindPort = ports[1]
-	// config.SerfLANConfig.MemberlistConfig.AdvertiseAddr = "127.0.0.1"
-	// config.SerfLANConfig.MemberlistConfig.AdvertisePort = ports[1]
-	// config.SerfLANConfig.MemberlistConfig.SuspicionMult = 2
-	// config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
-	// config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
-	// config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
-	// broker, err := broker.New(config, logger)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "failed starting broker: %v\n", err)
-	// 	os.Exit(1)
-	// }
-
-	// srv := server.New(&server.Config{BrokerAddr: brokerAddr, HTTPAddr: httpAddr}, broker, mock.NewMetrics(), logger)
-	// if err := srv.Start(context.Background()); err != nil {
-	// 	fmt.Fprintf(os.Stderr, "failed starting server: %v\n", err)
-	// 	os.Exit(1)
-	// }
-
 	var brokerID int32
 	c := jocko.NewTestServer(&testing.T{}, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
@@ -195,6 +164,7 @@ func setup(logger log.Logger) (*jocko.Server, func()) {
 	}
 
 	return c, func() {
+		c.Close()
 		os.RemoveAll(logDir)
 	}
 }

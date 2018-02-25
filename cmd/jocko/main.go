@@ -52,7 +52,6 @@ func init() {
 	brokerCmd.Flags().StringVar(&brokerCfg.DataDir, "data-dir", "/tmp/jocko", "A comma separated list of directories under which to store log files")
 	brokerCmd.Flags().StringVar(&brokerCfg.Broker.Addr, "broker-addr", "0.0.0.0:9092", "Address for broker to bind on")
 	brokerCmd.Flags().StringVar(&brokerCfg.Broker.SerfLANConfig.MemberlistConfig.BindAddr, "serf-addr", "0.0.0.0:9094", "Address for Serf to bind on") // TODO: can set addr alone or need to set bind port separately?
-	brokerCmd.Flags().StringVar(&brokerCfg.Server.HTTPAddr, "http-addr", ":9095", "Address for HTTP handlers to serve Prometheus metrics on")
 	brokerCmd.Flags().StringSliceVar(&brokerCfg.Broker.StartJoinAddrsLAN, "join", nil, "Address of an broker serf to join at start time. Can be specified multiple times.")
 	brokerCmd.Flags().StringSliceVar(&brokerCfg.Broker.StartJoinAddrsWAN, "join-wan", nil, "Address of an broker serf to join -wan at start time. Can be specified multiple times.")
 	brokerCmd.Flags().Int32Var(&brokerCfg.ID, "id", 0, "Broker ID")
@@ -74,7 +73,6 @@ func run(cmd *cobra.Command, args []string) {
 	logger := log.New().With(
 		log.Int32("id", brokerCfg.ID),
 		log.String("broker addr", brokerCfg.Server.BrokerAddr),
-		log.String("http addr", brokerCfg.Server.HTTPAddr),
 		log.String("serf addr", brokerCfg.Broker.SerfLANConfig.MemberlistConfig.BindAddr),
 		log.String("raft addr", brokerCfg.Broker.RaftAddr),
 	)
@@ -92,7 +90,7 @@ func run(cmd *cobra.Command, args []string) {
 	jLogger := jaegerlog.StdLogger
 	jMetricsFactory := metrics.NullFactory
 
-	tracer, _, err := cfg.New(
+	tracer, closer, err := cfg.New(
 		"jocko",
 		jaegercfg.Logger(jLogger),
 		jaegercfg.Metrics(jMetricsFactory),
@@ -107,7 +105,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	srv := jocko.NewServer(brokerCfg.Server, broker, nil, tracer, logger)
+	srv := jocko.NewServer(brokerCfg.Server, broker, nil, tracer, closer.Close, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)

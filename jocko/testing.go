@@ -50,7 +50,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 	jLogger := jaegerlog.StdLogger
 	jMetricsFactory := metrics.NullFactory
 
-	tracer, _, err := cfg.New(
+	tracer, closer, err := cfg.New(
 		"jocko",
 		jaegercfg.Logger(jLogger),
 		jaegercfg.Metrics(jMetricsFactory),
@@ -92,14 +92,13 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 
 	serverConfig := &ServerConfig{
 		BrokerAddr: brokerConfig.Addr,
-		HTTPAddr:   fmt.Sprintf("%s:%d", "127.0.0.1", ports[3]),
 	}
 
 	if cbServer != nil {
 		cbServer(serverConfig)
 	}
 
-	return NewServer(serverConfig, b, nil, tracer, logger)
+	return NewServer(serverConfig, b, nil, tracer, closer.Close, logger)
 }
 
 func TestJoin(t testing.T, s1 *Server, other ...*Server) {
