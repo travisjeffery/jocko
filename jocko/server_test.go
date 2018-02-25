@@ -3,20 +3,16 @@ package jocko_test
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"testing"
 
 	"github.com/Shopify/sarama"
+	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
-	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil"
 )
 
 const (
@@ -27,7 +23,7 @@ const (
 )
 
 func TestBroker(t *testing.T) {
-	bConfig, shutdown := setup(t)
+	srv, shutdown := setup(t)
 	defer shutdown()
 
 	t.Run("Sarama", func(t *testing.T) {
@@ -37,7 +33,7 @@ func TestBroker(t *testing.T) {
 		config.Producer.Return.Successes = true
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Retry.Max = 10
-		brokers := []string{bConfig.Addr}
+		brokers := []string{srv.Addr().String()}
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -70,7 +66,7 @@ func TestBroker(t *testing.T) {
 }
 
 func BenchmarkBroker(b *testing.B) {
-	bConfig, shutdown := setup(b)
+	srv, shutdown := setup(b)
 	defer shutdown()
 
 	config := sarama.NewConfig()
@@ -78,7 +74,7 @@ func BenchmarkBroker(b *testing.B) {
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 3
-	brokers := []string{bConfig.Addr}
+	brokers := []string{srv.Addr().String()}
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
@@ -120,30 +116,20 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t require.TestingT) (*config.BrokerConfig, func()) {
-	dataDir, err := ioutil.TempDir("", "server_test")
-	require.NoError(t, err)
-	logger := log.New()
-
-	ports := dynaport.Get(3)
-	dir, cfg := testutil.TestConfig(t.(*testing.T))
-	defer os.RemoveAll(dir)
-	cfg.Bootstrap = true
-	cfg.BootstrapExpect = 1
-	cfg.StartAsLeader = true
-
-	broker, err := jocko.NewBroker(cfg, nil, logger)
-	if err != nil {
-		panic(err)
-	}
-	require.NoError(t, err)
-
+func setup(t ti.T) (*jocko.Server, func()) {
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := jocko.NewServer(&jocko.ServerConfig{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, nil, nil, logger)
-	require.NotNil(t, srv)
-	require.NoError(t, srv.Start(ctx))
+	var dataDir string
+	srv := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+		dataDir = cfg.DataDir
+	}, nil)
+	if err := srv.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp", cfg.Addr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", srv.Addr().String())
 	require.NoError(t, err)
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
@@ -166,13 +152,11 @@ func setup(t require.TestingT) (*config.BrokerConfig, func()) {
 	require.NoError(t, err)
 	conn.Close()
 
-	return cfg, func() {
+	return srv, func() {
 		defer func() {
-			logger.Info("removing data dir")
 			os.RemoveAll(dataDir)
 		}()
 		cancel()
 		srv.Close()
-		broker.Shutdown()
 	}
 }
