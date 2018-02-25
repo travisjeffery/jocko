@@ -13,6 +13,11 @@ import (
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/uber/jaeger-lib/metrics"
+
+	"github.com/uber/jaeger-client-go"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
 var (
@@ -74,13 +79,35 @@ func run(cmd *cobra.Command, args []string) {
 		log.String("raft addr", brokerCfg.Broker.RaftAddr),
 	)
 
-	broker, err := jocko.NewBroker(brokerCfg.Broker, logger)
+	cfg := jaegercfg.Configuration{
+		Sampler: &jaegercfg.SamplerConfig{
+			Type:  jaeger.SamplerTypeConst,
+			Param: 1,
+		},
+		Reporter: &jaegercfg.ReporterConfig{
+			LogSpans: true,
+		},
+	}
+
+	jLogger := jaegerlog.StdLogger
+	jMetricsFactory := metrics.NullFactory
+
+	tracer, _, err := cfg.New(
+		"jocko",
+		jaegercfg.Logger(jLogger),
+		jaegercfg.Metrics(jMetricsFactory),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	broker, err := jocko.NewBroker(brokerCfg.Broker, tracer, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
 		os.Exit(1)
 	}
 
-	srv := jocko.NewServer(brokerCfg.Server, broker, nil, logger)
+	srv := jocko.NewServer(brokerCfg.Server, broker, nil, tracer, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)

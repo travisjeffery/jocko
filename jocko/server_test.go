@@ -153,10 +153,8 @@ func setup(t ti.T) (*jocko.Server, func()) {
 	conn.Close()
 
 	return srv, func() {
-		defer func() {
-			os.RemoveAll(dataDir)
-		}()
 		cancel()
 		srv.Close()
+		os.RemoveAll(dataDir)
 	}
 }
