@@ -132,14 +132,14 @@ func setup(t require.TestingT) (*config.BrokerConfig, func()) {
 	cfg.BootstrapExpect = 1
 	cfg.StartAsLeader = true
 
-	broker, err := jocko.NewBroker(cfg, logger)
+	broker, err := jocko.NewBroker(cfg, nil, logger)
 	if err != nil {
 		panic(err)
 	}
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel((context.Background()))
-	srv := jocko.NewServer(&jocko.ServerConfig{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, nil, logger)
+	srv := jocko.NewServer(&jocko.ServerConfig{BrokerAddr: cfg.Addr, HTTPAddr: fmt.Sprintf("127.0.0.1:%d", ports[2])}, broker, nil, nil, logger)
 	require.NotNil(t, srv)
 	require.NoError(t, srv.Start(ctx))
 

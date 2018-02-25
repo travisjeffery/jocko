@@ -6,10 +6,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
@@ -38,10 +41,11 @@ type Server struct {
 	metrics    *Metrics
 	requestCh  chan Request
 	responseCh chan Response
+	tracer     opentracing.Tracer
 	server     http.Server
 }
 
-func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, logger log.Logger) *Server {
+func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
 		broker:     broker,
@@ -50,6 +54,7 @@ func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, logger lo
 		shutdownCh: make(chan struct{}),
 		requestCh:  make(chan Request, 32),
 		responseCh: make(chan Response, 32),
+		tracer:     tracer,
 	}
 	s.logger.Info("hello")
 	return s
@@ -180,8 +185,6 @@ func (s *Server) handleRequest(conn net.Conn) {
 			panic(err)
 		}
 
-		s.logger.Debug("request", log.Int32("correlation id", header.CorrelationID), log.String("client id", header.ClientID), log.Uint32("size", size), log.Int16("api key", header.APIKey))
-
 		var req protocol.Decoder
 		switch header.APIKey {
 		case protocol.APIVersionsKey:
@@ -208,7 +211,16 @@ func (s *Server) handleRequest(conn net.Conn) {
 			panic(err)
 		}
 
+		span := s.tracer.StartSpan("request")
+		span.SetTag("api_key", header.APIKey)
+		span.SetTag("correlation_id", header.CorrelationID)
+		span.SetTag("client_id", header.ClientID)
+		span.SetTag("size", size)
+
+		ctx := opentracing.ContextWithSpan(context.Background(), span)
+
 		s.requestCh <- Request{
+			Ctx:     ctx,
 			Header:  header,
 			Request: req,
 			Conn:    conn,
@@ -217,7 +229,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 }
 
 func (s *Server) write(resp Response) error {
-	s.logger.Debug("response", log.Int32("correlation id", resp.Header.CorrelationID), log.Int16("api key", resp.Header.APIKey))
+	s.logger.Debug("response", log.Int32("correlation id", resp.Header.CorrelationID), log.Int16("api key", resp.Header.APIKey), log.String("request", dump(resp.Response)))
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err
@@ -233,4 +245,12 @@ func (s *Server) Addr() net.Addr {
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
+}
+
+func init() {
+	spew.Config.Indent = ""
+}
+
+func dump(i interface{}) string {
+	return strings.Replace(spew.Sdump(i), "\n", "", -1)
 }

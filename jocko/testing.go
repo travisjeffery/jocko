@@ -11,6 +11,12 @@ import (
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
+
+	"github.com/uber/jaeger-lib/metrics"
+
+	"github.com/uber/jaeger-client-go"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
 var (
@@ -28,14 +34,39 @@ func init() {
 }
 
 func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServer func(cfg *ServerConfig)) *Server {
-	ports := dynaport.GetS(4)
+	ports := dynaport.Get(4)
 	nodeID := atomic.AddInt32(&nodeNumber, 1)
 
+	cfg := jaegercfg.Configuration{
+		Sampler: &jaegercfg.SamplerConfig{
+			Type:  jaeger.SamplerTypeConst,
+			Param: 1,
+		},
+		Reporter: &jaegercfg.ReporterConfig{
+			LogSpans: true,
+		},
+	}
+
+	jLogger := jaegerlog.StdLogger
+	jMetricsFactory := metrics.NullFactory
+
+	tracer, _, err := cfg.New(
+		"jocko",
+		jaegercfg.Logger(jLogger),
+		jaegercfg.Metrics(jMetricsFactory),
+	)
+	if err != nil {
+		panic(err)
+	}
+
 	brokerConfig := config.DefaultBrokerConfig()
+	brokerConfig.ID = nodeID
+	brokerConfig.NodeName = fmt.Sprintf("%s-node-%d", t.Name(), nodeID)
 	brokerConfig.DataDir = filepath.Join(tempDir, fmt.Sprintf("node%d", nodeID))
-	brokerConfig.Addr = "127.0.0.1:" + ports[0]
-	brokerConfig.RaftAddr = "127.0.0.1:" + ports[1]
-	brokerConfig.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1:" + ports[2]
+	brokerConfig.Addr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[0])
+	brokerConfig.RaftAddr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[1])
+	brokerConfig.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
+	brokerConfig.SerfLANConfig.MemberlistConfig.BindPort = ports[2]
 
 	// Tighten the Serf timing
 	brokerConfig.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
@@ -54,21 +85,21 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 		cbBroker(brokerConfig)
 	}
 
-	b, err := NewBroker(brokerConfig, logger)
+	b, err := NewBroker(brokerConfig, tracer, logger)
 	if err != nil {
 		t.Fatalf("err != nil: %s", err)
 	}
 
 	serverConfig := &ServerConfig{
 		BrokerAddr: brokerConfig.Addr,
-		HTTPAddr:   "127.0.0.1:" + ports[3],
+		HTTPAddr:   fmt.Sprintf("%s:%d", "127.0.0.1", ports[3]),
 	}
 
 	if cbServer != nil {
 		cbServer(serverConfig)
 	}
 
-	return NewServer(serverConfig, b, nil, logger)
+	return NewServer(serverConfig, b, nil, tracer, logger)
 }
 
 func TestJoin(t testing.T, s1 *Server, other ...*Server) {

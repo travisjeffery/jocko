@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko/config"
@@ -65,13 +66,15 @@ type Broker struct {
 	fsm         *fsm.FSM
 	eventChLAN  chan serf.Event
 
+	tracer opentracing.Tracer
+
 	shutdownCh   chan struct{}
 	shutdown     bool
 	shutdownLock sync.Mutex
 }
 
 // New is used to instantiate a new broker.
-func NewBroker(config *config.BrokerConfig, logger log.Logger) (*Broker, error) {
+func NewBroker(config *config.BrokerConfig, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:        config,
 		logger:        logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
@@ -80,6 +83,7 @@ func NewBroker(config *config.BrokerConfig, logger log.Logger) (*Broker, error) 
 		brokerLookup:  NewBrokerLookup(),
 		replicaLookup: NewReplicaLookup(),
 		reconcileCh:   make(chan serf.Member, 32),
+		tracer:        tracer,
 	}
 
 	if b.logger == nil {
@@ -203,22 +207,6 @@ func (b *Broker) handleCreateTopic(header *protocol.RequestHeader, reqs *protoco
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
-			}
-			continue
-		}
-		if b.config.DevMode {
-			partitions := b.buildPartitions(req.Topic, req.NumPartitions, req.ReplicationFactor)
-			err := protocol.ErrNone
-			for _, p := range partitions {
-				replica := &Replica{Partition: p, BrokerID: b.config.ID}
-				b.replicaLookup.AddReplica(replica)
-				if err = b.startReplica(replica); err != protocol.ErrNone {
-					break
-				}
-			}
-			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
-				Topic:     req.Topic,
-				ErrorCode: err.Code(),
 			}
 			continue
 		}
@@ -434,6 +422,13 @@ func (b *Broker) handleMetadata(header *protocol.RequestHeader, req *protocol.Me
 				})
 				continue
 			}
+			if p == nil {
+				partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
+					ParititionID:       id,
+					PartitionErrorCode: protocol.ErrUnknownTopicOrPartition.Code(),
+				})
+				continue
+			}
 			partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
 				ParititionID:       p.ID,
 				PartitionErrorCode: protocol.ErrNone.Code(),
@@ -565,6 +560,7 @@ func (b *Broker) createPartition(partition structs.Partition) error {
 func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
+	b.logger.Debug("start replica", log.String("replica/partition", dump(replica.Partition)))
 	state := b.fsm.State()
 	_, topic, err := state.GetTopic(replica.Partition.Topic)
 	if err != nil {
@@ -629,7 +625,9 @@ func (b *Broker) createTopic(topic string, partitions int32, replicationFactor i
 	}
 	for _, partition := range ps {
 		req.PartitionStates = append(req.PartitionStates, &protocol.PartitionState{
-			Topic:    partition.Topic,
+			Topic:     partition.Topic,
+			Partition: partition.ID,
+			// TODO: ControllerEpoch, LeaderEpoch, ZKVersion
 			Leader:   partition.Leader,
 			ISR:      partition.ISR,
 			Replicas: partition.AR,
@@ -672,11 +670,12 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 			}
 		}
 		partition := structs.Partition{
-			Topic:  topic,
-			ID:     i,
-			Leader: leader,
-			AR:     replicas,
-			ISR:    replicas,
+			Topic:     topic,
+			ID:        i,
+			Partition: i,
+			Leader:    leader,
+			AR:        replicas,
+			ISR:       replicas,
 		}
 		partitions = append(partitions, partition)
 	}

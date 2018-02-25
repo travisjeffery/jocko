@@ -27,11 +27,6 @@ const (
 	messageCount  = 15
 	clientID      = "test_client"
 	numPartitions = int32(8)
-	brokerAddr    = "127.0.0.1:9092"
-	raftAddr      = "127.0.0.1:9093"
-	serfAddr      = "127.0.0.1:9094"
-	httpAddr      = "127.0.0.1:9095"
-	brokerID      = 0
 )
 
 var (
@@ -49,14 +44,15 @@ func init() {
 func main() {
 	logger := log.New()
 	logger = logger.With(log.String("example", "sarama"))
-	defer setup(logger)()
+	s, clean := setup(logger)
+	defer clean()
 
 	config := sarama.NewConfig()
 	config.ChannelBufferSize = 1
 	config.Version = sarama.V0_10_0_1
 	config.Producer.Return.Successes = true
 
-	brokers := []string{brokerAddr}
+	brokers := []string{s.Addr().String()}
 	producer, err := sarama.NewSyncProducer(brokers, config)
 	if err != nil {
 		panic(err)
@@ -123,7 +119,7 @@ func main() {
 	fmt.Printf("producer and consumer worked! %d messages ok\n", totalChecked)
 }
 
-func setup(logger log.Logger) func() {
+func setup(logger log.Logger) (*jocko.Server, func()) {
 	// ports := dynaport.Get(3)
 	// config := &config.Config{
 	// 	ID:              brokerID,
@@ -155,10 +151,12 @@ func setup(logger log.Logger) func() {
 	// 	os.Exit(1)
 	// }
 
+	var brokerID int32
 	c := jocko.NewTestServer(&testing.T{}, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
+		brokerID = cfg.ID
 	}, nil)
 	if err := c.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start cluster: %v\n", err)
@@ -182,8 +180,6 @@ func setup(logger log.Logger) func() {
 			Topic:             topic,
 			NumPartitions:     numPartitions,
 			ReplicationFactor: 1,
-			ReplicaAssignment: nil,
-			Configs:           nil,
 		}},
 	})
 	if err != nil {
@@ -198,7 +194,7 @@ func setup(logger log.Logger) func() {
 		}
 	}
 
-	return func() {
+	return c, func() {
 		os.RemoveAll(logDir)
 	}
 }

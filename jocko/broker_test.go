@@ -13,10 +13,10 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/require"
 
+	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"github.com/travisjeffery/jocko/testutil"
 )
 
 func TestBroker_Run(t *testing.T) {
@@ -370,23 +370,20 @@ func TestBroker_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			config.ID = 1
-			config.Bootstrap = true
-			config.BootstrapExpect = 1
-			config.StartAsLeader = true
-
-			defer os.RemoveAll(dir)
-
-			logger := log.New().With(log.String("test", tt.name))
-
-			b, err := NewBroker(config, logger)
-			require.NoError(t, err)
-			require.NotNil(t, b)
+			var dir string
+			b := NewTestServer(t, func(cfg *config.BrokerConfig) {
+				cfg.ID = 1
+				cfg.Bootstrap = true
+				cfg.BootstrapExpect = 1
+				cfg.StartAsLeader = true
+				cfg.Addr = "localhost:9092"
+				dir = cfg.DataDir
+			}, nil).broker
 
 			defer func() {
 				b.Leave()
 				b.Shutdown()
+				os.RemoveAll(dir)
 			}()
 
 			retry.Run(t, func(r *retry.R) {
@@ -453,15 +450,16 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir, config := testutil.TestConfig(t)
-			os.RemoveAll(dir)
-			b, err := NewBroker(config, tt.fields.logger)
-			if err != nil {
-				t.Error("expected no err")
-			}
-			if err != nil {
-				t.Errorf("NewBroker() error = %v, wanted nil", err)
-			}
+			var dir string
+			s := NewTestServer(t, func(cfg *config.BrokerConfig) {
+				cfg.ID = 1
+				cfg.Bootstrap = true
+				cfg.BootstrapExpect = 1
+				cfg.StartAsLeader = true
+				dir = cfg.DataDir
+			}, nil)
+			defer os.RemoveAll(dir)
+			b := s.broker
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -505,16 +503,11 @@ func newFields() fields {
 }
 
 func TestBroker_JoinLAN(t *testing.T) {
-	logger := log.New()
-	dir1, config1 := testutil.TestConfig(t)
-	b1, err := NewBroker(config1, logger)
-	require.NoError(t, err)
-	os.RemoveAll(dir1)
+	b1 := NewTestServer(t, nil, nil).broker
+	defer b1.Shutdown()
+	b2 := NewTestServer(t, nil, nil).broker
+	defer b2.Shutdown()
 
-	dir2, config2 := testutil.TestConfig(t)
-	b2, err := NewBroker(config2, logger)
-	os.RemoveAll(dir2)
-	require.NoError(t, err)
 	joinLAN(t, b1, b2)
 
 	retry.Run(t, func(r *retry.R) {
@@ -524,20 +517,17 @@ func TestBroker_JoinLAN(t *testing.T) {
 }
 
 func TestBroker_RegisterMember(t *testing.T) {
-	logger := log.New()
-	dir1, config1 := testutil.TestConfig(t)
-	config1.Bootstrap = true
-	config1.BootstrapExpect = 3
-	b1, err := NewBroker(config1, logger)
-	require.NoError(t, err)
-	os.RemoveAll(dir1)
+	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 3
+	}, nil).broker
+	defer b1.Shutdown()
 
-	dir2, config2 := testutil.TestConfig(t)
-	config2.Bootstrap = false
-	config2.BootstrapExpect = 3
-	b2, err := NewBroker(config2, logger)
-	os.RemoveAll(dir2)
-	require.NoError(t, err)
+	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil).broker
+	defer b2.Shutdown()
 
 	joinLAN(t, b2, b1)
 
@@ -565,21 +555,17 @@ func TestBroker_RegisterMember(t *testing.T) {
 }
 
 func TestBroker_FailedMember(t *testing.T) {
-	logger := log.New()
-	dir1, config1 := testutil.TestConfig(t)
-	config1.Bootstrap = true
-	config1.BootstrapExpect = 2
-	b1, err := NewBroker(config1, logger)
-	require.NoError(t, err)
-	os.RemoveAll(dir1)
+	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 2
+	}, nil).broker
+	defer b1.Shutdown()
 
-	dir2, config2 := testutil.TestConfig(t)
-	config2.Bootstrap = false
-	config2.BootstrapExpect = 2
-	config2.NonVoter = true
-	b2, err := NewBroker(config2, logger)
-	os.RemoveAll(dir2)
-	require.NoError(t, err)
+	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 2
+		cfg.NonVoter = true
+	}, nil).broker
 
 	waitForLeader(t, b1, b2)
 
@@ -604,21 +590,16 @@ func TestBroker_FailedMember(t *testing.T) {
 }
 
 func TestBroker_LeftMember(t *testing.T) {
-	logger := log.New()
-	dir1, config1 := testutil.TestConfig(t)
-	config1.Bootstrap = true
-	config1.BootstrapExpect = 2
-	b1, err := NewBroker(config1, logger)
-	require.NoError(t, err)
-	os.RemoveAll(dir1)
+	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 2
+	}, nil).broker
 
-	dir2, config2 := testutil.TestConfig(t)
-	config2.Bootstrap = false
-	config2.BootstrapExpect = 2
-	config2.NonVoter = true
-	b2, err := NewBroker(config2, logger)
-	os.RemoveAll(dir2)
-	require.NoError(t, err)
+	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 2
+		cfg.NonVoter = true
+	}, nil).broker
 
 	waitForLeader(t, b1, b2)
 
@@ -642,27 +623,23 @@ func TestBroker_LeftMember(t *testing.T) {
 }
 
 func TestBroker_LeaveLeader(t *testing.T) {
-	logger := log.New()
-	dir1, config1 := testutil.TestConfig(t)
-	config1.Bootstrap = true
-	config1.BootstrapExpect = 3
-	b1, err := NewBroker(config1, logger)
-	require.NoError(t, err)
-	defer os.RemoveAll(dir1)
+	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 3
+	}, nil).broker
+	defer b1.Shutdown()
 
-	dir2, config2 := testutil.TestConfig(t)
-	config2.Bootstrap = false
-	config2.BootstrapExpect = 3
-	b2, err := NewBroker(config2, logger)
-	defer os.RemoveAll(dir2)
-	require.NoError(t, err)
+	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil).broker
+	defer b2.Shutdown()
 
-	dir3, config3 := testutil.TestConfig(t)
-	config3.Bootstrap = false
-	config3.BootstrapExpect = 3
-	b3, err := NewBroker(config3, logger)
-	defer os.RemoveAll(dir3)
-	require.NoError(t, err)
+	b3 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil).broker
+	defer b3.Shutdown()
 
 	brokers := []*Broker{b1, b2, b3}
 
@@ -691,7 +668,7 @@ func TestBroker_LeaveLeader(t *testing.T) {
 		t.Fatal("leader should be ready for consistent reads")
 	}
 
-	err = leader.Leave()
+	err := leader.Leave()
 	require.NoError(t, err)
 
 	if leader.isReadyForConsistentReads() {
