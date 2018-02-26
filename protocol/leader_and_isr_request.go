@@ -28,6 +28,9 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 	var err error
 	e.PutInt32(r.ControllerID)
 	e.PutInt32(r.ControllerEpoch)
+	if err = e.PutArrayLength(len(r.PartitionStates)); err != nil {
+		return err
+	}
 	for _, p := range r.PartitionStates {
 		if err = e.PutString(p.Topic); err != nil {
 			return err
@@ -43,6 +46,16 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 		if err = e.PutInt32Array(p.Replicas); err != nil {
 			return err
 		}
+	}
+	if err = e.PutArrayLength(len(r.LiveLeaders)); err != nil {
+		return err
+	}
+	for _, ll := range r.LiveLeaders {
+		e.PutInt32(ll.ID)
+		if err = e.PutString(ll.Host); err != nil {
+			return err
+		}
+		e.PutInt32(ll.Port)
 	}
 	return nil
 }
@@ -68,6 +81,9 @@ func (r *LeaderAndISRRequest) Decode(d PacketDecoder) error {
 		if ps.Partition, err = d.Int32(); err != nil {
 			return err
 		}
+		if ps.ControllerEpoch, err = d.Int32(); err != nil {
+			return err
+		}
 		if ps.Leader, err = d.Int32(); err != nil {
 			return err
 		}
@@ -86,6 +102,9 @@ func (r *LeaderAndISRRequest) Decode(d PacketDecoder) error {
 		r.PartitionStates[i] = ps
 	}
 	leaderCount, err := d.ArrayLength()
+	if err != nil {
+		return err
+	}
 	r.LiveLeaders = make([]*LiveLeader, leaderCount)
 	for i := range r.LiveLeaders {
 		ll := new(LiveLeader)
