@@ -48,6 +48,9 @@ func (r *FetchResponses) Decode(d PacketDecoder) error {
 		return err
 	}
 	responseCount, err := d.ArrayLength()
+	if err != nil {
+		return err
+	}
 	r.Responses = make([]*FetchResponse, responseCount)
 
 	for i := range r.Responses {
@@ -57,6 +60,9 @@ func (r *FetchResponses) Decode(d PacketDecoder) error {
 			return err
 		}
 		partitionCount, err := d.ArrayLength()
+		if err != nil {
+			return err
+		}
 		ps := make([]*FetchPartitionResponse, partitionCount)
 		for j := range ps {
 			p := &FetchPartitionResponse{}
