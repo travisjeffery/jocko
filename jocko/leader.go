@@ -18,13 +18,17 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+const (
+	barrierWriteTimeout = 2 * time.Minute
+)
+
 // setupRaft is used to setup and initialize Raft.
 func (s *Broker) setupRaft() error {
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		if s.raft == nil && s.raftStore != nil {
 			if err := s.raftStore.Close(); err != nil {
-				s.logger.Error("failed to close raft store", log.Error("error", err))
+				s.logger.Error("leader: failed to close raft store", log.Error("error", err))
 			}
 		}
 	}()
@@ -86,7 +90,7 @@ func (s *Broker) setupRaft() error {
 		if err != nil {
 			return err
 		}
-		s.logger.Debug("setup raft: has existing state", log.Any("has state", hasState))
+		s.logger.Debug("leader: setup raft: has existing state", log.Any("has state", hasState))
 		if !hasState {
 			configuration := raft.Configuration{
 				Servers: []raft.Server{
@@ -122,7 +126,7 @@ func (s *Broker) monitorLeadership() {
 			switch {
 			case isLeader:
 				if weAreLeaderCh != nil {
-					s.logger.Error("attempted to start the leader loop while running")
+					s.logger.Error("leader: attempted to start the leader loop while running")
 					continue
 				}
 				weAreLeaderCh = make(chan struct{})
@@ -131,18 +135,18 @@ func (s *Broker) monitorLeadership() {
 					defer leaderLoop.Done()
 					s.leaderLoop(ch)
 				}(weAreLeaderCh)
-				s.logger.Info("cluster leadership acquired")
+				s.logger.Info("leader: cluster leadership acquired")
 
 			default:
 				if weAreLeaderCh == nil {
-					s.logger.Error("attempted to stop the leader loop while not running")
+					s.logger.Error("leader: attempted to stop the leader loop while not running")
 					continue
 				}
-				s.logger.Debug("shutting down leader loop")
+				s.logger.Debug("leader: shutting down leader loop")
 				close(weAreLeaderCh)
 				leaderLoop.Wait()
 				weAreLeaderCh = nil
-				s.logger.Info("cluster leadership lost")
+				s.logger.Info("leader: cluster leadership lost")
 			}
 		case <-s.shutdownCh:
 			return
@@ -167,29 +171,28 @@ func (s *Broker) leaderLoop(stopCh chan struct{}) {
 
 RECONCILE:
 	reconcileCh = nil
-	interval := time.After(60 * time.Second)
-	// start := time.Now()
-	barrier := s.raft.Barrier(2 * time.Minute)
+	interval := time.After(s.config.ReconcileInterval)
+	barrier := s.raft.Barrier(barrierWriteTimeout)
 	if err := barrier.Error(); err != nil {
-		s.logger.Error("failed to wait for barrier", log.Error("error", err))
+		s.logger.Error("leader: failed to wait for barrier", log.Error("error", err))
 		goto WAIT
 	}
 
 	if !establishedLeader {
 		if err := s.establishLeadership(); err != nil {
-			s.logger.Error("failedto establish leader", log.Error("error", err))
+			s.logger.Error("leader: failedto establish leader", log.Error("error", err))
 			goto WAIT
 		}
 		establishedLeader = true
 		defer func() {
 			if err := s.revokeLeadership(); err != nil {
-				s.logger.Error("failed to revoke leadership", log.Error("error", err))
+				s.logger.Error("leader: failed to revoke leadership", log.Error("error", err))
 			}
 		}()
 	}
 
 	if err := s.reconcile(); err != nil {
-		s.logger.Error("failed to reconcile", log.Error("error", err))
+		s.logger.Error("leader: failed to reconcile", log.Error("error", err))
 		goto WAIT
 	}
 
@@ -231,7 +234,7 @@ func (s *Broker) reconcileMember(m serf.Member) error {
 		err = s.handleLeftMember(m)
 	}
 	if err != nil {
-		s.logger.Error("failed to reconcile member", log.Any("member", m), log.Error("error", err))
+		s.logger.Error("leader: failed to reconcile member", log.Any("member", m), log.Error("error", err))
 	}
 	return nil
 }
@@ -252,7 +255,7 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 		// TODO: should still register?
 		return nil
 	}
-	s.logger.Info("member joined, marking health alive", log.Any("member", m))
+	s.logger.Info("leader: member joined, marking health alive", log.Any("member", m))
 	req := structs.RegisterNodeRequest{
 		Node: structs.Node{
 			Node:    b.ID.Int32(),
@@ -299,7 +302,7 @@ func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error
 	}
 
 	if meta.ID.Int32() == s.config.ID {
-		s.logger.Debug("deregistering self should be done by follower")
+		s.logger.Debug("leader: deregistering self should be done by follower")
 		return nil
 	}
 
@@ -316,7 +319,7 @@ func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error
 		return nil
 	}
 
-	s.logger.Info("member is deregistering", log.String("node", meta.ID.String()), log.String("reason", reason))
+	s.logger.Info("leader: member is deregistering", log.String("node", meta.ID.String()), log.String("reason", reason))
 	req := structs.DeregisterNodeRequest{
 		Node: structs.Node{Node: meta.ID.Int32()},
 	}
@@ -330,7 +333,7 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 		for _, member := range members {
 			p, ok := metadata.IsBroker(member)
 			if ok && member.Name != m.Name && p.Bootstrap {
-				s.logger.Error("multiple nodes in bootstrap mode. there can only be one.")
+				s.logger.Error("leader: multiple nodes in bootstrap mode. there can only be one.")
 				return nil
 			}
 		}
@@ -338,13 +341,13 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 
 	configFuture := s.raft.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
-		s.logger.Error("failed to get raft configuration", log.Error("error", err))
+		s.logger.Error("leader: failed to get raft configuration", log.Error("error", err))
 		return err
 	}
 
 	if m.Name == s.config.NodeName {
 		if l := len(configFuture.Configuration().Servers); l < 3 {
-			s.logger.Debug("skipping self join since cluster is too small", log.String("member name", m.Name))
+			s.logger.Debug("leader: skipping self join since cluster is too small", log.String("member name", m.Name))
 			return nil
 		}
 	}
@@ -352,14 +355,14 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 	if parts.NonVoter {
 		addFuture := s.raft.AddNonvoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
-			s.logger.Error("failed to add raft peer", log.Error("error", err))
+			s.logger.Error("leader: failed to add raft peer", log.Error("error", err))
 			return err
 		}
 	} else {
-		s.logger.Debug("join cluster: add voter", log.Any("member", parts))
+		s.logger.Debug("leader: join cluster: add voter", log.Any("member", parts))
 		addFuture := s.raft.AddVoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
-			s.logger.Error("failed to add raft peer", log.Error("error", err))
+			s.logger.Error("leader: failed to add raft peer", log.Error("error", err))
 			return err
 		}
 	}
@@ -495,14 +498,14 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
 	configFuture := s.raft.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
-		s.logger.Error("failed to get raft configuration", log.Error("error", err))
+		s.logger.Error("leader: failed to get raft configuration", log.Error("error", err))
 		return err
 	}
 	for _, server := range configFuture.Configuration().Servers {
-		s.logger.Info("removing server by id", log.Any("id", server.ID))
+		s.logger.Info("leader: removing server by id", log.Any("id", server.ID))
 		future := s.raft.RemoveServer(raft.ServerID(meta.ID), 0, 0)
 		if err := future.Error(); err != nil {
-			s.logger.Error("failed to remove server", log.Error("error", err))
+			s.logger.Error("leader: failed to remove server", log.Error("error", err))
 			return err
 		}
 	}
