@@ -795,6 +795,8 @@ func (s *Broker) Leave() error {
 		}
 	}
 
+	time.Sleep(s.config.LeaveDrainTime)
+
 	if !isLeader {
 		left := false
 		limit := time.Now().Add(5 * time.Second)

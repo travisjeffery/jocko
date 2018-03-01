@@ -70,6 +70,8 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 	brokerConfig.RaftAddr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[1])
 	brokerConfig.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
 	brokerConfig.SerfLANConfig.MemberlistConfig.BindPort = ports[2]
+	brokerConfig.LeaveDrainTime = 100 * time.Millisecond
+	brokerConfig.ReconcileInterval = 300 * time.Millisecond
 
 	// Tighten the Serf timing
 	brokerConfig.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"

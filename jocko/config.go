@@ -28,6 +28,8 @@ type BrokerConfig struct {
 	StartJoinAddrsWAN []string
 	NonVoter          bool
 	RaftAddr          string
+	LeaveDrainTime    time.Duration
+	ReconcileInterval time.Duration
 }
 
 // DefaultConfig creates/returns a default configuration.
@@ -38,10 +40,12 @@ func DefaultBrokerConfig() *BrokerConfig {
 	}
 
 	conf := &BrokerConfig{
-		DevMode:       false,
-		NodeName:      hostname,
-		SerfLANConfig: serfDefaultConfig(),
-		RaftConfig:    raft.DefaultConfig(),
+		DevMode:           false,
+		NodeName:          hostname,
+		SerfLANConfig:     serfDefaultConfig(),
+		RaftConfig:        raft.DefaultConfig(),
+		LeaveDrainTime:    5 * time.Second,
+		ReconcileInterval: 60 * time.Second,
 	}
 
 	conf.SerfLANConfig.ReconnectTimeout = 3 * 24 * time.Hour
