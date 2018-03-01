@@ -783,7 +783,7 @@ func (s *Broker) Leave() error {
 
 	isLeader := s.isLeader()
 	if isLeader && numPeers > 1 {
-		future := s.raft.RemoveServer(raft.ServerID(s.config.RaftAddr), 0, 0)
+		future := s.raft.RemoveServer(raft.ServerID(s.config.ID), 0, 0)
 		if err := future.Error(); err != nil {
 			s.logger.Error("failed to remove ourself as raft peer", log.Error("error", err))
 		}
