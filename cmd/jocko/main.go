@@ -32,10 +32,10 @@ var (
 		ID      int32
 		DataDir string
 		Broker  *config.BrokerConfig
-		Server  *jocko.ServerConfig
+		Server  *config.ServerConfig
 	}{
 		Broker: config.DefaultBrokerConfig(),
-		Server: &jocko.ServerConfig{},
+		Server: &config.ServerConfig{},
 	}
 
 	topicCfg = struct {

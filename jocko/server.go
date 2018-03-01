@@ -9,6 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/util"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
@@ -31,10 +32,6 @@ func init() {
 	}
 }
 
-type ServerConfig struct {
-	BrokerAddr string
-}
-
 // Broker is the interface that wraps the Broker's methods.
 type broker interface {
 	Run(context.Context, <-chan Request, chan<- Response)
@@ -44,7 +41,7 @@ type broker interface {
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	config     *ServerConfig
+	config     *config.ServerConfig
 	protocolLn *net.TCPListener
 	logger     log.Logger
 	broker     *Broker
@@ -56,7 +53,7 @@ type Server struct {
 	close      func() error
 }
 
-func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
+func NewServer(config *config.ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
 		broker:     broker,

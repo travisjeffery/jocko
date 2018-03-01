@@ -36,7 +36,7 @@ func init() {
 	}
 }
 
-func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServer func(cfg *ServerConfig)) (*Server, func()) {
+func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServer func(cfg *config.ServerConfig)) (*Server, func()) {
 	ports := dynaport.Get(4)
 	nodeID := atomic.AddInt32(&nodeNumber, 1)
 
@@ -95,7 +95,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 		t.Fatalf("err != nil: %s", err)
 	}
 
-	serverConfig := &ServerConfig{
+	serverConfig := &config.ServerConfig{
 		BrokerAddr: brokerConfig.Addr,
 	}
 
