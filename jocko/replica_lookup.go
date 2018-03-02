@@ -22,10 +22,6 @@ func (rl *replicaLookup) AddReplica(replica *Replica) {
 	defer rl.lock.Unlock()
 ADD:
 	if t, ok := rl.replica[replica.Partition.Topic]; ok {
-		if _, ok := t[replica.Partition.ID]; ok {
-			// replica exists already -- leave it?
-			return
-		}
 		t[replica.Partition.ID] = replica
 	} else {
 		rl.replica[replica.Partition.Topic] = make(map[int32]*Replica)
