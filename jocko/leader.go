@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
@@ -401,7 +400,6 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 	if err != nil {
 		panic(err)
 	}
-	spew.Dump("partitions before reassignment:", partitions)
 
 	// need to reassign partitions
 	_, partitions, err = state.PartitionsByLeader(meta.ID.Int32())
@@ -413,8 +411,6 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 		return err
 	}
 
-	spew.Dump("reassigning from node:", meta.ID)
-
 	// TODO: add an index for this. have same code in broker.go:handleMetadata(...)
 	var passing []*structs.Node
 	for _, n := range nodes {
@@ -422,8 +418,6 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 			passing = append(passing, n)
 		}
 	}
-
-	spew.Dump("hey")
 
 	leaderAndISRReq := &protocol.LeaderAndISRRequest{
 		ControllerID:    s.config.ID,
@@ -480,16 +474,13 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 	for _, n := range passing {
 		b := s.brokerLookup.BrokerByID(raft.ServerID(n.Node))
 		if b == nil {
-			brokers := s.brokerLookup.Brokers()
-			spew.Dump("brokers:", brokers)
 			panic(fmt.Errorf("trying to assign partitions to unknown broker: %#v", n))
 		}
 		client := NewClient(b)
-		resp, err := client.LeaderAndISR(s.config.NodeName, leaderAndISRReq)
+		_, err := client.LeaderAndISR(s.config.NodeName, leaderAndISRReq)
 		if err != nil {
 			return err
 		}
-		spew.Dump("leader and isr response:", resp)
 	}
 
 	return nil

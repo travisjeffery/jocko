@@ -122,19 +122,25 @@ func TestJoin(t testing.T, s1 *Server, other ...*Server) {
 
 // WaitForLeader waits for one of the servers to be leader, failing the test if no one is the leader. Returns the leader (if there is one) and non-leaders.
 func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
-	var leader *Server
-	var followers []*Server
+	tmp := struct {
+		leader    *Server
+		followers map[*Server]bool
+	}{nil, make(map[*Server]bool)}
 	retry.Run(t, func(r *retry.R) {
 		for _, s := range servers {
 			if raft.Leader == s.broker.raft.State() {
-				leader = s
+				tmp.leader = s
 			} else {
-				followers = append(followers, s)
+				tmp.followers[s] = true
 			}
 		}
-		if leader == nil {
+		if tmp.leader == nil {
 			r.Fatal("no leader")
 		}
 	})
-	return leader, followers
+	var followers []*Server
+	for f := range tmp.followers {
+		followers = append(followers, f)
+	}
+	return tmp.leader, followers
 }

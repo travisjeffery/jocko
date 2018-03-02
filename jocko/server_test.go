@@ -3,13 +3,11 @@ package jocko_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/davecgh/go-spew/spew"
 	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/jocko"
@@ -60,7 +58,10 @@ func TestServer(t *testing.T) {
 	err = createTopic(t, controller, others...)
 	require.NoError(t, err)
 
-	t.Run("Produce and consume", func(t *testing.T) {
+	// give raft enough time to register the topic
+	time.Sleep(500 * time.Millisecond)
+
+	t.Run("Produce and consume and replicate", func(t *testing.T) {
 		config := sarama.NewConfig()
 		config.Version = sarama.V0_10_0_0
 		config.ChannelBufferSize = 1
@@ -69,9 +70,13 @@ func TestServer(t *testing.T) {
 		config.Producer.Retry.Max = 10
 
 		brokers := []string{controller.Addr().String()}
-		// for _, o := range others {
-		// 	brokers = append(brokers, o.Addr().String())
-		// }
+		for _, o := range others {
+			brokers = append(brokers, o.Addr().String())
+		}
+
+		client, err := sarama.NewClient(brokers, config)
+		require.NoError(t, err)
+		require.Equal(t, 3, len(client.Brokers()))
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -101,7 +106,6 @@ func TestServer(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		fmt.Printf("closing controller: %d/%s\n", controller.ID(), controller.Addr().String())
 		switch controller {
 		case s1:
 			cancel1()
@@ -115,12 +119,16 @@ func TestServer(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		controller, others = jocko.WaitForLeader(t, others...)
-		fmt.Printf("elected controller: %d/%s\n", controller.ID(), controller.Addr().String())
 		// TODO: kill the controller, try consuming from one of the replicas
+
 		brokers = []string{controller.Addr().String()}
-		client, err := sarama.NewClient(brokers, config)
+		for _, o := range others {
+			brokers = append(brokers, o.Addr().String())
+		}
+
+		client, err = sarama.NewClient(brokers, config)
 		require.NoError(t, err)
-		spew.Dump("test brokers:", client.Brokers())
+		require.Equal(t, 2, len(client.Brokers()))
 		consumer, err = sarama.NewConsumer(brokers, config)
 		require.NoError(t, err)
 		cPartition, err = consumer.ConsumePartition(topic, pPartition, 0)
@@ -170,7 +178,7 @@ func BenchmarkServer(b *testing.B) {
 
 	var msgCount int
 
-	b.Run("Sarama_Produce", func(b *testing.B) {
+	b.Run("Produce", func(b *testing.B) {
 		msgCount = b.N
 
 		for i := 0; i < b.N; i++ {
@@ -182,7 +190,7 @@ func BenchmarkServer(b *testing.B) {
 		}
 	})
 
-	b.Run("Sarama_Consume", func(b *testing.B) {
+	b.Run("Consume", func(b *testing.B) {
 		consumer, err := sarama.NewConsumer(brokers, config)
 		require.NoError(b, err)
 

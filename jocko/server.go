@@ -226,14 +226,12 @@ func (s *Server) handleResponse(resp Response) error {
 	psp := opentracing.SpanFromContext(resp.Ctx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
 	s.vlog(sp, "response", resp.Response)
-	spew.Dump("resp:", resp)
 	defer psp.Finish()
 	defer sp.Finish()
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
-	spew.Dump("b:", b)
 	_, err = resp.Conn.Write(b)
 	return err
 }

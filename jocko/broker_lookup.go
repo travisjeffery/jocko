@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	"github.com/travisjeffery/jocko/jocko/metadata"
 )
@@ -25,7 +24,6 @@ func NewBrokerLookup() *brokerLookup {
 func (sl *brokerLookup) AddBroker(broker *metadata.Broker) {
 	sl.lock.Lock()
 	defer sl.lock.Unlock()
-	spew.Dump("add broker:", broker)
 	sl.addressToBroker[raft.ServerAddress(broker.RaftAddr)] = broker
 	sl.idToBroker[raft.ServerID(broker.ID.Int32())] = broker
 }
@@ -57,7 +55,6 @@ func (sl *brokerLookup) BrokerAddr(id raft.ServerID) (raft.ServerAddress, error)
 func (sl *brokerLookup) RemoveBroker(broker *metadata.Broker) {
 	sl.lock.Lock()
 	defer sl.lock.Unlock()
-	spew.Dump("remove broker:", broker)
 	delete(sl.addressToBroker, raft.ServerAddress(broker.RaftAddr))
 	delete(sl.idToBroker, raft.ServerID(broker.ID.Int32()))
 }
