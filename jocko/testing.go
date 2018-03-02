@@ -3,10 +3,13 @@ package jocko
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
 
+	"github.com/hashicorp/consul/testutil/retry"
+	"github.com/hashicorp/raft"
 	"github.com/mitchellh/go-testing-interface"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
@@ -33,7 +36,7 @@ func init() {
 	}
 }
 
-func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServer func(cfg *ServerConfig)) *Server {
+func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServer func(cfg *ServerConfig)) (*Server, func()) {
 	ports := dynaport.Get(4)
 	nodeID := atomic.AddInt32(&nodeNumber, 1)
 
@@ -98,7 +101,9 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 		cbServer(serverConfig)
 	}
 
-	return NewServer(serverConfig, b, nil, tracer, closer.Close, logger)
+	return NewServer(serverConfig, b, nil, tracer, closer.Close, logger), func() {
+		os.RemoveAll(brokerConfig.DataDir)
+	}
 }
 
 func TestJoin(t testing.T, s1 *Server, other ...*Server) {
@@ -111,4 +116,23 @@ func TestJoin(t testing.T, s1 *Server, other ...*Server) {
 			t.Fatalf("bad: %d", num)
 		}
 	}
+}
+
+// WaitForLeader waits for one of the servers to be leader, failing the test if no one is the leader. Returns the leader (if there is one) and non-leaders.
+func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
+	var leader *Server
+	var followers []*Server
+	retry.Run(t, func(r *retry.R) {
+		for _, s := range servers {
+			if raft.Leader == s.broker.raft.State() {
+				leader = s
+			} else {
+				followers = append(followers, s)
+			}
+		}
+		if leader == nil {
+			r.Fatal("no leader")
+		}
+	})
+	return leader, followers
 }
