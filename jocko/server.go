@@ -126,7 +126,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 // Close closes the service.
 func (s *Server) Close() {
-	close(s.shutdownCh)
+	// close(s.shutdownCh)
+	s.broker.Shutdown()
 	s.protocolLn.Close()
 	s.close()
 }

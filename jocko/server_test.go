@@ -3,10 +3,13 @@ package jocko_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/davecgh/go-spew/spew"
 	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/jocko"
@@ -19,14 +22,13 @@ const (
 )
 
 func TestServer(t *testing.T) {
-	ctx, cancel := context.WithCancel((context.Background()))
-	defer cancel()
-
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true
 	}, nil)
-	err := s1.Start(ctx)
+	ctx1, cancel1 := context.WithCancel((context.Background()))
+	defer cancel1()
+	err := s1.Start(ctx1)
 	require.NoError(t, err)
 	defer teardown1()
 	// TODO: mv close into teardown
@@ -35,7 +37,9 @@ func TestServer(t *testing.T) {
 	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 	}, nil)
-	err = s2.Start(ctx)
+	ctx2, cancel2 := context.WithCancel((context.Background()))
+	defer cancel2()
+	err = s2.Start(ctx2)
 	require.NoError(t, err)
 	defer teardown2()
 	defer s2.Close()
@@ -43,7 +47,9 @@ func TestServer(t *testing.T) {
 	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 	}, nil)
-	err = s3.Start(ctx)
+	ctx3, cancel3 := context.WithCancel((context.Background()))
+	defer cancel3()
+	err = s3.Start(ctx3)
 	require.NoError(t, err)
 	defer teardown3()
 	defer s3.Close()
@@ -54,14 +60,18 @@ func TestServer(t *testing.T) {
 	err = createTopic(t, controller, others...)
 	require.NoError(t, err)
 
-	t.Run("Sarama", func(t *testing.T) {
+	t.Run("Produce and consume", func(t *testing.T) {
 		config := sarama.NewConfig()
 		config.Version = sarama.V0_10_0_0
 		config.ChannelBufferSize = 1
 		config.Producer.Return.Successes = true
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Retry.Max = 10
+
 		brokers := []string{controller.Addr().String()}
+		// for _, o := range others {
+		// 	brokers = append(brokers, o.Addr().String())
+		// }
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -79,6 +89,41 @@ func TestServer(t *testing.T) {
 		require.NoError(t, err)
 
 		cPartition, err := consumer.ConsumePartition(topic, pPartition, 0)
+		require.NoError(t, err)
+
+		select {
+		case msg := <-cPartition.Messages():
+			require.Equal(t, msg.Offset, offset)
+			require.Equal(t, pPartition, msg.Partition)
+			require.Equal(t, topic, msg.Topic)
+			require.Equal(t, 0, bytes.Compare(bValue, msg.Value))
+		case err := <-cPartition.Errors():
+			require.NoError(t, err)
+		}
+
+		fmt.Printf("closing controller: %d/%s\n", controller.ID(), controller.Addr().String())
+		switch controller {
+		case s1:
+			cancel1()
+		case s2:
+			cancel2()
+		case s3:
+			cancel3()
+		}
+		controller.Close()
+
+		time.Sleep(3 * time.Second)
+
+		controller, others = jocko.WaitForLeader(t, others...)
+		fmt.Printf("elected controller: %d/%s\n", controller.ID(), controller.Addr().String())
+		// TODO: kill the controller, try consuming from one of the replicas
+		brokers = []string{controller.Addr().String()}
+		client, err := sarama.NewClient(brokers, config)
+		require.NoError(t, err)
+		spew.Dump("brokers", client.Brokers())
+		consumer, err = sarama.NewConsumer(brokers, config)
+		require.NoError(t, err)
+		cPartition, err = consumer.ConsumePartition(topic, pPartition, 0)
 		require.NoError(t, err)
 
 		select {
