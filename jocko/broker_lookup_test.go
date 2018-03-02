@@ -11,8 +11,8 @@ import (
 func TestNewBrokerLookup(t *testing.T) {
 	lookup := NewBrokerLookup()
 	addr := "10.0.0.1:9092"
-	id := int32(1)
-	svr := &metadata.Broker{ID: id, RaftAddr: addr}
+	id := "1"
+	svr := &metadata.Broker{ID: metadata.NodeID(id), RaftAddr: addr}
 
 	lookup.AddBroker(svr)
 	got, err := lookup.BrokerAddr(raft.ServerID(id))
