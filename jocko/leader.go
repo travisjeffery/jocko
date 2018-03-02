@@ -241,7 +241,7 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 		}
 	}
 	state := s.fsm.State()
-	_, node, err := state.GetNode(b.RaftAddr)
+	_, node, err := state.GetNode(b.ID.String())
 	if err != nil {
 		return err
 	}
@@ -250,7 +250,24 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 		return nil
 	}
 	s.logger.Info("member joined, marking health alive", log.Any("member", m))
-	req := structs.RegisterNodeRequest{Node: structs.Node{Node: b.RaftAddr}}
+	req := structs.RegisterNodeRequest{
+		Node: structs.Node{
+			Node:    fmt.Sprintf("%s", b.ID),
+			Address: b.BrokerAddr,
+			Meta: map[string]string{
+				"raft_addr":     b.RaftAddr,
+				"serf_lan_addr": b.SerfLANAddr,
+				"name":          b.Name,
+			},
+			Check: &structs.HealthCheck{
+				Node:    b.RaftAddr,
+				CheckID: structs.SerfCheckID,
+				Name:    structs.SerfCheckName,
+				Status:  structs.HealthPassing,
+				Output:  structs.SerfCheckAliveOutput,
+			},
+		},
+	}
 	_, err = s.raftApply(structs.RegisterNodeRequestType, &req)
 	return err
 }
@@ -349,7 +366,16 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 
 func (s *Broker) handleFailedMember(m serf.Member) error {
 	req := structs.RegisterNodeRequest{
-		Node: structs.Node{Node: m.Tags["raft_addr"]},
+		Node: structs.Node{
+			Node: m.Tags["raft_addr"],
+			Check: &structs.HealthCheck{
+				Node:    m.Tags["raft_addr"],
+				CheckID: structs.SerfCheckID,
+				Name:    structs.SerfCheckName,
+				Status:  structs.HealthCritical,
+				Output:  structs.SerfCheckFailedOutput,
+			},
+		},
 	}
 	_, err := s.raftApply(structs.RegisterNodeRequestType, &req)
 	return err

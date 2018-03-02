@@ -17,6 +17,25 @@ const (
 	DeregisterPartitionRequestType             = 5
 )
 
+type CheckID string
+
+const (
+	SerfCheckID           CheckID = "serf health"
+	SerfCheckName                 = "Serf health status"
+	SerfCheckAliveOutput          = "Node alive and reachable"
+	SerfCheckFailedOutput         = "Node not live or unreachable"
+)
+
+const (
+	// HealthAny is special, and is used as a wild card,
+	// not as a specific state.
+	HealthAny      = "any"
+	HealthPassing  = "passing"
+	HealthWarning  = "warning"
+	HealthCritical = "critical"
+	HealthMaint    = "maintenance"
+)
+
 type RegisterNodeRequest struct {
 	Node Node
 }
@@ -67,6 +86,7 @@ type Node struct {
 	ID      string
 	Node    string
 	Address string
+	Check   *HealthCheck
 	Meta    map[string]string
 	RaftIndex
 }
@@ -83,13 +103,11 @@ type NodeService struct {
 
 // HealthCheck represents a single check on a given node
 type HealthCheck struct {
-	Node        string
-	CheckID     string
-	Status      string
-	Nodes       string
-	ServiceID   string
-	ServiceName string
-	ServiceTags []string
+	Node    string
+	CheckID CheckID // unique check id
+	Name    string  // check name
+	Status  string  // current check stauts
+	Output  string  // output of script runs
 	RaftIndex
 }
 
