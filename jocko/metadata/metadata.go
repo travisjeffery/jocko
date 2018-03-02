@@ -7,9 +7,23 @@ import (
 	"github.com/hashicorp/serf/serf"
 )
 
+type NodeID string
+
+func (n NodeID) Int32() int32 {
+	i, err := strconv.Atoi(string(n))
+	if err != nil {
+		panic(err)
+	}
+	return int32(i)
+}
+
+func (n NodeID) String() string {
+	return string(n)
+}
+
 type Broker struct {
+	ID          NodeID
 	Name        string
-	ID          int32
 	Bootstrap   bool
 	Expect      int
 	NonVoter    bool
@@ -80,14 +94,8 @@ func IsBroker(m serf.Member) (*Broker, bool) {
 	_, bootstrap := m.Tags["bootstrap"]
 	_, nonVoter := m.Tags["non_voter"]
 
-	idStr := m.Tags["id"]
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		return nil, false
-	}
-
 	return &Broker{
-		ID:          int32(id),
+		ID:          NodeID(m.Tags["id"]),
 		Name:        m.Tags["name"],
 		Bootstrap:   bootstrap,
 		Expect:      expect,
