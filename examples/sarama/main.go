@@ -120,12 +120,10 @@ func main() {
 }
 
 func setup(logger log.Logger) (*jocko.Server, func()) {
-	var brokerID int32
-	c := jocko.NewTestServer(&testing.T{}, func(cfg *config.BrokerConfig) {
+	c, cancel := jocko.NewTestServer(&testing.T{}, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
-		brokerID = cfg.ID
 	}, nil)
 	if err := c.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start cluster: %v\n", err)
@@ -164,6 +162,7 @@ func setup(logger log.Logger) (*jocko.Server, func()) {
 	}
 
 	return c, func() {
+		cancel()
 		c.Close()
 		os.RemoveAll(logDir)
 	}
