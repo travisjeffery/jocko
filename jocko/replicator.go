@@ -81,7 +81,15 @@ func (r *Replicator) fetchMessages() {
 			}
 			for _, resp := range fetchResponse.Responses {
 				for _, p := range resp.PartitionResponses {
-					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8])) + 1
+					if p.ErrorCode != protocol.ErrNone.Code() {
+						r.logger.Error("partition response error", log.Int16("error code", p.ErrorCode), log.Any("response", p))
+						continue
+					}
+					if p.RecordSet == nil {
+						r.logger.Debug("replicator: fetch messages: record set is nil")
+						continue
+					}
+					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8]))
 					if offset > r.offset {
 						r.msgs <- p.RecordSet
 						r.highwaterMarkOffset = p.HighWatermark
