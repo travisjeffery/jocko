@@ -28,11 +28,10 @@ Kafka/distributed commit log service in Go.
     - [x] Metadata
     - [x] Create Topics
     - [x] Delete Topics
-    - [ ] Consumer group
+    - [ ] Consumer group [current task]
 - [x] Discovery
-- [ ] API versioning
-- [ ] Replication [current task]
-- [ ] Tests [current task]
+- [ ] API versioning [more API versions to implement]
+- [ ] Replication [first draft done - testing heavily now]
 
 ## Reading
 
