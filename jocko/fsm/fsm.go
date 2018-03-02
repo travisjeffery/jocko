@@ -40,6 +40,7 @@ func registerCommand(msg structs.MessageType, fn unboundCommand) {
 }
 
 type NodeID int32
+type Tracer opentracing.Tracer
 
 // FSM implements a finite state machine used with Raft to provide strong consistency.
 type FSM struct {
@@ -52,15 +53,17 @@ type FSM struct {
 }
 
 // New returns a new FSM instance.
-func New(logger log.Logger, tracer opentracing.Tracer, args ...interface{}) (*FSM, error) {
+func New(logger log.Logger, args ...interface{}) (*FSM, error) {
 	var nodeID NodeID
+	var tracer Tracer
 	for _, arg := range args {
 		switch a := arg.(type) {
 		case NodeID:
 			nodeID = a
+		case Tracer:
+			tracer = a
 		}
 	}
-
 	store, err := NewStore(logger, tracer, nodeID)
 	if err != nil {
 		return nil, err
@@ -172,7 +175,7 @@ type Store struct {
 	nodeID    NodeID
 }
 
-func NewStore(logger log.Logger, tracer opentracing.Tracer, args ...interface{}) (*Store, error) {
+func NewStore(logger log.Logger, args ...interface{}) (*Store, error) {
 	dbSchema := &memdb.DBSchema{
 		Tables: make(map[string]*memdb.TableSchema),
 	}
@@ -192,12 +195,13 @@ func NewStore(logger log.Logger, tracer opentracing.Tracer, args ...interface{})
 		db:        db,
 		abandonCh: make(chan struct{}),
 		logger:    logger,
-		tracer:    tracer,
 	}
 	for _, arg := range args {
 		switch a := arg.(type) {
 		case NodeID:
 			s.nodeID = a
+		case Tracer:
+			s.tracer = a
 		}
 	}
 	return s, nil
@@ -235,6 +239,25 @@ func (s *Store) GetNode(id string) (uint64, *structs.Node, error) {
 		return idx, node.(*structs.Node), nil
 	}
 	return idx, nil, nil
+}
+
+func (s *Store) GetNodes() (uint64, []*structs.Node, error) {
+	sp := s.tracer.StartSpan("store: get nodes")
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+
+	idx := maxIndexTxn(tx, "nodes")
+	it, err := tx.Get("nodes", "id")
+	if err != nil {
+		return 0, nil, fmt.Errorf("node lookup failed: %s", err)
+	}
+	var nodes []*structs.Node
+	for next := it.Next(); next != nil; next = it.Next() {
+		nodes = append(nodes, next.(*structs.Node))
+	}
+	return idx, nodes, nil
 }
 
 // EnsureNode is used to upsert nodes.

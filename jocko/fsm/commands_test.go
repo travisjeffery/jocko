@@ -4,16 +4,16 @@ import (
 	"testing"
 
 	"github.com/hashicorp/raft"
+	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 )
 
 func TestRegisterNode(t *testing.T) {
-	fsm, err := New(log.New())
+	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-
 	req := structs.RegisterNodeRequest{
 		Node: structs.Node{Node: "node1"},
 	}
@@ -40,7 +40,7 @@ func TestRegisterNode(t *testing.T) {
 }
 
 func TestRegisterTopic(t *testing.T) {
-	fsm, err := New(log.New())
+	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestRegisterTopic(t *testing.T) {
 }
 
 func TestRegisterPartition(t *testing.T) {
-	fsm, err := New(log.New())
+	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

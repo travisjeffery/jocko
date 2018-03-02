@@ -4,12 +4,13 @@ import (
 	"reflect"
 	"testing"
 
+	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
 )
 
 func testStore(t *testing.T) *Store {
-	s, err := NewStore(log.New())
+	s, err := NewStore(log.New(), stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -66,6 +67,10 @@ func TestStore_DeleteNode(t *testing.T) {
 	// add the node
 	testRegisterNode(t, s, 0, "node1")
 
+	if idx, ns, err := s.GetNodes(); err != nil || len(ns) != 1 || idx != 0 {
+		t.Fatalf("bad: %#v %d (err: %#v)", ns, idx, err)
+	}
+
 	// delete the node
 	if err := s.DeleteNode(1, "node1"); err != nil {
 		t.Fatalf("err: %s", err)
@@ -74,6 +79,10 @@ func TestStore_DeleteNode(t *testing.T) {
 	// check it's gone
 	if idx, n, err := s.GetNode("node1"); err != nil || n != nil || idx != 1 {
 		t.Fatalf("bad: %#v %d (err: %#v)", n, idx, err)
+	}
+
+	if idx, ns, err := s.GetNodes(); err != nil || len(ns) != 0 || idx != 1 {
+		t.Fatalf("bad: %#v %d (err: %#v)", ns, idx, err)
 	}
 
 	// index is updated
