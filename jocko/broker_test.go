@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/raft"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 
 	"github.com/travisjeffery/jocko/jocko/config"
@@ -371,19 +371,27 @@ func TestBroker_Run(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var dir string
-			b := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
 				dir = cfg.DataDir
-			}, nil).broker
+			}, nil)
+			b := s.broker
+
+			ctx, cancel := context.WithCancel(context.Background())
+			span := b.tracer.StartSpan("TestBroker_Run")
+			span.SetTag("name", tt.name)
+			span.SetTag("test", true)
+			defer span.Finish()
+			runCtx := opentracing.ContextWithSpan(ctx, span)
 
 			defer func() {
 				b.Leave()
 				b.Shutdown()
-				os.RemoveAll(dir)
+				teardown()
 			}()
 
 			retry.Run(t, func(r *retry.R) {
@@ -409,11 +417,15 @@ func TestBroker_Run(t *testing.T) {
 					}
 				}
 			}
-			ctx, cancel := context.WithCancel(context.Background())
+
 			go b.Run(ctx, tt.args.requestCh, tt.args.responseCh)
 
 			for i := 0; i < len(tt.args.requests); i++ {
-				tt.args.requestCh <- tt.args.requests[i]
+				req := tt.args.requests[i]
+				reqSpan := b.tracer.StartSpan("request", opentracing.ChildOf(span.Context()))
+				req.Ctx = opentracing.ContextWithSpan(runCtx, reqSpan)
+				tt.args.requestCh <- req
+
 				response := <-tt.args.responseCh
 
 				if tt.handle != nil {
@@ -451,14 +463,14 @@ func TestBroker_Shutdown(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var dir string
-			s := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				dir = cfg.DataDir
 			}, nil)
-			defer os.RemoveAll(dir)
+			defer teardown()
 			b := s.broker
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
@@ -503,9 +515,13 @@ func newFields() fields {
 }
 
 func TestBroker_JoinLAN(t *testing.T) {
-	b1 := NewTestServer(t, nil, nil).broker
+	s1, t1 := NewTestServer(t, nil, nil)
+	b1 := s1.broker
+	defer t1()
 	defer b1.Shutdown()
-	b2 := NewTestServer(t, nil, nil).broker
+	s2, t2 := NewTestServer(t, nil, nil)
+	b2 := s2.broker
+	defer t2()
 	defer b2.Shutdown()
 
 	joinLAN(t, b1, b2)
@@ -517,16 +533,20 @@ func TestBroker_JoinLAN(t *testing.T) {
 }
 
 func TestBroker_RegisterMember(t *testing.T) {
-	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
-	}, nil).broker
+	}, nil)
+	b1 := s1.broker
+	defer t1()
 	defer b1.Shutdown()
 
-	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
-	}, nil).broker
+	}, nil)
+	b2 := s2.broker
+	defer t2()
 	defer b2.Shutdown()
 
 	joinLAN(t, b2, b1)
@@ -555,17 +575,21 @@ func TestBroker_RegisterMember(t *testing.T) {
 }
 
 func TestBroker_FailedMember(t *testing.T) {
-	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 2
-	}, nil).broker
+	}, nil)
+	b1 := s1.broker
+	defer t1()
 	defer b1.Shutdown()
 
-	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 2
 		cfg.NonVoter = true
-	}, nil).broker
+	}, nil)
+	b2 := s2.broker
+	defer t2()
 
 	waitForLeader(t, b1, b2)
 
@@ -590,16 +614,20 @@ func TestBroker_FailedMember(t *testing.T) {
 }
 
 func TestBroker_LeftMember(t *testing.T) {
-	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 2
-	}, nil).broker
+	}, nil)
+	b1 := s1.broker
+	defer t1()
 
-	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 2
 		cfg.NonVoter = true
-	}, nil).broker
+	}, nil)
+	b2 := s2.broker
+	defer t2()
 
 	waitForLeader(t, b1, b2)
 
@@ -623,22 +651,28 @@ func TestBroker_LeftMember(t *testing.T) {
 }
 
 func TestBroker_LeaveLeader(t *testing.T) {
-	b1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
-	}, nil).broker
+	}, nil)
+	b1 := s1.broker
+	defer t1()
 	defer b1.Shutdown()
 
-	b2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
-	}, nil).broker
+	}, nil)
+	b2 := s2.broker
+	defer t2()
 	defer b2.Shutdown()
 
-	b3 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s3, t3 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
-	}, nil).broker
+	}, nil)
+	b3 := s3.broker
+	defer t3()
 	defer b3.Shutdown()
 
 	brokers := []*Broker{b1, b2, b3}

@@ -139,6 +139,11 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 			header = request.Header
 			reqCtx = request.Ctx
 
+			queueSpan, ok := reqCtx.Value(requestQueueSpanKey).(opentracing.Span)
+			if ok {
+				queueSpan.Finish()
+			}
+
 			switch req := request.Request.(type) {
 			case *protocol.APIVersionsRequest:
 				resp = b.handleAPIVersions(reqCtx, header, req)
@@ -161,7 +166,11 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 			return
 		}
 
-		responsec <- Response{Ctx: reqCtx, Conn: conn, Header: header, Response: &protocol.Response{
+		parentSpan := opentracing.SpanFromContext(reqCtx)
+		queueSpan := b.tracer.StartSpan("broker: queue response", opentracing.ChildOf(parentSpan.Context()))
+		responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
+
+		responsec <- Response{Ctx: responseCtx, Conn: conn, Header: header, Response: &protocol.Response{
 			CorrelationID: header.CorrelationID,
 			Body:          resp,
 		}}
@@ -205,14 +214,14 @@ var (
 func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing.Span {
 	if ctx == nil {
 		// only done for unit tests
-		return tracer.StartSpan(op)
+		return tracer.StartSpan("broker: " + op)
 	}
 	parentSpan := opentracing.SpanFromContext(ctx)
 	if parentSpan == nil {
 		// only done for unit tests
-		return tracer.StartSpan(op)
+		return tracer.StartSpan("broker: " + op)
 	}
-	return tracer.StartSpan(op, opentracing.ChildOf(parentSpan.Context()))
+	return tracer.StartSpan("broker: "+op, opentracing.ChildOf(parentSpan.Context()))
 }
 
 func (b *Broker) handleAPIVersions(ctx context.Context, header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
@@ -227,6 +236,7 @@ func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.Request
 	resp := new(protocol.CreateTopicsResponse)
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := b.isController()
+	sp.LogKV("is controller", isController)
 	for i, req := range reqs.Requests {
 		if !isController {
 			resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
@@ -441,7 +451,7 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 			panic(err)
 		}
 		brokers = append(brokers, &protocol.Broker{
-			NodeID: b.config.ID,
+			NodeID: m.ID,
 			Host:   host,
 			Port:   int32(port),
 		})
