@@ -436,7 +436,25 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 	defer sp.Finish()
 	state := b.fsm.State()
 	brokers := make([]*protocol.Broker, 0, len(b.LANMembers()))
+
+	_, nodes, err := state.GetNodes()
+	if err != nil {
+		panic(err)
+	}
+
+	var passing []*structs.Node
+	for _, n := range nodes {
+		if n.Check.Status == structs.HealthPassing {
+			passing = append(passing, n)
+		}
+	}
+
 	for _, mem := range b.LANMembers() {
+		// TODO: should filter elsewhere
+		if mem.Status != serf.StatusAlive {
+			continue
+		}
+
 		m, ok := metadata.IsBroker(mem)
 		if !ok {
 			continue
@@ -451,7 +469,7 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 			panic(err)
 		}
 		brokers = append(brokers, &protocol.Broker{
-			NodeID: m.ID,
+			NodeID: m.ID.Int32(),
 			Host:   host,
 			Port:   int32(port),
 		})
@@ -688,7 +706,7 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 	}
 	// TODO: can optimize this
 	for _, s := range b.brokerLookup.Brokers() {
-		if s.ID == b.config.ID {
+		if s.ID.Int32() == b.config.ID {
 			errCode := b.handleLeaderAndISR(ctx, nil, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
@@ -701,7 +719,6 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 				panic(err)
 			}
 		}
-
 	}
 	return protocol.ErrNone
 }
@@ -712,7 +729,7 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 	var partitions []structs.Partition
 
 	for i := int32(0); i < partitionsCount; i++ {
-		leader := mems[i%memCount].ID
+		leader := mems[i%memCount].ID.Int32()
 		replicas := []int32{leader}
 		for replica := rand.Int31n(memCount); len(replicas) < int(replicationFactor); replica++ {
 			if replica != leader {
