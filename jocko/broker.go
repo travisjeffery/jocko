@@ -2,6 +2,7 @@ package jocko
 
 import (
 	"bytes"
+	"container/ring"
 	"context"
 	"fmt"
 	"io"
@@ -309,26 +310,28 @@ func (b *Broker) handleLeaderAndISR(ctx context.Context, header *protocol.Reques
 			Topic:     p.Topic,
 		}
 	}
+	spew.Dump("leader and isr req:", req)
 	for i, p := range req.PartitionStates {
-		replica, err := b.replicaLookup.Replica(p.Topic, p.Partition)
+		_, err := b.replicaLookup.Replica(p.Topic, p.Partition)
 		isNew := err != nil
-		if err != nil {
-			replica = &Replica{
-				BrokerID: b.config.ID,
-				Partition: structs.Partition{
-					ID:              p.Partition,
-					Partition:       p.Partition,
-					Topic:           p.Topic,
-					ISR:             p.ISR,
-					AR:              p.Replicas,
-					ControllerEpoch: p.ZKVersion,
-					LeaderEpoch:     p.LeaderEpoch,
-					Leader:          p.Leader,
-				},
-				IsLocal: true,
-			}
-			b.replicaLookup.AddReplica(replica)
+
+		// TODO: need to replace the replica regardless
+		replica := &Replica{
+			BrokerID: b.config.ID,
+			Partition: structs.Partition{
+				ID:              p.Partition,
+				Partition:       p.Partition,
+				Topic:           p.Topic,
+				ISR:             p.ISR,
+				AR:              p.Replicas,
+				ControllerEpoch: p.ZKVersion,
+				LeaderEpoch:     p.LeaderEpoch,
+				Leader:          p.Leader,
+			},
+			IsLocal: true,
 		}
+		b.replicaLookup.AddReplica(replica)
+
 		if err := b.startReplica(replica); err != protocol.ErrNone {
 			setErr(i, p, err)
 			continue
@@ -373,6 +376,7 @@ func (b *Broker) handleOffsets(ctx context.Context, header *protocol.RequestHead
 			if p.Timestamp == -2 {
 				offset = replica.Log.OldestOffset()
 			} else {
+				// TODO: this is nil because i'm not sending the leader and isr requests telling the new leader to start the replica and instantiate the log...
 				offset = replica.Log.NewestOffset()
 			}
 			pResp.Offsets = []int64{offset}
@@ -437,11 +441,18 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 	state := b.fsm.State()
 	brokers := make([]*protocol.Broker, 0, len(b.LANMembers()))
 
+	_, partitions, err := state.GetPartitions()
+	if err != nil {
+		panic(err)
+	}
+	spew.Dump("partitions:", partitions)
+
 	_, nodes, err := state.GetNodes()
 	if err != nil {
 		panic(err)
 	}
 
+	// TODO: add an index to the table on the check status
 	var passing []*structs.Node
 	for _, n := range nodes {
 		if n.Check.Status == structs.HealthPassing {
@@ -633,7 +644,9 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
 	state := b.fsm.State()
+	// TODO: the issue with reassignment is i gotta update the fsm state, seems the topic isn't being updated...
 	_, topic, err := state.GetTopic(replica.Partition.Topic)
+	spew.Dump("topic:", topic, "node:", b.config.ID)
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
@@ -641,7 +654,7 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 		return protocol.ErrUnknownTopicOrPartition
 	}
 	var isReplica bool
-	for _, replica := range topic.Partitions[replica.Partition.ID] {
+	for _, replica := range topic.Partitions[replica.Partition.Partition] {
 		if replica == b.config.ID {
 			isReplica = true
 			break
@@ -724,26 +737,31 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 }
 
 func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicationFactor int16) []structs.Partition {
-	mems := b.brokerLookup.Brokers()
-	memCount := int32(len(mems))
+	brokers := b.brokerLookup.Brokers()
+	count := len(brokers)
+
+	// container/ring is dope af
+	r := ring.New(count)
+	for i := 0; i < r.Len(); i++ {
+		r.Value = brokers[i]
+		r = r.Next()
+	}
+
 	var partitions []structs.Partition
 
 	for i := int32(0); i < partitionsCount; i++ {
-		leader := mems[i%memCount].ID.Int32()
-		replicas := []int32{leader}
-		for replica := rand.Int31n(memCount); len(replicas) < int(replicationFactor); replica++ {
-			if replica != leader {
-				replicas = append(replicas, replica)
-			}
-			if replica+1 == memCount {
-				replica = -1
-			}
+		r = r.Move(rand.Intn(count))
+		leader := r.Value.(*metadata.Broker)
+		replicas := []int32{leader.ID.Int32()}
+		for i := int16(0); i < replicationFactor-1; i++ {
+			r = r.Next()
+			replicas = append(replicas, r.Value.(*metadata.Broker).ID.Int32())
 		}
 		partition := structs.Partition{
 			Topic:     topic,
 			ID:        i,
 			Partition: i,
-			Leader:    leader,
+			Leader:    leader.ID.Int32(),
 			AR:        replicas,
 			ISR:       replicas,
 		}

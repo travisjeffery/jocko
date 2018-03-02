@@ -120,7 +120,7 @@ func TestServer(t *testing.T) {
 		brokers = []string{controller.Addr().String()}
 		client, err := sarama.NewClient(brokers, config)
 		require.NoError(t, err)
-		spew.Dump("brokers", client.Brokers())
+		spew.Dump("test brokers:", client.Brokers())
 		consumer, err = sarama.NewConsumer(brokers, config)
 		require.NoError(t, err)
 		cPartition, err = consumer.ConsumePartition(topic, pPartition, 0)

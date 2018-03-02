@@ -566,6 +566,44 @@ func (s *Store) GetPartition(topic string, id int32) (uint64, *structs.Partition
 	return idx, nil, nil
 }
 
+// PartitionsByLeader is used to return all partitions for the given leader.
+func (s *Store) PartitionsByLeader(leader int32) (uint64, []*structs.Partition, error) {
+	sp := s.tracer.StartSpan("store: partitions by leader")
+	sp.SetTag("leader", leader)
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "partitions")
+	it, err := tx.Get("partitions", "leader", leader)
+	if err != nil {
+		return 0, nil, err
+	}
+	var partitions []*structs.Partition
+	for next := it.Next(); next != nil; next = it.Next() {
+		partitions = append(partitions, next.(*structs.Partition))
+	}
+	return idx, partitions, nil
+}
+
+func (s *Store) GetPartitions() (uint64, []*structs.Partition, error) {
+	sp := s.tracer.StartSpan("store: get partitions")
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "partitions")
+	it, err := tx.Get("partitions", "id")
+	if err != nil {
+		return 0, nil, err
+	}
+	var partitions []*structs.Partition
+	for next := it.Next(); next != nil; next = it.Next() {
+		partitions = append(partitions, next.(*structs.Partition))
+	}
+	return idx, partitions, nil
+}
+
 // DeletePartition is used to delete partitions.
 func (s *Store) DeletePartition(idx uint64, topic string, partition int32) error {
 	sp := s.tracer.StartSpan("store: delete partition")
@@ -785,6 +823,14 @@ func partitionsTableSchema() *memdb.TableSchema {
 				Unique:       false,
 				Indexer: &memdb.StringFieldIndex{
 					Field: "Topic",
+				},
+			},
+			"leader": &memdb.IndexSchema{
+				Name:         "leader",
+				AllowMissing: false,
+				Unique:       false,
+				Indexer: &IntFieldIndex{
+					Field: "Leader",
 				},
 			},
 		},

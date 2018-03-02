@@ -2,10 +2,12 @@ package jocko
 
 import (
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
@@ -13,6 +15,7 @@ import (
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 // setupRaft is used to setup and initialize Raft.
@@ -382,8 +385,111 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 			},
 		},
 	}
-	_, err := s.raftApply(structs.RegisterNodeRequestType, &req)
-	return err
+
+	if _, err := s.raftApply(structs.RegisterNodeRequestType, &req); err != nil {
+		return err
+	}
+
+	// TODO should put all the following some where else. maybe onBrokerChange or handleBrokerChange
+
+	state := s.fsm.State()
+
+	_, partitions, err := state.GetPartitions()
+	if err != nil {
+		panic(err)
+	}
+	spew.Dump("partitions before reassignment:", partitions)
+
+	// need to reassign partitions
+	_, partitions, err = state.PartitionsByLeader(meta.ID.Int32())
+	if err != nil {
+		return err
+	}
+	_, nodes, err := state.GetNodes()
+	if err != nil {
+		return err
+	}
+
+	spew.Dump("reassigning from node:", meta.ID)
+
+	// TODO: add an index for this. have same code in broker.go:handleMetadata(...)
+	var passing []*structs.Node
+	for _, n := range nodes {
+		if n.Check.Status == structs.HealthPassing && n.ID != meta.ID.Int32() {
+			passing = append(passing, n)
+		}
+	}
+
+	spew.Dump("hey")
+
+	leaderAndISRReq := &protocol.LeaderAndISRRequest{
+		ControllerID:    s.config.ID,
+		PartitionStates: make([]*protocol.PartitionState, 0, len(partitions)),
+		// TODO: LiveLeaders, ControllerEpoch
+	}
+	for _, p := range partitions {
+		i := rand.Intn(len(passing))
+		// TODO: check that old leader won't be in this list, will have been deregistered removed from fsm
+		node := passing[i]
+
+		// TODO: need to check replication factor
+
+		var ar []int32
+		for _, r := range p.AR {
+			if r != meta.ID.Int32() {
+				ar = append(ar, r)
+			}
+		}
+		var isr []int32
+		for _, r := range p.ISR {
+			if r != meta.ID.Int32() {
+				isr = append(isr, r)
+			}
+		}
+
+		// TODO: need to update epochs
+
+		req := structs.RegisterPartitionRequest{
+			Partition: structs.Partition{
+				Topic:     p.Topic,
+				ID:        p.Partition,
+				Partition: p.Partition,
+				Leader:    node.Node,
+				AR:        ar,
+				ISR:       isr,
+			},
+		}
+		if _, err = s.raftApply(structs.RegisterPartitionRequestType, req); err != nil {
+			return err
+		}
+		// TODO: need to send on leader and isr changes now i think
+		leaderAndISRReq.PartitionStates = append(leaderAndISRReq.PartitionStates, &protocol.PartitionState{
+			Topic:     p.Topic,
+			Partition: p.Partition,
+			// TODO: ControllerEpoch, LeaderEpoch, ZKVersion - lol
+			Leader:   p.Leader,
+			ISR:      p.ISR,
+			Replicas: p.AR,
+		})
+	}
+
+	// TODO: optimize this to send requests to only nodes affected
+	for _, n := range passing {
+		b := s.brokerLookup.BrokerByID(raft.ServerID(n.Node))
+		if b == nil {
+			brokers := s.brokerLookup.Brokers()
+			spew.Dump("brokers:", brokers)
+			panic(fmt.Errorf("trying to assign partitions to unknown broker: %#v", n))
+		}
+		client := NewClient(b)
+		resp, err := client.LeaderAndISR(s.config.NodeName, leaderAndISRReq)
+		if err != nil {
+			return err
+		}
+		spew.Dump("leader and isr response:", resp)
+	}
+
+	return nil
 }
 
 func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
