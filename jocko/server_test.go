@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"os"
 	"testing"
 
 	"github.com/Shopify/sarama"
@@ -16,15 +15,44 @@ import (
 )
 
 const (
-	topic         = "test_topic"
-	messageCount  = 15
-	clientID      = "test_client"
-	numPartitions = int32(1)
+	topic = "test_topic"
 )
 
-func TestBroker(t *testing.T) {
-	srv, shutdown := setup(t)
-	defer shutdown()
+func TestServer(t *testing.T) {
+	ctx, cancel := context.WithCancel((context.Background()))
+	defer cancel()
+
+	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.BootstrapExpect = 3
+		cfg.Bootstrap = true
+	}, nil)
+	err := s1.Start(ctx)
+	require.NoError(t, err)
+	defer teardown1()
+	// TODO: mv close into teardown
+	defer s1.Close()
+
+	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+	}, nil)
+	err = s2.Start(ctx)
+	require.NoError(t, err)
+	defer teardown2()
+	defer s2.Close()
+
+	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = false
+	}, nil)
+	err = s3.Start(ctx)
+	require.NoError(t, err)
+	defer teardown3()
+	defer s3.Close()
+
+	jocko.TestJoin(t, s1, s2, s3)
+	controller, others := jocko.WaitForLeader(t, s1, s2, s3)
+
+	err = createTopic(t, controller, others...)
+	require.NoError(t, err)
 
 	t.Run("Sarama", func(t *testing.T) {
 		config := sarama.NewConfig()
@@ -33,7 +61,7 @@ func TestBroker(t *testing.T) {
 		config.Producer.Return.Successes = true
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Retry.Max = 10
-		brokers := []string{srv.Addr().String()}
+		brokers := []string{controller.Addr().String()}
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -65,9 +93,20 @@ func TestBroker(t *testing.T) {
 	})
 }
 
-func BenchmarkBroker(b *testing.B) {
-	srv, shutdown := setup(b)
-	defer shutdown()
+func BenchmarkServer(b *testing.B) {
+	ctx, cancel := context.WithCancel((context.Background()))
+	defer cancel()
+	srv, teardown := jocko.NewTestServer(b, func(cfg *config.BrokerConfig) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+	}, nil)
+	defer teardown()
+	err := srv.Start(ctx)
+	require.NoError(b, err)
+
+	err = createTopic(b, srv)
+	require.NoError(b, err)
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V0_10_0_0
@@ -116,45 +155,31 @@ func BenchmarkBroker(b *testing.B) {
 	})
 }
 
-func setup(t ti.T) (*jocko.Server, func()) {
-	ctx, cancel := context.WithCancel((context.Background()))
-	var dataDir string
-	srv := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
-		cfg.Bootstrap = true
-		cfg.BootstrapExpect = 1
-		cfg.StartAsLeader = true
-		dataDir = cfg.DataDir
-	}, nil)
-	if err := srv.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	tcpAddr, err := net.ResolveTCPAddr("tcp", srv.Addr().String())
+func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", s1.Addr().String())
 	require.NoError(t, err)
-
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	require.NoError(t, err)
-
 	client := jocko.NewClient(conn)
+
+	assignment := []int32{s1.ID()}
+	for _, o := range other {
+		assignment = append(assignment, o.ID())
+	}
+
 	_, err = client.CreateTopics("testclient", &protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
 			NumPartitions:     int32(1),
-			ReplicationFactor: int16(1),
+			ReplicationFactor: int16(3),
 			ReplicaAssignment: map[int32][]int32{
-				0: []int32{0, 1},
+				0: assignment,
 			},
 			Configs: map[string]string{
 				"config_key": "config_val",
 			},
 		}},
 	})
-	require.NoError(t, err)
-	conn.Close()
 
-	return srv, func() {
-		cancel()
-		srv.Close()
-		os.RemoveAll(dataDir)
-	}
+	return err
 }
