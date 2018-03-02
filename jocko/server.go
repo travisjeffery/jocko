@@ -9,12 +9,17 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/travisjeffery/jocko/jocko/util"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+type contextKey string
+
 var (
-	serverVerboseLogs bool
+	serverVerboseLogs    bool
+	requestQueueSpanKey  = contextKey("request queue span key")
+	responseQueueSpanKey = contextKey("response queue span key")
 )
 
 func init() {
@@ -55,7 +60,7 @@ func NewServer(config *ServerConfig, broker *Broker, metrics *Metrics, tracer op
 	s := &Server{
 		config:     config,
 		broker:     broker,
-		logger:     logger.With(log.Any("config", config)),
+		logger:     logger.With(log.Int32("node id", broker.config.ID), log.String("addr", broker.config.Addr)),
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
 		requestCh:  make(chan Request, 32),
@@ -104,6 +109,9 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.shutdownCh:
 				break
 			case resp := <-s.responseCh:
+				if queueSpan, ok := resp.Ctx.Value(responseQueueSpanKey).(opentracing.Span); ok {
+					queueSpan.Finish()
+				}
 				if err := s.handleResponse(resp); err != nil {
 					s.logger.Error("failed to write response", log.Error("error", err))
 				}
@@ -140,6 +148,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		span := s.tracer.StartSpan("request")
+		decodeSpan := s.tracer.StartSpan("server: decode request", opentracing.ChildOf(span.Context()))
 
 		size := protocol.Encoding.Uint32(p)
 		if size == 0 {
@@ -164,6 +173,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 			panic(err)
 		}
 
+		span.SetTag("api_key", header.APIKey)
+		span.SetTag("correlation_id", header.CorrelationID)
+		span.SetTag("client_id", header.ClientID)
+		span.SetTag("size", size)
+		span.SetTag("node_id", s.broker.config.ID) // can I set this globally for the tracer?
+
 		var req protocol.Decoder
 		switch header.APIKey {
 		case protocol.APIVersionsKey:
@@ -185,18 +200,20 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		if err := req.Decode(d); err != nil {
+			s.logger.Error("failed to decode request", log.Error("err", err), log.Any("header", header))
 			span.LogKV("msg", "failed to decode request", "err", err)
 			span.Finish()
 			panic(err)
 		}
 
-		span.SetTag("api_key", header.APIKey)
-		span.SetTag("correlation_id", header.CorrelationID)
-		span.SetTag("client_id", header.ClientID)
-		span.SetTag("size", size)
+		decodeSpan.Finish()
+
 		s.vlog(span, "request", req)
 
 		ctx := opentracing.ContextWithSpan(context.Background(), span)
+
+		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
+		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
 
 		s.requestCh <- Request{
 			Ctx:     ctx,
@@ -209,14 +226,16 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 func (s *Server) handleResponse(resp Response) error {
 	psp := opentracing.SpanFromContext(resp.Ctx)
-	sp := s.tracer.StartSpan("response", opentracing.ChildOf(psp.Context()))
+	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
 	s.vlog(sp, "response", resp.Response)
+	spew.Dump("resp:", resp)
 	defer psp.Finish()
 	defer sp.Finish()
 	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
+	spew.Dump("b:", b)
 	_, err = resp.Conn.Write(b)
 	return err
 }
@@ -226,12 +245,12 @@ func (s *Server) Addr() net.Addr {
 	return s.protocolLn.Addr()
 }
 
-func dump(i interface{}) string {
-	return strings.Replace(spew.Sdump(i), "\n", "", -1)
+func (s *Server) ID() int32 {
+	return s.broker.config.ID
 }
 
 func (s *Server) vlog(span opentracing.Span, k string, i interface{}) {
 	if serverVerboseLogs {
-		span.LogKV(k, dump(i))
+		span.LogKV(k, util.Dump(i))
 	}
 }
