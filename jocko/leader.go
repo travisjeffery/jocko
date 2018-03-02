@@ -17,6 +17,7 @@ import (
 
 // setupRaft is used to setup and initialize Raft.
 func (s *Broker) setupRaft() error {
+	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		if s.raft == nil && s.raftStore != nil {
 			if err := s.raftStore.Close(); err != nil {
@@ -26,7 +27,7 @@ func (s *Broker) setupRaft() error {
 	}()
 
 	var err error
-	s.fsm, err = fsm.New(s.logger)
+	s.fsm, err = fsm.New(s.logger, s.tracer, fsm.NodeID(s.config.ID))
 	if err != nil {
 		return err
 	}
@@ -41,14 +42,14 @@ func (s *Broker) setupRaft() error {
 	s.config.RaftConfig.StartAsLeader = s.config.StartAsLeader
 
 	// build an in-memory setup for dev mode, disk-based otherwise.
-	var log raft.LogStore
+	var logStore raft.LogStore
 	var stable raft.StableStore
 	var snap raft.SnapshotStore
 	if s.config.DevMode {
 		store := raft.NewInmemStore()
 		s.raftInmem = store
 		stable = store
-		log = store
+		logStore = store
 		snap = raft.NewInmemSnapshotStore()
 	} else {
 		path := filepath.Join(s.config.DataDir, raftState)
@@ -68,7 +69,7 @@ func (s *Broker) setupRaft() error {
 		if err != nil {
 			return err
 		}
-		log = cacheStore
+		logStore = cacheStore
 
 		snapshots, err := raft.NewFileSnapshotStore(path, snapshotsRetained, nil)
 		if err != nil {
@@ -78,10 +79,11 @@ func (s *Broker) setupRaft() error {
 	}
 
 	if s.config.Bootstrap || s.config.DevMode {
-		hasState, err := raft.HasExistingState(log, stable, snap)
+		hasState, err := raft.HasExistingState(logStore, stable, snap)
 		if err != nil {
 			return err
 		}
+		s.logger.Debug("setup raft: has existing state", log.Any("has state", hasState))
 		if !hasState {
 			configuration := raft.Configuration{
 				Servers: []raft.Server{
@@ -91,7 +93,7 @@ func (s *Broker) setupRaft() error {
 					},
 				},
 			}
-			if err := raft.BootstrapCluster(s.config.RaftConfig, log, stable, snap, trans, configuration); err != nil {
+			if err := raft.BootstrapCluster(s.config.RaftConfig, logStore, stable, snap, trans, configuration); err != nil {
 				return err
 			}
 		}
@@ -103,7 +105,7 @@ func (s *Broker) setupRaft() error {
 	s.raftNotifyCh = raftNotifyCh
 
 	// setup raft store
-	s.raft, err = raft.NewRaft(s.config.RaftConfig, s.fsm, log, stable, snap, trans)
+	s.raft, err = raft.NewRaft(s.config.RaftConfig, s.fsm, logStore, stable, snap, trans)
 	return err
 }
 
@@ -334,6 +336,7 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 			return err
 		}
 	} else {
+		s.logger.Debug("join cluster: add voter", log.Any("member", parts))
 		addFuture := s.raft.AddVoter(raft.ServerID(parts.RaftAddr), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			s.logger.Error("failed to add raft peer", log.Error("error", err))
