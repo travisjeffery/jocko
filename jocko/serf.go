@@ -109,7 +109,7 @@ func (s *Broker) maybeBootstrap() {
 		return
 	}
 	if index != 0 {
-		s.logger.Info("raft data found, disabling bootstrap mode")
+		s.logger.Info("raft data found, disabling bootstrap mode", log.String("store path", filepath.Join(s.config.DataDir, raftState)))
 		s.config.BootstrapExpect = 0
 		return
 	}
@@ -133,6 +133,7 @@ func (s *Broker) maybeBootstrap() {
 	}
 
 	if len(brokers) < s.config.BootstrapExpect {
+		s.logger.Debug("maybe bootstrap: need more brokers", log.Int("brokers", len(brokers)), log.Int("bootstrap expect", s.config.BootstrapExpect))
 		return
 	}
 
