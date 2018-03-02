@@ -555,7 +555,7 @@ func TestBroker_RegisterMember(t *testing.T) {
 
 	state := b1.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.RaftAddr)
+		_, node, err := state.GetNode(b2.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -564,7 +564,7 @@ func TestBroker_RegisterMember(t *testing.T) {
 		}
 	})
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b1.config.RaftAddr)
+		_, node, err := state.GetNode(b1.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -601,7 +601,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	// Should be registered
 	state := b1.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.RaftAddr)
+		_, node, err := state.GetNode(b2.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -640,7 +640,7 @@ func TestBroker_LeftMember(t *testing.T) {
 	// Should be deregistered
 	state := b1.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.RaftAddr)
+		_, node, err := state.GetNode(b2.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -730,7 +730,7 @@ func TestBroker_LeaveLeader(t *testing.T) {
 
 	state := remain.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(leader.config.RaftAddr)
+		_, node, err := state.GetNode(leader.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}

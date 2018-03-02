@@ -20,11 +20,11 @@ func testStore(t *testing.T) *Store {
 	return s
 }
 
-func testRegisterNode(t *testing.T, s *Store, idx uint64, nodeID string) {
+func testRegisterNode(t *testing.T, s *Store, idx uint64, nodeID int32) {
 	testRegisterNodeWithMeta(t, s, idx, nodeID, nil)
 }
 
-func testRegisterNodeWithMeta(t *testing.T, s *Store, idx uint64, nodeID string, meta map[string]string) {
+func testRegisterNodeWithMeta(t *testing.T, s *Store, idx uint64, nodeID int32, meta map[string]string) {
 	node := &structs.Node{Node: nodeID, Meta: meta}
 	if err := s.EnsureNode(idx, node); err != nil {
 		t.Fatalf("err: %s", err)
@@ -42,8 +42,8 @@ func testRegisterNodeWithMeta(t *testing.T, s *Store, idx uint64, nodeID string,
 
 func TestStore_maxIndex(t *testing.T) {
 	s := testStore(t)
-	testRegisterNode(t, s, 0, "foo")
-	testRegisterNode(t, s, 1, "bar")
+	testRegisterNode(t, s, 0, 1)
+	testRegisterNode(t, s, 1, 2)
 
 	if max := s.maxIndex("nodes", "services"); max != 1 {
 		t.Fatalf("bad max: %d", max)
@@ -65,19 +65,19 @@ func TestStore_DeleteNode(t *testing.T) {
 	s := testStore(t)
 
 	// add the node
-	testRegisterNode(t, s, 0, "node1")
+	testRegisterNode(t, s, 0, 1)
 
 	if idx, ns, err := s.GetNodes(); err != nil || len(ns) != 1 || idx != 0 {
 		t.Fatalf("bad: %#v %d (err: %#v)", ns, idx, err)
 	}
 
 	// delete the node
-	if err := s.DeleteNode(1, "node1"); err != nil {
+	if err := s.DeleteNode(1, 1); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
-	if idx, n, err := s.GetNode("node1"); err != nil || n != nil || idx != 1 {
+	if idx, n, err := s.GetNode(1); err != nil || n != nil || idx != 1 {
 		t.Fatalf("bad: %#v %d (err: %#v)", n, idx, err)
 	}
 
@@ -91,7 +91,7 @@ func TestStore_DeleteNode(t *testing.T) {
 	}
 
 	// deleting should be idempotent
-	if err := s.DeleteNode(4, "node1"); err != nil {
+	if err := s.DeleteNode(4, 1); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 	if idx := s.maxIndex("nodes"); idx != 1 {
@@ -160,6 +160,10 @@ func TestStore_RegisterPartition(t *testing.T) {
 		t.Fatalf("err: %s, partition: %v", err, p)
 	}
 
+	if _, p, err := s.PartitionsByLeader(partitionLeader); err != nil || p == nil || len(p) != 1 {
+		t.Fatalf("err: %s, partition: %v", err, p)
+	}
+
 	// delete the partition
 	if err := s.DeletePartition(1, "test-topic", 1); err != nil {
 		t.Fatalf("err: %s", err)
@@ -184,8 +188,12 @@ func TestStore_RegisterPartition(t *testing.T) {
 	}
 }
 
+const (
+	partitionLeader = 1
+)
+
 func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic string) {
-	if err := s.EnsurePartition(idx, &structs.Partition{Partition: id, Topic: topic}); err != nil {
+	if err := s.EnsurePartition(idx, &structs.Partition{Partition: id, Topic: topic, Leader: partitionLeader}); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 	tx := s.db.Txn(false)

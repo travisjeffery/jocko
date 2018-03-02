@@ -83,8 +83,8 @@ type RaftIndex struct {
 
 // Node is used to return info about a node
 type Node struct {
-	ID      string
-	Node    string
+	ID      int32
+	Node    int32
 	Address string
 	Check   *HealthCheck
 	Meta    map[string]string

@@ -1,24 +1,21 @@
 package metadata
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 
 	"github.com/hashicorp/serf/serf"
 )
 
-type NodeID string
+type NodeID int32
 
 func (n NodeID) Int32() int32 {
-	i, err := strconv.Atoi(string(n))
-	if err != nil {
-		panic(err)
-	}
-	return int32(i)
+	return int32(n)
 }
 
 func (n NodeID) String() string {
-	return string(n)
+	return fmt.Sprintf("%d", n)
 }
 
 type Broker struct {
@@ -94,8 +91,14 @@ func IsBroker(m serf.Member) (*Broker, bool) {
 	_, bootstrap := m.Tags["bootstrap"]
 	_, nonVoter := m.Tags["non_voter"]
 
+	idStr := m.Tags["id"]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return nil, false
+	}
+
 	return &Broker{
-		ID:          NodeID(m.Tags["id"]),
+		ID:          NodeID(id),
 		Name:        m.Tags["name"],
 		Bootstrap:   bootstrap,
 		Expect:      expect,

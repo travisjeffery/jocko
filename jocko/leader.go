@@ -38,7 +38,7 @@ func (s *Broker) setupRaft() error {
 	}
 	s.raftTransport = trans
 
-	s.config.RaftConfig.LocalID = raft.ServerID(s.config.RaftAddr)
+	s.config.RaftConfig.LocalID = raft.ServerID(s.config.ID)
 	s.config.RaftConfig.StartAsLeader = s.config.StartAsLeader
 
 	// build an in-memory setup for dev mode, disk-based otherwise.
@@ -241,7 +241,7 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 		}
 	}
 	state := s.fsm.State()
-	_, node, err := state.GetNode(b.ID.String())
+	_, node, err := state.GetNode(b.ID.Int32())
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 	s.logger.Info("member joined, marking health alive", log.Any("member", m))
 	req := structs.RegisterNodeRequest{
 		Node: structs.Node{
-			Node:    fmt.Sprintf("%s", b.ID),
+			Node:    b.ID.Int32(),
 			Address: b.BrokerAddr,
 			Meta: map[string]string{
 				"raft_addr":     b.RaftAddr,
@@ -260,7 +260,7 @@ func (s *Broker) handleAliveMember(m serf.Member) error {
 				"name":          b.Name,
 			},
 			Check: &structs.HealthCheck{
-				Node:    b.RaftAddr,
+				Node:    b.ID.String(),
 				CheckID: structs.SerfCheckID,
 				Name:    structs.SerfCheckName,
 				Status:  structs.HealthPassing,
@@ -290,13 +290,13 @@ func (s *Broker) handleLeftMember(m serf.Member) error {
 
 // handleDeregisterMember is used to deregister a mmeber for a given reason.
 func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error {
-	if member.Name == s.config.RaftAddr {
-		s.logger.Debug("deregistering self should be done by follower")
+	meta, ok := metadata.IsBroker(member)
+	if !ok {
 		return nil
 	}
 
-	meta, ok := metadata.IsBroker(member)
-	if !ok {
+	if meta.ID.Int32() == s.config.ID {
+		s.logger.Debug("deregistering self should be done by follower")
 		return nil
 	}
 
@@ -305,7 +305,7 @@ func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error
 	}
 
 	state := s.fsm.State()
-	_, node, err := state.GetNode(meta.RaftAddr)
+	_, node, err := state.GetNode(meta.ID.Int32())
 	if err != nil {
 		return err
 	}
@@ -313,9 +313,9 @@ func (s *Broker) handleDeregisterMember(reason string, member serf.Member) error
 		return nil
 	}
 
-	s.logger.Info("member is deregistering", log.String("node", meta.RaftAddr), log.String("reason", reason))
+	s.logger.Info("member is deregistering", log.String("node", meta.ID.String()), log.String("reason", reason))
 	req := structs.DeregisterNodeRequest{
-		Node: structs.Node{Node: meta.RaftAddr},
+		Node: structs.Node{Node: meta.ID.Int32()},
 	}
 	_, err = s.raftApply(structs.DeregisterNodeRequestType, &req)
 	return err
@@ -347,14 +347,14 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 	}
 
 	if parts.NonVoter {
-		addFuture := s.raft.AddNonvoter(raft.ServerID(parts.RaftAddr), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		addFuture := s.raft.AddNonvoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			s.logger.Error("failed to add raft peer", log.Error("error", err))
 			return err
 		}
 	} else {
 		s.logger.Debug("join cluster: add voter", log.Any("member", parts))
-		addFuture := s.raft.AddVoter(raft.ServerID(parts.RaftAddr), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		addFuture := s.raft.AddVoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			s.logger.Error("failed to add raft peer", log.Error("error", err))
 			return err
@@ -365,9 +365,14 @@ func (s *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 }
 
 func (s *Broker) handleFailedMember(m serf.Member) error {
+	meta, ok := metadata.IsBroker(m)
+	if !ok {
+		return nil
+	}
+
 	req := structs.RegisterNodeRequest{
 		Node: structs.Node{
-			Node: m.Tags["raft_addr"],
+			Node: meta.ID.Int32(),
 			Check: &structs.HealthCheck{
 				Node:    m.Tags["raft_addr"],
 				CheckID: structs.SerfCheckID,
@@ -389,7 +394,7 @@ func (s *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
 	}
 	for _, server := range configFuture.Configuration().Servers {
 		s.logger.Info("removing server by id", log.Any("id", server.ID))
-		future := s.raft.RemoveServer(raft.ServerID(meta.RaftAddr), 0, 0)
+		future := s.raft.RemoveServer(raft.ServerID(meta.ID), 0, 0)
 		if err := future.Error(); err != nil {
 			s.logger.Error("failed to remove server", log.Error("error", err))
 			return err

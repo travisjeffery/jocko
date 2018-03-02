@@ -15,7 +15,7 @@ func TestRegisterNode(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	req := structs.RegisterNodeRequest{
-		Node: structs.Node{Node: "node1"},
+		Node: structs.Node{Node: 1},
 	}
 	buf, err := structs.Encode(structs.RegisterNodeRequestType, req)
 	if err != nil {
@@ -27,7 +27,7 @@ func TestRegisterNode(t *testing.T) {
 		t.Fatalf("resp: %v", resp)
 	}
 
-	_, node, err := fsm.state.GetNode("node1")
+	_, node, err := fsm.state.GetNode(1)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

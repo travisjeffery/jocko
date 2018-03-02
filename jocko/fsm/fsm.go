@@ -220,7 +220,7 @@ func (s *Store) AbandonCh() <-chan struct{} {
 }
 
 // GetNode is used to retrieve a node by node name ID.
-func (s *Store) GetNode(id string) (uint64, *structs.Node, error) {
+func (s *Store) GetNode(id int32) (uint64, *structs.Node, error) {
 	sp := s.tracer.StartSpan("store: get node")
 	sp.LogKV("id", id)
 	sp.SetTag("node id", s.nodeID)
@@ -279,7 +279,7 @@ func (s *Store) EnsureNode(idx uint64, node *structs.Node) error {
 }
 
 // DeleteNode is used to delete nodes.
-func (s *Store) DeleteNode(idx uint64, id string) error {
+func (s *Store) DeleteNode(idx uint64, id int32) error {
 	sp := s.tracer.StartSpan("store: delete node")
 	sp.LogKV("id", id)
 	sp.SetTag("node id", s.nodeID)
@@ -296,7 +296,7 @@ func (s *Store) DeleteNode(idx uint64, id string) error {
 	return nil
 }
 
-func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id string) error {
+func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id int32) error {
 	node, err := tx.First("nodes", "id", id)
 	if err != nil {
 		s.logger.Error("failed node lookup", log.Error("error", err))
@@ -718,17 +718,8 @@ func nodesTableSchema() *memdb.TableSchema {
 				Name:         "id",
 				AllowMissing: false,
 				Unique:       true,
-				Indexer: &memdb.StringFieldIndex{
-					Field:     "Node",
-					Lowercase: true,
-				},
-			},
-			"uuid": &memdb.IndexSchema{
-				Name:         "uuid",
-				AllowMissing: true,
-				Unique:       true,
-				Indexer: &memdb.UUIDFieldIndex{
-					Field: "ID",
+				Indexer: &IntFieldIndex{
+					Field: "Node",
 				},
 			},
 			"meta": &memdb.IndexSchema{
