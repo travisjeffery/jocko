@@ -476,8 +476,11 @@ func (s *Broker) handleFailedMember(m serf.Member) error {
 		if b == nil {
 			panic(fmt.Errorf("trying to assign partitions to unknown broker: %#v", n))
 		}
-		client := NewClient(b)
-		_, err := client.LeaderAndISR(s.config.NodeName, leaderAndISRReq)
+		conn, err := defaultDialer.Dial("tcp", b.BrokerAddr)
+		if err != nil {
+			return err
+		}
+		_, err = conn.LeaderAndISR(leaderAndISRReq)
 		if err != nil {
 			return err
 		}

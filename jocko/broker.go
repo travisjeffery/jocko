@@ -601,7 +601,6 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 					break
 				}
 			}
-
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone.Code(),
@@ -609,7 +608,6 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 				RecordSet:     b.Bytes(),
 			}
 		}
-
 		fresp.Responses[i] = fr
 	}
 	return fresp
@@ -717,11 +715,14 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}
 		} else {
-			c := NewClient(s)
-			_, err := c.LeaderAndISR(fmt.Sprintf("%d", b.config.ID), req)
+			conn, err := Dial("tcp", s.BrokerAddr)
+			if err != nil {
+				return protocol.ErrUnknown.WithErr(err)
+			}
+			_, err = conn.LeaderAndISR(req)
 			if err != nil {
 				// handle err and responses
-				panic(err)
+				return protocol.ErrUnknown.WithErr(err)
 			}
 		}
 	}
@@ -863,8 +864,15 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if err := replica.Log.Truncate(hw); err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
-	conn := b.brokerLookup.BrokerByID(raft.ServerID(cmd.Leader))
-	r := NewReplicator(ReplicatorConfig{}, replica, NewClient(conn), b.logger)
+	broker := b.brokerLookup.BrokerByID(raft.ServerID(cmd.Leader))
+	if broker == nil {
+		return protocol.ErrBrokerNotAvailable
+	}
+	conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
+	if err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	r := NewReplicator(ReplicatorConfig{}, replica, conn, b.logger)
 	replica.Replicator = r
 	if !b.config.DevMode {
 		r.Replicate()

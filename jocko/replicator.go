@@ -9,9 +9,9 @@ import (
 
 // Client is used to request other brokers.
 type client interface {
-	FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
-	CreateTopics(clientID string, createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error)
-	LeaderAndISR(clientID string, request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error)
+	Fetch(fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
+	CreateTopics(createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error)
+	LeaderAndISR(request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error)
 	// others
 }
 
@@ -50,6 +50,7 @@ func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, log
 	return r
 }
 
+// Replicate start fetching messages from the leader and appending them to the local commit log.
 func (r *Replicator) Replicate() {
 	go r.fetchMessages()
 	go r.appendMessages()
@@ -73,7 +74,7 @@ func (r *Replicator) fetchMessages() {
 					}},
 				}},
 			}
-			fetchResponse, err := r.leader.FetchMessages(r.clientID, fetchRequest)
+			fetchResponse, err := r.leader.Fetch(fetchRequest)
 			// TODO: probably shouldn't panic. just let this replica fall out of ISR.
 			if err != nil {
 				r.logger.Error("failed to fetch messages", log.Error("error", err))

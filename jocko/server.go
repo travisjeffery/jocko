@@ -132,9 +132,7 @@ func (s *Server) Close() {
 func (s *Server) handleRequest(conn net.Conn) {
 	defer conn.Close()
 
-	header := new(protocol.RequestHeader)
 	p := make([]byte, 4)
-
 	for {
 		_, err := io.ReadFull(conn, p[:])
 		if err == io.EOF {
@@ -164,6 +162,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		d := protocol.NewDecoder(b)
+		header := new(protocol.RequestHeader)
 		if err := header.Decode(d); err != nil {
 			// TODO: handle err
 			span.LogKV("msg", "failed to decode header", "err", err)

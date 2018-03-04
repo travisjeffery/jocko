@@ -3,7 +3,6 @@ package jocko_test
 import (
 	"bytes"
 	"context"
-	"net"
 	"testing"
 	"time"
 
@@ -209,18 +208,20 @@ func BenchmarkServer(b *testing.B) {
 }
 
 func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", s1.Addr().String())
-	require.NoError(t, err)
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	require.NoError(t, err)
-	client := jocko.NewClient(conn)
-
+	d := &jocko.Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+		ClientID:  t.Name(),
+	}
+	conn, err := d.Dial("tcp", s1.Addr().String())
+	if err != nil {
+		return err
+	}
 	assignment := []int32{s1.ID()}
 	for _, o := range other {
 		assignment = append(assignment, o.ID())
 	}
-
-	_, err = client.CreateTopics("testclient", &protocol.CreateTopicRequests{
+	_, err = conn.CreateTopics(&protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
 			NumPartitions:     int32(1),
@@ -233,6 +234,5 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 			},
 		}},
 	})
-
 	return err
 }

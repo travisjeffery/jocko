@@ -462,39 +462,16 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var dir string
 			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
-				dir = cfg.DataDir
 			}, nil)
 			defer teardown()
 			b := s.broker
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_contains(t *testing.T) {
-	type args struct {
-		rs []int32
-		r  int32
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := contains(tt.args.rs, tt.args.r); got != tt.want {
-				t.Errorf("contains() = %v, want %v", got, tt.want)
 			}
 		})
 	}

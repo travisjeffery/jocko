@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 
 	"testing"
@@ -130,19 +129,12 @@ func setup(logger log.Logger) (*jocko.Server, func()) {
 		os.Exit(1)
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", c.Addr().String())
+	conn, err := jocko.Dial("tcp", c.Addr().String())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to resolve addr: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
 		os.Exit(1)
 	}
-	conn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to connect to broker: %v\n", err)
-		os.Exit(1)
-	}
-
-	client := jocko.NewClient(conn)
-	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
+	resp, err := conn.CreateTopics(&protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
 			NumPartitions:     numPartitions,

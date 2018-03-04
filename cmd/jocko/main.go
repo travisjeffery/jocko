@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -123,20 +122,13 @@ func run(cmd *cobra.Command, args []string) {
 }
 
 func createTopic(cmd *cobra.Command, args []string) {
-	addr, err := net.ResolveTCPAddr("tcp", topicCfg.BrokerAddr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
-		os.Exit(1)
-	}
-
-	conn, err := net.DialTCP("tcp", nil, addr)
+	conn, err := jocko.Dial("tcp", topicCfg.BrokerAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
 		os.Exit(1)
 	}
 
-	client := jocko.NewClient(conn)
-	resp, err := client.CreateTopics("cmd/createtopic", &protocol.CreateTopicRequests{
+	resp, err := conn.CreateTopics(&protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topicCfg.Topic,
 			NumPartitions:     topicCfg.Partitions,

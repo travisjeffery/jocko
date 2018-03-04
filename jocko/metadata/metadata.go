@@ -2,7 +2,6 @@ package metadata
 
 import (
 	"fmt"
-	"net"
 	"strconv"
 
 	"github.com/hashicorp/serf/serf"
@@ -28,48 +27,6 @@ type Broker struct {
 	RaftAddr    string
 	SerfLANAddr string
 	BrokerAddr  string
-	conn        net.Conn
-}
-
-// TODO: probably a better way of doing this
-
-// Write is used to write the member.
-func (b *Broker) Write(p []byte) (int, error) {
-	if b.conn == nil {
-		if err := b.connect(); err != nil {
-			return 0, err
-		}
-	}
-	return b.conn.Write(p)
-}
-
-// Read is used to read from the member.
-func (b *Broker) Read(p []byte) (int, error) {
-	if b.conn == nil {
-		if err := b.connect(); err != nil {
-			return 0, err
-		}
-	}
-	return b.conn.Read(p)
-}
-
-// connect opens a tcp connection to the cluster member.
-func (b *Broker) connect() error {
-	host, portStr, err := net.SplitHostPort(b.BrokerAddr)
-	if err != nil {
-		return err
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return err
-	}
-	addr := &net.TCPAddr{IP: net.ParseIP(host), Port: port}
-	conn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		return err
-	}
-	b.conn = conn
-	return nil
 }
 
 // IsBroker checks if the given serf.Member is a broker, building and returning Broker instance from the Member's tags if so.
