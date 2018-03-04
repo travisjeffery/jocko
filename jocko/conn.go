@@ -211,7 +211,8 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 }
 
 func (c *Conn) readResponse(resp protocol.Decoder, size int) error {
-	b, err := c.rbuf.Peek(size)
+	b := make([]byte, size)
+	_, err := c.rbuf.Read(b)
 	if err != nil {
 		return err
 	}
