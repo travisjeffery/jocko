@@ -212,10 +212,40 @@ WAIT:
 	}
 }
 
+// reconcile is used to reconcile the differences between serf membership and what's reflected in the strongly consistent store.
 func (s *Broker) reconcile() error {
 	members := s.LANMembers()
+	knownMembers := make(map[int32]struct{})
 	for _, member := range members {
 		if err := s.reconcileMember(member); err != nil {
+			return err
+		}
+		meta, ok := metadata.IsBroker(member)
+		if !ok {
+			continue
+		}
+		knownMembers[meta.ID.Int32()] = struct{}{}
+	}
+	return s.reconcileReaped(knownMembers)
+}
+
+func (s *Broker) reconcileReaped(known map[int32]struct{}) error {
+	state := s.fsm.State()
+	_, nodes, err := state.GetNodes()
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		if _, ok := known[node.ID]; ok {
+			continue
+		}
+		member := serf.Member{
+			Tags: map[string]string{
+				"id":   fmt.Sprintf("%s", node.ID),
+				"role": "jocko",
+			},
+		}
+		if err := s.handleReapMember(member); err != nil {
 			return err
 		}
 	}
@@ -291,6 +321,10 @@ func (s *Broker) raftApply(t structs.MessageType, msg interface{}) (interface{},
 
 func (s *Broker) handleLeftMember(m serf.Member) error {
 	return s.handleDeregisterMember("left", m)
+}
+
+func (s *Broker) handleReapMember(member serf.Member) error {
+	return s.handleDeregisterMember("reaped", member)
 }
 
 // handleDeregisterMember is used to deregister a mmeber for a given reason.
