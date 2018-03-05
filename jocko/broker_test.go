@@ -719,10 +719,14 @@ func TestBroker_LeaveLeader(t *testing.T) {
 
 func waitForLeader(t *testing.T, brokers ...*Broker) {
 	retry.Run(t, func(r *retry.R) {
+		var leader *Broker
 		for _, b := range brokers {
 			if raft.Leader == b.raft.State() {
-				t.Fatal("no leader")
+				leader = b
 			}
+		}
+		if leader == nil {
+			r.Fatal("no leader")
 		}
 	})
 }
