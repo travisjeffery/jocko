@@ -28,16 +28,11 @@ func (c *DeleteCleaner) Clean(segments []*Segment) ([]*Segment, error) {
 			s := segments[i]
 			totalBytes += s.Position
 			if totalBytes > c.Retention.Bytes {
-				break
-			}
-			cleanedSegments = append([]*Segment{s}, cleanedSegments...)
-		}
-		if i > -1 {
-			for ; i != 0; i-- {
-				s := segments[i]
 				if err := s.Delete(); err != nil {
 					return nil, err
 				}
+			} else {
+				cleanedSegments = append([]*Segment{s}, cleanedSegments...)
 			}
 		}
 	}
