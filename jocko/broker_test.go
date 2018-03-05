@@ -554,31 +554,28 @@ func TestBroker_RegisterMember(t *testing.T) {
 func TestBroker_FailedMember(t *testing.T) {
 	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
-		cfg.BootstrapExpect = 2
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
 	}, nil)
-	b1 := s1.broker
 	defer t1()
-	defer b1.Shutdown()
+	defer s1.Shutdown()
 
 	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
-		cfg.BootstrapExpect = 2
 		cfg.NonVoter = true
 	}, nil)
-	b2 := s2.broker
 	defer t2()
 
-	waitForLeader(t, b1, b2)
-
-	joinLAN(t, b2, b1)
+	TestJoin(t, s2, s1)
 
 	// Fail the member
-	b2.Shutdown()
+	s2.Shutdown()
+
+	state := s1.broker.fsm.State()
 
 	// Should be registered
-	state := b1.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.ID)
+		_, node, err := state.GetNode(s2.broker.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -593,31 +590,37 @@ func TestBroker_FailedMember(t *testing.T) {
 func TestBroker_LeftMember(t *testing.T) {
 	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
-		cfg.BootstrapExpect = 2
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
 	}, nil)
-	b1 := s1.broker
 	defer t1()
 
 	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
-		cfg.BootstrapExpect = 2
 		cfg.NonVoter = true
 	}, nil)
-	b2 := s2.broker
 	defer t2()
 
-	waitForLeader(t, b1, b2)
+	TestJoin(t, s2, s1)
 
-	joinLAN(t, b2, b1)
+	state := s1.broker.fsm.State()
 
-	// Fail the member
-	b2.Leave()
-	b2.Shutdown()
+	// should be registered
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(s2.broker.config.ID)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			r.Fatal("node isn't registered")
+		}
+	})
+
+	s2.broker.Leave()
 
 	// Should be deregistered
-	state := b1.fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.ID)
+		_, node, err := state.GetNode(s2.broker.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
