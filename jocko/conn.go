@@ -211,12 +211,13 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 }
 
 func (c *Conn) readResponse(resp protocol.Decoder, size int) error {
-	b := make([]byte, size)
-	_, err := c.rbuf.Read(b)
+	b, err := c.rbuf.Peek(size)
 	if err != nil {
 		return err
 	}
-	return protocol.Decode(b, resp)
+	err = protocol.Decode(b, resp)
+	c.rbuf.Discard(size)
+	return err
 }
 
 func (c *Conn) writeRequest(body protocol.Body) error {
