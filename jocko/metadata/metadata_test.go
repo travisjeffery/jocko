@@ -3,7 +3,6 @@ package metadata
 import (
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/serf/serf"
 )
 
@@ -24,7 +23,6 @@ func TestIsBroker(t *testing.T) {
 
 func testMinimum(t *testing.T) {
 	b, ok := IsBroker(serf.Member{Tags: map[string]string{"id": "1", "role": "jocko"}})
-	spew.Dump(b, ok)
 	if !ok {
 		t.Fatal("is broker not ok")
 	}

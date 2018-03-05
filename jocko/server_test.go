@@ -29,7 +29,7 @@ func TestServer(t *testing.T) {
 	require.NoError(t, err)
 	defer teardown1()
 	// TODO: mv close into teardown
-	defer s1.Close()
+	defer s1.Shutdown()
 
 	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
@@ -39,7 +39,7 @@ func TestServer(t *testing.T) {
 	err = s2.Start(ctx2)
 	require.NoError(t, err)
 	defer teardown2()
-	defer s2.Close()
+	defer s2.Shutdown()
 
 	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = false
@@ -49,7 +49,7 @@ func TestServer(t *testing.T) {
 	err = s3.Start(ctx3)
 	require.NoError(t, err)
 	defer teardown3()
-	defer s3.Close()
+	defer s3.Shutdown()
 
 	jocko.TestJoin(t, s1, s2, s3)
 	controller, others := jocko.WaitForLeader(t, s1, s2, s3)
@@ -113,7 +113,7 @@ func TestServer(t *testing.T) {
 		case s3:
 			cancel3()
 		}
-		controller.Close()
+		controller.Shutdown()
 
 		time.Sleep(3 * time.Second)
 

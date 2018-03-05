@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -41,16 +42,18 @@ type broker interface {
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	config     *config.ServerConfig
-	protocolLn *net.TCPListener
-	logger     log.Logger
-	broker     *Broker
-	shutdownCh chan struct{}
-	metrics    *Metrics
-	requestCh  chan Request
-	responseCh chan Response
-	tracer     opentracing.Tracer
-	close      func() error
+	config       *config.ServerConfig
+	protocolLn   *net.TCPListener
+	logger       log.Logger
+	broker       *Broker
+	shutdown     bool
+	shutdownCh   chan struct{}
+	shutdownLock sync.Mutex
+	metrics      *Metrics
+	requestCh    chan Request
+	responseCh   chan Response
+	tracer       opentracing.Tracer
+	close        func() error
 }
 
 func NewServer(config *config.ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
@@ -121,11 +124,21 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Close closes the service.
-func (s *Server) Close() {
-	// close(s.shutdownCh)
+// Shutdown closes the service.
+func (s *Server) Shutdown() {
+	s.shutdownLock.Lock()
+	defer s.shutdownLock.Unlock()
+
+	if s.shutdown {
+		return
+	}
+
+	s.shutdown = true
+	close(s.shutdownCh)
+
 	s.broker.Shutdown()
 	s.protocolLn.Close()
+
 	s.close()
 }
 

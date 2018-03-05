@@ -155,7 +155,7 @@ func setup(logger log.Logger) (*jocko.Server, func()) {
 
 	return c, func() {
 		cancel()
-		c.Close()
+		c.Shutdown()
 		os.RemoveAll(logDir)
 	}
 }

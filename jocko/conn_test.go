@@ -91,7 +91,7 @@ func TestConn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
+	defer s.Shutdown()
 
 	tests := []struct {
 		name string

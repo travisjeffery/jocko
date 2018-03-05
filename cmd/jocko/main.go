@@ -110,7 +110,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	defer srv.Close()
+	defer srv.Shutdown()
 
 	gracefully.Timeout = 10 * time.Second
 	gracefully.Shutdown()
