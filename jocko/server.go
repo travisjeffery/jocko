@@ -188,6 +188,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		span.SetTag("client_id", header.ClientID)
 		span.SetTag("size", size)
 		span.SetTag("node_id", s.broker.config.ID) // can I set this globally for the tracer?
+		span.SetTag("addr", s.broker.config.Addr)
 
 		var req protocol.Decoder
 		switch header.APIKey {
