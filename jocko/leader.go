@@ -530,6 +530,9 @@ func (b *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
 		return err
 	}
 	for _, server := range configFuture.Configuration().Servers {
+		if server.ID != raft.ServerID(meta.ID) {
+			continue
+		}
 		b.logger.Info("leader: removing server by id", log.Any("server id", server.ID))
 		future := b.raft.RemoveServer(raft.ServerID(meta.ID), 0, 0)
 		if err := future.Error(); err != nil {
