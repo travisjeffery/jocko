@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/hashicorp/consul/testutil/retry"
 	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/jocko"
@@ -73,9 +74,15 @@ func TestServer(t *testing.T) {
 			brokers = append(brokers, o.Addr().String())
 		}
 
-		client, err := sarama.NewClient(brokers, config)
-		require.NoError(t, err)
-		require.Equal(t, 3, len(client.Brokers()))
+		retry.Run(t, func(r *retry.R) {
+			client, err := sarama.NewClient(brokers, config)
+			if err != nil {
+				r.Fatalf("err: %v", err)
+			}
+			if 3 != len(client.Brokers()) {
+				r.Fatalf("client didn't find the right number of brokers: %d", len(client.Brokers()))
+			}
+		})
 
 		producer, err := sarama.NewSyncProducer(brokers, config)
 		if err != nil {
@@ -126,9 +133,16 @@ func TestServer(t *testing.T) {
 			brokers = append(brokers, o.Addr().String())
 		}
 
-		client, err = sarama.NewClient(brokers, config)
-		require.NoError(t, err)
-		require.Equal(t, 2, len(client.Brokers()))
+		retry.Run(t, func(r *retry.R) {
+			client, err := sarama.NewClient(brokers, config)
+			if err != nil {
+				r.Fatalf("err: %v", err)
+			}
+			if 2 != len(client.Brokers()) {
+				r.Fatalf("client didn't find the right number of brokers: %d", len(client.Brokers()))
+			}
+		})
+
 		consumer, err = sarama.NewConsumer(brokers, config)
 		require.NoError(t, err)
 		cPartition, err = consumer.ConsumePartition(topic, pPartition, 0)
