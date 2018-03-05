@@ -1,8 +1,6 @@
 package jocko
 
 import (
-	"fmt"
-
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
@@ -20,7 +18,6 @@ type Replicator struct {
 	config              ReplicatorConfig
 	logger              log.Logger
 	replica             *Replica
-	clientID            string
 	minBytes            int32
 	fetchSize           int32
 	maxWaitTime         int32
@@ -39,13 +36,12 @@ type ReplicatorConfig struct {
 // NewReplicator returns a new replicator instance.
 func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, logger log.Logger) *Replicator {
 	r := &Replicator{
-		config:   config,
-		logger:   logger,
-		replica:  replica,
-		clientID: fmt.Sprintf("Replicator-%d", replica.BrokerID),
-		leader:   leader,
-		done:     make(chan struct{}, 2),
-		msgs:     make(chan []byte, 2),
+		config:  config,
+		logger:  logger,
+		replica: replica,
+		leader:  leader,
+		done:    make(chan struct{}, 2),
+		msgs:    make(chan []byte, 2),
 	}
 	return r
 }

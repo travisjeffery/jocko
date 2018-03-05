@@ -868,7 +868,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if broker == nil {
 		return protocol.ErrBrokerNotAvailable
 	}
-	conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
+	conn, err := NewDialer(fmt.Sprintf("jocko-replicator-%d", b.config.ID)).Dial("tcp", broker.BrokerAddr)
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}

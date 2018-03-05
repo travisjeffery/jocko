@@ -10,19 +10,21 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
+// Conn implemenets net.Conn for connections to Jocko brokers. It's used as an internal client for replication fetches and leader and ISR requests.
 type Conn struct {
 	conn          net.Conn
 	mutex         sync.Mutex
 	rlock         sync.Mutex
 	rbuf          bufio.Reader
+	rdeadline     connDeadline
 	wlock         sync.Mutex
 	wbuf          bufio.Writer
 	wdeadline     connDeadline
-	rdeadline     connDeadline
 	clientID      string
 	correlationID int32
 }
 
+// NewConn creates a new *Conn.
 func NewConn(conn net.Conn, clientID string) (*Conn, error) {
 	return &Conn{
 		conn:     conn,
@@ -32,37 +34,53 @@ func NewConn(conn net.Conn, clientID string) (*Conn, error) {
 	}, nil
 }
 
+// LocalAddr returns the local network address.
 func (c *Conn) LocalAddr() net.Addr { return c.conn.LocalAddr() }
 
+// RemoteAddr returns the remote network address.
 func (c *Conn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
 
+// SetDeadline sets the read and write deadlines associated
+// with the connection. It is equivalent to calling both
+// SetReadDeadline and SetWriteDeadline. See net.Conn SetDeadline.
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.rdeadline.setDeadline(t)
 	c.wdeadline.setDeadline(t)
 	return nil
 }
 
+// SetReadDeadline sets the deadline for future Read calls
+// and any currently-blocked Read call.
+// A zero value for t means Read will not time out.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.rdeadline.setDeadline(t)
 	return nil
 }
 
+// SetWriteDeadline sets the deadline for future Write calls
+// and any currently-blocked Write call.
+// Even if write times out, it may return n > 0, indicating that
+// some of the data was successfully written.
+// A zero value for t means Write will not time out.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.wdeadline.setDeadline(t)
 	return nil
 }
 
-// Read satisfies net.Conn interface. Don't use it.
+// Read implements the Conn Read method. Don't use it.
 func (c *Conn) Read(b []byte) (int, error) {
 	return 0, nil
 }
 
+// Write implements the Conn Write method. Don't use it.
 func (c *Conn) Write(b []byte) (int, error) {
 	return 0, nil
 }
 
+// Close closes the connection.
 func (c *Conn) Close() error { return c.conn.Close() }
 
+// LeaderAndISR sends a leader and ISR request and returns the response.
 func (c *Conn) LeaderAndISR(req *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error) {
 	var resp protocol.LeaderAndISRResponse
 	err := c.writeOperation(func(deadline time.Time, id int32) error {
@@ -76,6 +94,7 @@ func (c *Conn) LeaderAndISR(req *protocol.LeaderAndISRRequest) (*protocol.Leader
 	return &resp, nil
 }
 
+// CreateTopics sends a create topics request and returns the response.
 func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
 	var resp protocol.CreateTopicsResponse
 	err := c.writeOperation(func(deadline time.Time, id int32) error {
@@ -89,6 +108,7 @@ func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.Create
 	return &resp, nil
 }
 
+// CreateTopics sends a fetch request and returns the response.
 func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, error) {
 	var resp protocol.FetchResponses
 	err := c.readOperation(func(deadline time.Time, id int32) error {

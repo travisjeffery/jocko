@@ -14,6 +14,7 @@ const (
 	minTimeout = time.Duration(math.MinInt32) * time.Millisecond
 )
 
+// Dialer is like the net.Dialer API but for opening connections to Jocko brokers.
 type Dialer struct {
 	// Unique ID for client connections established by this Dialer.
 	ClientID string
@@ -38,13 +39,19 @@ type Dialer struct {
 }
 
 var (
-	defaultDialer = &Dialer{
-		Timeout:   10 * time.Second,
-		DualStack: true,
-		ClientID:  "jocko",
-	}
+	defaultDialer = NewDialer("jocko")
 )
 
+// NewDialer creates a new dialer.
+func NewDialer(clientID string) *Dialer {
+	return &Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+		ClientID:  clientID,
+	}
+}
+
+// Dial creates a connection to the broker on the given network and address on the default dialer.
 func Dial(network, address string) (*Conn, error) {
 	return defaultDialer.Dial(network, address)
 }
@@ -53,6 +60,7 @@ func DialContext(ctx context.Context, network, address string) (*Conn, error) {
 	return defaultDialer.DialContext(ctx, network, address)
 }
 
+// Dial creates a connection to the broker on the given network and address.
 func (d *Dialer) Dial(network, address string) (*Conn, error) {
 	return d.DialContext(context.Background(), network, address)
 }
