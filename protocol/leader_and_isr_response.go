@@ -14,6 +14,9 @@ type LeaderAndISRResponse struct {
 func (r *LeaderAndISRResponse) Encode(e PacketEncoder) error {
 	var err error
 	e.PutInt16(r.ErrorCode)
+	if err = e.PutArrayLength(len(r.Partitions)); err != nil {
+		return err
+	}
 	for _, p := range r.Partitions {
 		if err = e.PutString(p.Topic); err != nil {
 			return err

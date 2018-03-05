@@ -50,6 +50,10 @@
   revision = "75ff99613d288868d8888ec87594525906815dbc"
 
 [[constraint]]
+  name = "github.com/uber/jaeger-client-go"
+  version = "=2.11.2"
+
+[[constraint]]
   name = "github.com/pkg/errors"
   version = "=0.8.0"
 

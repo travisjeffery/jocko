@@ -23,7 +23,7 @@ func (p *Client) Messages() [][]byte {
 	return p.msgs
 }
 
-func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error) {
+func (p *Client) Fetch(fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error) {
 	if len(p.msgs) >= p.msgCount {
 		return &protocol.FetchResponses{}, nil
 	}
@@ -44,10 +44,10 @@ func (p *Client) FetchMessages(clientID string, fetchRequest *protocol.FetchRequ
 	return response, nil
 }
 
-func (p *Client) CreateTopics(clientID string, createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
+func (p *Client) CreateTopics(createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error) {
 	return nil, nil
 }
 
-func (p *Client) LeaderAndISR(clientID string, request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error) {
+func (p *Client) LeaderAndISR(request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error) {
 	return nil, nil
 }

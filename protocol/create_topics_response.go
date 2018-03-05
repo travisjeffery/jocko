@@ -10,9 +10,14 @@ type CreateTopicsResponse struct {
 }
 
 func (c *CreateTopicsResponse) Encode(e PacketEncoder) error {
-	e.PutArrayLength(len(c.TopicErrorCodes))
+	var err error
+	if err = e.PutArrayLength(len(c.TopicErrorCodes)); err != nil {
+		return err
+	}
 	for _, t := range c.TopicErrorCodes {
-		e.PutString(t.Topic)
+		if err = e.PutString(t.Topic); err != nil {
+			return err
+		}
 		e.PutInt16(t.ErrorCode)
 	}
 	return nil
