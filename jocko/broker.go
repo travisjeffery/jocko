@@ -641,25 +641,7 @@ func (b *Broker) createPartition(partition structs.Partition) error {
 func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
-	state := b.fsm.State()
-	// TODO: the issue with reassignment is i gotta update the fsm state, seems the topic isn't being updated...
-	_, topic, err := state.GetTopic(replica.Partition.Topic)
-	if err != nil {
-		return protocol.ErrUnknown.WithErr(err)
-	}
-	if topic == nil {
-		return protocol.ErrUnknownTopicOrPartition
-	}
-	var isReplica bool
-	for _, replica := range topic.Partitions[replica.Partition.Partition] {
-		if replica == b.config.ID {
-			isReplica = true
-			break
-		}
-	}
-	if !isReplica {
-		return protocol.ErrReplicaNotAvailable
-	}
+
 	if replica.Log == nil {
 		log, err := commitlog.New(commitlog.Options{
 			Path:            filepath.Join(b.config.DataDir, "data", fmt.Sprintf("%d", replica.Partition.ID)),
@@ -672,6 +654,7 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 		replica.Log = log
 		// TODO: register leader-change listener on r.replica.Partition.id
 	}
+
 	return protocol.ErrNone
 }
 
@@ -694,7 +677,6 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 		return protocol.ErrUnknown.WithErr(err)
 	}
 	for _, partition := range ps {
-		// TODO: think i want to just send this to raft and then create downstream
 		if err := b.createPartition(partition); err != nil {
 			return protocol.ErrUnknown.WithErr(err)
 		}
@@ -703,6 +685,7 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 	req := &protocol.LeaderAndISRRequest{
 		ControllerID: b.config.ID,
 		// TODO ControllerEpoch
+		PartitionStates: make([]*protocol.PartitionState, 0, len(ps)),
 	}
 	for _, partition := range ps {
 		req.PartitionStates = append(req.PartitionStates, &protocol.PartitionState{
@@ -963,4 +946,5 @@ type Replica struct {
 	Hw         int64
 	Leo        int64
 	Replicator *Replicator
+	sync.Mutex
 }
