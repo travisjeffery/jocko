@@ -5,6 +5,7 @@ vendor/*
 .idea
 *.log
 *.index
-NOTES.txt
+NOTES.org
 .dir-locals.el
 .#*
+.DS_Store

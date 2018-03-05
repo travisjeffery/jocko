@@ -2,7 +2,7 @@
 
 Kafka/distributed commit log service in Go.
 
-[![Travis CI](https://travis-ci.org/travisjeffery/jocko.svg?branch=master)](https://travis-ci.org/travisjeffery/jocko) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://semaphoreci.com/api/v1/travisjeffery/jocko/branches/master/shields_badge.svg)](https://semaphoreci.com/travisjeffery/jocko) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![codecov](https://codecov.io/gh/confluentinc/cc-scheduler-service/branch/master/graph/badge.svg?token=FdPmYoDfX2)](https://codecov.io/gh/confluentinc/cc-scheduler-service)
 
 ## Goals of this project:
@@ -28,11 +28,10 @@ Kafka/distributed commit log service in Go.
     - [x] Metadata
     - [x] Create Topics
     - [x] Delete Topics
-    - [ ] Consumer group
+    - [ ] Consumer group [current task]
 - [x] Discovery
-- [ ] API versioning
-- [ ] Replication [current task]
-- [ ] Tests [current task]
+- [ ] API versioning [more API versions to implement]
+- [ ] Replication [first draft done - testing heavily now]
 
 ## Reading
 

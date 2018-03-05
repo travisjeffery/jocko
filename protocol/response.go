@@ -30,9 +30,11 @@ func (r *Response) Decode(pd PacketDecoder) (err error) {
 	if err != nil {
 		return err
 	}
-	r.CorrelationID, err = pd.Int32()
-	if r.Body != nil {
-		r.Body.Decode(pd)
+	if r.CorrelationID, err = pd.Int32(); err != nil {
+		return err
 	}
-	return err
+	if r.Body != nil {
+		return r.Body.Decode(pd)
+	}
+	return nil
 }

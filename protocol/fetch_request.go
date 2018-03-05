@@ -20,6 +20,7 @@ type FetchRequest struct {
 }
 
 func (r *FetchRequest) Encode(e PacketEncoder) error {
+	var err error
 	if r.ReplicaID == 0 {
 		e.PutInt32(-1) // replica ID is -1 for clients
 	} else {
@@ -28,10 +29,16 @@ func (r *FetchRequest) Encode(e PacketEncoder) error {
 	e.PutInt32(r.MaxWaitTime)
 	e.PutInt32(r.MinBytes)
 	// e.PutInt32(r.MaxBytes)
-	e.PutArrayLength(len(r.Topics))
+	if err = e.PutArrayLength(len(r.Topics)); err != nil {
+		return err
+	}
 	for _, t := range r.Topics {
-		e.PutString(t.Topic)
-		e.PutArrayLength(len(t.Partitions))
+		if err = e.PutString(t.Topic); err != nil {
+			return err
+		}
+		if err = e.PutArrayLength(len(t.Partitions)); err != nil {
+			return err
+		}
 		for _, p := range t.Partitions {
 			e.PutInt32(p.Partition)
 			e.PutInt64(p.FetchOffset)

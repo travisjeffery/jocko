@@ -17,11 +17,12 @@ func (r *Request) Encode(pe PacketEncoder) (err error) {
 	pe.PutInt16(r.Body.Key())
 	pe.PutInt16(r.Body.Version())
 	pe.PutInt32(r.CorrelationID)
-	pe.PutString(r.ClientID)
-	if err != nil {
+	if err = pe.PutString(r.ClientID); err != nil {
 		return err
 	}
-	r.Body.Encode(pe)
+	if err = r.Body.Encode(pe); err != nil {
+		return err
+	}
 	pe.Pop()
 	return nil
 }

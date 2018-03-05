@@ -8,6 +8,12 @@
   version = "v1.13.0"
 
 [[projects]]
+  name = "github.com/apache/thrift"
+  packages = ["lib/go/thrift"]
+  revision = "b2a4d4ae21c789b689dd162deb819665567f481c"
+  version = "0.10.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/armon/go-metrics"
   packages = ["."]
@@ -24,6 +30,12 @@
   packages = ["."]
   revision = "2f1ce7a837dcb8da3ec595b1dac9d0632f0f99e8"
   version = "v1.3.1"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/codahale/hdrhistogram"
+  packages = ["."]
+  revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -48,6 +60,16 @@
   packages = ["."]
   revision = "ded5959c0d4e360646dc9e9908cff48666781367"
   version = "v1.0.2"
+
+[[projects]]
+  name = "github.com/go-kit/kit"
+  packages = [
+    "metrics",
+    "metrics/internal/lv",
+    "metrics/prometheus"
+  ]
+  revision = "4dc7be5d2d12881735283bcab7352178e190fc71"
+  version = "v0.6.0"
 
 [[projects]]
   branch = "master"
@@ -173,6 +195,22 @@
   revision = "946bd9fbed05568b0f3cd188353d8aa28f38b688"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/mitchellh/go-testing-interface"
+  packages = ["."]
+  revision = "a61a99592b77c9ba629d254a693acffaeb4b7e28"
+
+[[projects]]
+  name = "github.com/opentracing/opentracing-go"
+  packages = [
+    ".",
+    "ext",
+    "log"
+  ]
+  revision = "1949ddbfd147afd4d964a9f00b24eb291e0e7c38"
+  version = "v1.0.2"
+
+[[projects]]
   name = "github.com/pierrec/lz4"
   packages = ["."]
   revision = "08c27939df1bd95e881e2c2367a749964ad1fceb"
@@ -281,6 +319,32 @@
   revision = "e87a6e482c2ceaa54bd76e0fb30d1f2d40dd3f01"
 
 [[projects]]
+  name = "github.com/uber/jaeger-client-go"
+  packages = [
+    ".",
+    "config",
+    "internal/baggage",
+    "internal/baggage/remote",
+    "internal/spanlog",
+    "log",
+    "rpcmetrics",
+    "thrift-gen/agent",
+    "thrift-gen/baggage",
+    "thrift-gen/jaeger",
+    "thrift-gen/sampling",
+    "thrift-gen/zipkincore",
+    "utils"
+  ]
+  revision = "3ac96c6e679cb60a74589b0d0aa7c70a906183f7"
+  version = "v2.11.2"
+
+[[projects]]
+  name = "github.com/uber/jaeger-lib"
+  packages = ["metrics"]
+  revision = "7f95f4f7e80028096410abddaae2556e4c61b59f"
+  version = "v1.3.1"
+
+[[projects]]
   name = "github.com/ugorji/go"
   packages = ["codec"]
   revision = "9831f2c3ac1068a78f50999a30db84270f647af6"
@@ -313,6 +377,12 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/net"
+  packages = ["context"]
+  revision = "cbe0f9307d0156177f9dd5dc85da1a31abc5f2fb"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
   revision = "ebfc5b4631820b793c9010c87fd8fef0f39eb082"
@@ -320,6 +390,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b571e386ce2e4f3d6478e1be305141f4c6d8bba7b77cfb88a2db7fbd29086378"
+  inputs-digest = "f0e938cb6af48c75404a50b9c696dd70dd992e8e843ca2cf153fedf2b25e15a9"
   solver-name = "gps-cdcl"
   solver-version = 1
