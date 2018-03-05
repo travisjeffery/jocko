@@ -115,10 +115,11 @@ func TestServer(t *testing.T) {
 		}
 		controller.Shutdown()
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(time.Second)
 
 		controller, others = jocko.WaitForLeader(t, others...)
-		// TODO: kill the controller, try consuming from one of the replicas
+
+		time.Sleep(time.Second)
 
 		brokers = []string{controller.Addr().String()}
 		for _, o := range others {
