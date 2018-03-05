@@ -407,7 +407,7 @@ func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHead
 				continue
 			}
 			replica, err := b.replicaLookup.Replica(td.Topic, p.Partition)
-			if err != nil {
+			if err != nil || replica == nil || replica.Log == nil {
 				b.logger.Error("produce to partition failed", log.Error("error", err))
 				presp.Partition = p.Partition
 				presp.ErrorCode = protocol.ErrReplicaNotAvailable.Code()
@@ -573,6 +573,13 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 				}
 				continue
 			}
+			if replica.Log == nil {
+				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
+					Partition: p.Partition,
+					ErrorCode: protocol.ErrReplicaNotAvailable.Code(),
+				}
+				continue
+			}
 			rdr, rdrErr := replica.Log.NewReader(p.FetchOffset, p.MaxBytes)
 			if rdrErr != nil {
 				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
@@ -581,14 +588,14 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 				}
 				continue
 			}
-			b := new(bytes.Buffer)
+			buf := new(bytes.Buffer)
 			var n int32
 			for n < r.MinBytes {
 				if r.MaxWaitTime != 0 && int32(time.Since(received).Nanoseconds()/1e6) > r.MaxWaitTime {
 					break
 				}
 				// TODO: copy these bytes to outer bytes
-				nn, err := io.Copy(b, rdr)
+				nn, err := io.Copy(buf, rdr)
 				if err != nil && err != io.EOF {
 					fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 						Partition: p.Partition,
@@ -605,7 +612,7 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone.Code(),
 				HighWatermark: replica.Log.NewestOffset(),
-				RecordSet:     b.Bytes(),
+				RecordSet:     buf.Bytes(),
 			}
 		}
 		fresp.Responses[i] = fr
@@ -708,14 +715,14 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 		})
 	}
 	// TODO: can optimize this
-	for _, s := range b.brokerLookup.Brokers() {
-		if s.ID.Int32() == b.config.ID {
+	for _, broker := range b.brokerLookup.Brokers() {
+		if broker.ID.Int32() == b.config.ID {
 			errCode := b.handleLeaderAndISR(ctx, nil, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}
 		} else {
-			conn, err := Dial("tcp", s.BrokerAddr)
+			conn, err := Dial("tcp", broker.BrokerAddr)
 			if err != nil {
 				return protocol.ErrUnknown.WithErr(err)
 			}
@@ -766,30 +773,30 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 }
 
 // Leave is used to prepare for a graceful shutdown.
-func (s *Broker) Leave() error {
-	s.logger.Info("broker: starting leave")
+func (b *Broker) Leave() error {
+	b.logger.Info("broker: starting leave")
 
-	numPeers, err := s.numPeers()
+	numPeers, err := b.numPeers()
 	if err != nil {
-		s.logger.Error("jocko: failed to check raft peers", log.Error("error", err))
+		b.logger.Error("jocko: failed to check raft peers", log.Error("error", err))
 		return err
 	}
 
-	isLeader := s.isLeader()
+	isLeader := b.isLeader()
 	if isLeader && numPeers > 1 {
-		future := s.raft.RemoveServer(raft.ServerID(s.config.ID), 0, 0)
+		future := b.raft.RemoveServer(raft.ServerID(b.config.ID), 0, 0)
 		if err := future.Error(); err != nil {
-			s.logger.Error("failed to remove ourself as raft peer", log.Error("error", err))
+			b.logger.Error("failed to remove ourself as raft peer", log.Error("error", err))
 		}
 	}
 
-	if s.serf != nil {
-		if err := s.serf.Leave(); err != nil {
-			s.logger.Error("failed to leave LAN serf cluster", log.Error("error", err))
+	if b.serf != nil {
+		if err := b.serf.Leave(); err != nil {
+			b.logger.Error("failed to leave LAN serf cluster", log.Error("error", err))
 		}
 	}
 
-	time.Sleep(s.config.LeaveDrainTime)
+	time.Sleep(b.config.LeaveDrainTime)
 
 	if !isLeader {
 		left := false
@@ -799,16 +806,16 @@ func (s *Broker) Leave() error {
 			time.Sleep(50 * time.Millisecond)
 
 			// Get the latest configuration.
-			future := s.raft.GetConfiguration()
+			future := b.raft.GetConfiguration()
 			if err := future.Error(); err != nil {
-				s.logger.Error("failed to get raft configuration", log.Error("error", err))
+				b.logger.Error("failed to get raft configuration", log.Error("error", err))
 				break
 			}
 
 			// See if we are no longer included.
 			left = true
 			for _, server := range future.Configuration().Servers {
-				if server.Address == raft.ServerAddress(s.config.RaftAddr) {
+				if server.Address == raft.ServerAddress(b.config.RaftAddr) {
 					left = false
 					break
 				}
@@ -914,22 +921,22 @@ func ensurePath(path string, dir bool) error {
 }
 
 // Atomically sets a readiness state flag when leadership is obtained, to indicate that server is past its barrier write
-func (s *Broker) setConsistentReadReady() {
-	atomic.StoreInt32(&s.readyForConsistentReads, 1)
+func (b *Broker) setConsistentReadReady() {
+	atomic.StoreInt32(&b.readyForConsistentReads, 1)
 }
 
 // Atomically reset readiness state flag on leadership revoke
-func (s *Broker) resetConsistentReadReady() {
-	atomic.StoreInt32(&s.readyForConsistentReads, 0)
+func (b *Broker) resetConsistentReadReady() {
+	atomic.StoreInt32(&b.readyForConsistentReads, 0)
 }
 
 // Returns true if this server is ready to serve consistent reads
-func (s *Broker) isReadyForConsistentReads() bool {
-	return atomic.LoadInt32(&s.readyForConsistentReads) == 1
+func (b *Broker) isReadyForConsistentReads() bool {
+	return atomic.LoadInt32(&b.readyForConsistentReads) == 1
 }
 
-func (s *Broker) numPeers() (int, error) {
-	future := s.raft.GetConfiguration()
+func (b *Broker) numPeers() (int, error) {
+	future := b.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
 		return 0, err
 	}
@@ -943,8 +950,8 @@ func (s *Broker) numPeers() (int, error) {
 	return numPeers, nil
 }
 
-func (s *Broker) LANMembers() []serf.Member {
-	return s.serf.Members()
+func (b *Broker) LANMembers() []serf.Member {
+	return b.serf.Members()
 }
 
 // Replica
