@@ -19,6 +19,7 @@ type PacketDecoder interface {
 	ArrayLength() (int, error)
 	Bytes() ([]byte, error)
 	String() (string, error)
+	NullableString() (*string, error)
 	Int32Array() ([]int32, error)
 	Int64Array() ([]int64, error)
 	StringArray() ([]string, error)
@@ -166,6 +167,12 @@ func (d *ByteDecoder) String() (string, error) {
 	tmpStr := string(d.b[d.off : d.off+n])
 	d.off += n
 	return tmpStr, nil
+}
+
+func (d *ByteDecoder) NullableString() (*string, error) {
+	tmpStr, err := d.String()
+	return &tmpStr, err
+
 }
 
 func (d *ByteDecoder) Int32Array() ([]int32, error) {

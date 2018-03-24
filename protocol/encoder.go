@@ -12,6 +12,7 @@ type PacketEncoder interface {
 	PutRawBytes(in []byte) error
 	PutBytes(in []byte) error
 	PutString(in string) error
+	PutNullableString(in *string) error
 	PutStringArray(in []string) error
 	PutInt32Array(in []int32) error
 	PutInt64Array(in []int64) error
@@ -108,6 +109,14 @@ func (e *LenEncoder) PutString(in string) error {
 	}
 	e.Length += len(in)
 	return nil
+}
+
+func (e *LenEncoder) PutNullableString(in *string) error {
+	if in == nil {
+		e.Length += 2
+		return nil
+	}
+	return e.PutString(*in)
 }
 
 func (e *LenEncoder) PutStringArray(in []string) error {
@@ -217,6 +226,14 @@ func (e *ByteEncoder) PutString(in string) error {
 	copy(e.b[e.off:], in)
 	e.off += len(in)
 	return nil
+}
+
+func (e *ByteEncoder) PutNullableString(in *string) error {
+	if in == nil {
+		e.PutInt16(-1)
+		return nil
+	}
+	return e.PutString(*in)
 }
 
 func (e *ByteEncoder) PutStringArray(in []string) error {
