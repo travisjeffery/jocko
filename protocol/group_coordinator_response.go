@@ -1,11 +1,5 @@
 package protocol
 
-type Coordinator struct {
-	NodeID int32
-	Host   string
-	Port   int32
-}
-
 type GroupCoordinatorResponse struct {
 	ErrorCode   int16
 	Coordinator *Coordinator
