@@ -13,6 +13,7 @@ import (
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
 	"github.com/travisjeffery/jocko/log"
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/ugorji/go/codec"
 )
 
@@ -499,6 +500,111 @@ func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
 	return nil
 }
 
+func (s *Store) EnsureCoordinator(idx uint64, coordinator *structs.Coordinator) error {
+	sp := s.tracer.StartSpan("store: ensure coordinator")
+	s.vlog(sp, "coordinator", coordinator)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+	if err := s.ensureCoordinatorTxn(tx, idx, coordinator); err != nil {
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) ensureCoordinatorTxn(tx *memdb.Txn, idx uint64, coordinator *structs.Coordinator) error {
+	var t *structs.Coordinator
+	existing, err := tx.First("coordinators", "id", coordinator.Group, coordinator.Type)
+	if err != nil {
+		return fmt.Errorf("coordinator lookup failed: %s", err)
+	}
+
+	if existing != nil {
+		t = existing.(*structs.Coordinator)
+	}
+
+	if t != nil {
+		coordinator.CreateIndex = t.CreateIndex
+		coordinator.ModifyIndex = idx
+	} else {
+		coordinator.CreateIndex = idx
+		coordinator.ModifyIndex = idx
+	}
+
+	if err := tx.Insert("coordinators", coordinator); err != nil {
+		return fmt.Errorf("failed inserting coordinator: %s", err)
+	}
+
+	if err := tx.Insert("index", &IndexEntry{"coordinators", idx}); err != nil {
+		return fmt.Errorf("failed updating index: %s", err)
+	}
+
+	return nil
+}
+
+// GetCoordinator is used to get coordinators.
+func (s *Store) GetCoordinator(id string, t protocol.CoordinatorType) (uint64, *structs.Coordinator, error) {
+	sp := s.tracer.StartSpan("store: get coordinator")
+	sp.LogKV("id", id)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "coordinators")
+
+	coordinator, err := tx.First("coordinators", "id", id, t)
+	if err != nil {
+		return 0, nil, fmt.Errorf("coordinator lookup failed: %s", err)
+	}
+	if coordinator != nil {
+		return idx, coordinator.(*structs.Coordinator), nil
+	}
+
+	return idx, nil, nil
+}
+
+// DeleteCoordinator is used to delete coordinators.
+func (s *Store) DeleteCoordinator(idx uint64, group string, cType protocol.CoordinatorType) error {
+	sp := s.tracer.StartSpan("store: delete coordinator")
+	sp.LogKV("group", group, "coordinator", cType)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.deleteCoordinatorTxn(tx, idx, group, cType); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) deleteCoordinatorTxn(tx *memdb.Txn, idx uint64, group string, cType protocol.CoordinatorType) error {
+	coordinator, err := tx.First("coordinators", "id", group, cType)
+	if err != nil {
+		s.logger.Error("failed coordinator lookup", log.Error("error", err))
+		return err
+	}
+	if coordinator == nil {
+		return nil
+	}
+	if err := tx.Delete("coordinators", coordinator); err != nil {
+		s.logger.Error("failed deleting coordinator", log.Error("error", err))
+		return err
+	}
+	if err := tx.Insert("index", &IndexEntry{"coordinators", idx}); err != nil {
+		s.logger.Error("failed updating index", log.Error("error", err))
+		return err
+	}
+	return nil
+}
+
 func (s *Store) EnsurePartition(idx uint64, partition *structs.Partition) error {
 	sp := s.tracer.StartSpan("store: ensure partition")
 	s.vlog(sp, "partition", partition)
@@ -837,11 +943,30 @@ func partitionsTableSchema() *memdb.TableSchema {
 	}
 }
 
+func coordinatorTableSchema() *memdb.TableSchema {
+	return &memdb.TableSchema{
+		Name: "coordinators",
+		Indexes: map[string]*memdb.IndexSchema{
+			"id": &memdb.IndexSchema{
+				Name:   "id",
+				Unique: true,
+				Indexer: &memdb.CompoundIndex{
+					Indexes: []memdb.Indexer{
+						&memdb.StringFieldIndex{Field: "Group"},
+						&IntFieldIndex{Field: "Type"},
+					},
+				},
+			},
+		},
+	}
+}
+
 func init() {
 	registerSchema(indexTableSchema)
 	registerSchema(nodesTableSchema)
 	registerSchema(topicsTableSchema)
 	registerSchema(partitionsTableSchema)
+	registerSchema(coordinatorTableSchema)
 
 	e := os.Getenv("JOCKODEBUG")
 	if strings.Contains(e, "fsm=1") {

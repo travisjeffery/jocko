@@ -162,6 +162,8 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 				resp = b.handleDeleteTopics(reqCtx, header, req)
 			case *protocol.LeaderAndISRRequest:
 				resp = b.handleLeaderAndISR(reqCtx, header, req)
+			case *protocol.FindCoordinatorRequest:
+				resp = b.handleFindCoordinator(reqCtx, header, req)
 			}
 		case <-ctx.Done():
 			return
@@ -542,6 +544,23 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 		Brokers:       brokers,
 		TopicMetadata: topicMetadata,
 	}
+	return resp
+}
+
+func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.RequestHeader, r *protocol.FindCoordinatorRequest) *protocol.FindCoordinatorResponse {
+	sp := span(ctx, b.tracer, "find coordinator")
+	defer sp.Finish()
+
+	resp := &protocol.FindCoordinatorResponse{}
+	resp.ThrottleTimeMs = 0
+	resp.ErrorCode = protocol.ErrNone.Code()
+	resp.ErrorMessage = nil
+
+	// TODO: distribute this.
+	resp.Coordinator.NodeID = 0
+	resp.Coordinator.Host = "localhost"
+	resp.Coordinator.Port = 0
+
 	return resp
 }
 

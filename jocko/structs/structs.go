@@ -3,6 +3,7 @@ package structs
 import (
 	"bytes"
 
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/ugorji/go/codec"
 )
 
@@ -141,5 +142,14 @@ type Partition struct {
 	ControllerEpoch int32
 	LeaderEpoch     int32
 
+	RaftIndex
+}
+
+// Group
+type Coordinator struct {
+	ID          string
+	Group       string
+	Type        protocol.CoordinatorType
+	Coordinator int32
 	RaftIndex
 }

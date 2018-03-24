@@ -1,8 +1,15 @@
 package protocol
 
+type CoordinatorType int8
+
+const (
+	CoordinatorGroup       CoordinatorType = 0
+	CoordinatorTransaction CoordinatorType = 0
+)
+
 type FindCoordinatorRequest struct {
 	CoordinatorKey  string
-	CoordinatorType int8
+	CoordinatorType CoordinatorType
 }
 
 func (r *FindCoordinatorRequest) Encode(e PacketEncoder) (err error) {
@@ -10,7 +17,7 @@ func (r *FindCoordinatorRequest) Encode(e PacketEncoder) (err error) {
 		return err
 	}
 	if r.Version() >= 1 {
-		e.PutInt8(r.CoordinatorType)
+		e.PutInt8(int8(r.CoordinatorType))
 	}
 	return nil
 }
@@ -19,9 +26,11 @@ func (r *FindCoordinatorRequest) Decode(d PacketDecoder) (err error) {
 	if r.CoordinatorKey, err = d.String(); err != nil {
 		return err
 	}
-	if r.CoordinatorType, err = d.Int8(); err != nil {
+	coordinatorType, err := d.Int8()
+	if err != nil {
 		return err
 	}
+	r.CoordinatorType = CoordinatorType(coordinatorType)
 	return nil
 }
 

@@ -7,6 +7,7 @@ import (
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
+	"github.com/travisjeffery/jocko/protocol"
 )
 
 func testStore(t *testing.T) *Store {
@@ -204,5 +205,57 @@ func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic s
 	}
 	if result, ok := top.(*structs.Partition); !ok || result.Partition != id {
 		t.Fatalf("bad partition: %#v", result)
+	}
+}
+
+func TestStore_RegisterCoordinator(t *testing.T) {
+	s := testStore(t)
+
+	testRegisterCoordinator(t, s, 0, "test-group", protocol.CoordinatorGroup)
+
+	if _, p, err := s.GetCoordinator("test-group", protocol.CoordinatorGroup); err != nil || p == nil {
+		t.Fatalf("err: %s, coordinator: %v", err, p)
+	}
+
+	// delete the coordinator
+	if err := s.DeleteCoordinator(1, "test-group", protocol.CoordinatorGroup); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// check it's gone
+	if idx, top, err := s.GetCoordinator("test-group", protocol.CoordinatorGroup); err != nil || top != nil || idx != 1 {
+		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
+	}
+
+	// check index is updated
+	if idx := s.maxIndex("coordinators"); idx != 1 {
+		t.Fatalf("err: %d", idx)
+	}
+
+	// deleting should be idempotent
+	if err := s.DeleteCoordinator(2, "test-group", 1); err != nil {
+		t.Fatalf("err: %d", err)
+	}
+	if idx := s.maxIndex("coordinators"); idx != 1 {
+		t.Fatalf("err: %d", idx)
+	}
+}
+
+const (
+	coordinator = int32(1)
+)
+
+func testRegisterCoordinator(t *testing.T, s *Store, idx uint64, id string, cType protocol.CoordinatorType) {
+	if err := s.EnsureCoordinator(idx, &structs.Coordinator{Group: id, Type: cType, Coordinator: coordinator}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	top, err := tx.First("coordinators", "id", id, cType)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if result, ok := top.(*structs.Coordinator); !ok || result.Coordinator != coordinator {
+		t.Fatalf("bad coordinator: %#v", result)
 	}
 }

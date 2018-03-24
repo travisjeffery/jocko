@@ -18,5 +18,4 @@ func TestFindCoordinatorRequest(t *testing.T) {
 	err = Decode(b, &act)
 	req.NoError(err)
 	req.Equal(exp, &act)
-
 }
