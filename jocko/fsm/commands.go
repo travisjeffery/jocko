@@ -14,6 +14,21 @@ func init() {
 	registerCommand(structs.DeregisterTopicRequestType, (*FSM).applyDeregisterTopic)
 	registerCommand(structs.RegisterPartitionRequestType, (*FSM).applyRegisterPartition)
 	registerCommand(structs.DeregisterPartitionRequestType, (*FSM).applyDeregisterPartition)
+	registerCommand(structs.RegisterCoordinatorRequestType, (*FSM).applyRegisterCoordinator)
+}
+
+func (c *FSM) applyRegisterCoordinator(buf []byte, index uint64) interface{} {
+	var req structs.RegisterCoordinatorRequest
+	if err := structs.Decode(buf, &req); err != nil {
+		panic(fmt.Errorf("failed to decode request: %v", err))
+	}
+
+	if err := c.state.EnsureCoordinator(index, &req.Coordinator); err != nil {
+		c.logger.Error("EnsureNode failed", log.Error("error", err))
+		return err
+	}
+
+	return nil
 }
 
 func (c *FSM) applyRegisterNode(buf []byte, index uint64) interface{} {

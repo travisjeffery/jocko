@@ -1,8 +1,13 @@
 package protocol
 
+type ListGroup struct {
+	GroupID      string
+	ProtocolType string
+}
+
 type ListGroupsResponse struct {
 	ErrorCode int16
-	Groups    map[string]string
+	Groups    []ListGroup
 }
 
 func (r *ListGroupsResponse) Encode(e PacketEncoder) error {
@@ -10,11 +15,11 @@ func (r *ListGroupsResponse) Encode(e PacketEncoder) error {
 	if err := e.PutArrayLength(len(r.Groups)); err != nil {
 		return err
 	}
-	for groupID, protocolType := range r.Groups {
-		if err := e.PutString(groupID); err != nil {
+	for _, group := range r.Groups {
+		if err := e.PutString(group.GroupID); err != nil {
 			return err
 		}
-		if err := e.PutString(protocolType); err != nil {
+		if err := e.PutString(group.ProtocolType); err != nil {
 			return err
 		}
 	}
@@ -29,7 +34,7 @@ func (r *ListGroupsResponse) Decode(d PacketDecoder) (err error) {
 	if err != nil {
 		return err
 	}
-	r.Groups = make(map[string]string)
+	r.Groups = make([]ListGroup, groupCount)
 	for i := 0; i < groupCount; i++ {
 		groupID, err := d.String()
 		if err != nil {
@@ -39,7 +44,7 @@ func (r *ListGroupsResponse) Decode(d PacketDecoder) (err error) {
 		if err != nil {
 			return err
 		}
-		r.Groups[groupID] = protocolType
+		r.Groups[i] = ListGroup{GroupID: groupID, ProtocolType: protocolType}
 	}
 	return nil
 }

@@ -25,7 +25,7 @@ func (b *Broker) setupSerf(config *serf.Config, ch chan serf.Event, path string)
 		config.Tags["non_voter"] = "1"
 	}
 	config.Tags["raft_addr"] = b.config.RaftAddr
-	config.Tags["serf_lan_addr"] = fmt.Sprintf("%b:%d", b.config.SerfLANConfig.MemberlistConfig.BindAddr, b.config.SerfLANConfig.MemberlistConfig.BindPort)
+	config.Tags["serf_lan_addr"] = fmt.Sprintf("%s:%d", b.config.SerfLANConfig.MemberlistConfig.BindAddr, b.config.SerfLANConfig.MemberlistConfig.BindPort)
 	config.Tags["broker_addr"] = b.config.Addr
 	config.EventCh = ch
 	config.EnableNameConflictResolution = false

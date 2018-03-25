@@ -367,17 +367,39 @@ func TestBroker_Run(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "find coordinator",
+			args: args{
+				requestCh:  make(chan Request, 2),
+				responseCh: make(chan Response, 2),
+				requests: []Request{{
+					Header: &protocol.RequestHeader{CorrelationID: 3},
+					Request: &protocol.FindCoordinatorRequest{
+						CoordinatorKey:  "test-group",
+						CoordinatorType: protocol.CoordinatorGroup,
+					},
+				}},
+				responses: []Response{{
+					Header: &protocol.RequestHeader{CorrelationID: 3},
+					Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
+						Coordinator: protocol.Coordinator{
+							NodeID: 1,
+							Host:   "localhost",
+							Port:   9092,
+						},
+					}},
+				}},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var dir string
 			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
-				dir = cfg.DataDir
 			}, nil)
 			b := s.broker
 

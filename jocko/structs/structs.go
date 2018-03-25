@@ -16,6 +16,7 @@ const (
 	DeregisterTopicRequestType                 = 3
 	RegisterPartitionRequestType               = 4
 	DeregisterPartitionRequestType             = 5
+	RegisterCoordinatorRequestType             = 6
 )
 
 type CheckID string
@@ -36,6 +37,10 @@ const (
 	HealthCritical = "critical"
 	HealthMaint    = "maintenance"
 )
+
+type RegisterCoordinatorRequest struct {
+	Coordinator Coordinator
+}
 
 type RegisterNodeRequest struct {
 	Node Node

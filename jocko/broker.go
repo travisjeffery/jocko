@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -465,19 +463,10 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 		if !ok {
 			continue
 		}
-		// TODO: replace this -- just use the addr
-		host, portStr, err := net.SplitHostPort(m.BrokerAddr)
-		if err != nil {
-			panic(err)
-		}
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			panic(err)
-		}
 		brokers = append(brokers, &protocol.Broker{
 			NodeID: m.ID.Int32(),
-			Host:   host,
-			Port:   int32(port),
+			Host:   m.Host(),
+			Port:   m.Port(),
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
@@ -553,13 +542,42 @@ func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.Req
 
 	resp := &protocol.FindCoordinatorResponse{}
 	resp.ThrottleTimeMs = 0
-	resp.ErrorCode = protocol.ErrNone.Code()
-	resp.ErrorMessage = nil
 
 	// TODO: distribute this.
-	resp.Coordinator.NodeID = 0
-	resp.Coordinator.Host = "localhost"
-	resp.Coordinator.Port = 0
+	state := b.fsm.State()
+
+	var broker *metadata.Broker
+	_, coordinator, err := state.GetCoordinator(r.CoordinatorKey, r.CoordinatorType)
+	if err != nil {
+		goto ERROR
+	}
+
+	if coordinator == nil {
+		broker = b.brokerLookup.RandomBroker()
+
+		_, err := b.raftApply(structs.RegisterCoordinatorRequestType, structs.RegisterCoordinatorRequest{
+			Coordinator: structs.Coordinator{
+				Group:       r.CoordinatorKey,
+				Type:        r.CoordinatorType,
+				Coordinator: broker.ID.Int32(),
+			},
+		})
+		if err != nil {
+			goto ERROR
+		}
+	}
+
+	resp.Coordinator.NodeID = broker.ID.Int32()
+	resp.Coordinator.Host = broker.Host()
+	resp.Coordinator.Port = broker.Port()
+
+	return resp
+
+ERROR:
+	// todo: which err code to use?
+	resp.ErrorCode = protocol.ErrUnknown.Code()
+	msg := err.Error()
+	resp.ErrorMessage = &msg
 
 	return resp
 }
