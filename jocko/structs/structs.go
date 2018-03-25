@@ -16,7 +16,7 @@ const (
 	DeregisterTopicRequestType                 = 3
 	RegisterPartitionRequestType               = 4
 	DeregisterPartitionRequestType             = 5
-	RegisterCoordinatorRequestType             = 6
+	RegisterGroupRequestType                   = 6
 )
 
 type CheckID string
@@ -38,8 +38,8 @@ const (
 	HealthMaint    = "maintenance"
 )
 
-type RegisterCoordinatorRequest struct {
-	Coordinator Coordinator
+type RegisterGroupRequest struct {
+	Group Group
 }
 
 type RegisterNodeRequest struct {
@@ -151,7 +151,7 @@ type Partition struct {
 }
 
 // Group
-type Coordinator struct {
+type Group struct {
 	ID          string
 	Group       string
 	Type        protocol.CoordinatorType

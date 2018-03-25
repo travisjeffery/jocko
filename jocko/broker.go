@@ -541,7 +541,6 @@ func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.Req
 	defer sp.Finish()
 
 	resp := &protocol.FindCoordinatorResponse{}
-	resp.ThrottleTimeMs = 0
 
 	// TODO: distribute this.
 	state := b.fsm.State()
@@ -580,6 +579,17 @@ ERROR:
 	resp.ErrorMessage = &msg
 
 	return resp
+}
+
+func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.JoinGroupRequest) *protocol.JoinGroupResponse {
+	sp := span(ctx, b.tracer, "join group")
+	defer sp.Finish()
+	return nil
+	// resp := &protocol.JoinGroupResponse{}
+
+	// // TODO: distribute this.
+	// state := b.fsm.State()
+	// r
 }
 
 func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {

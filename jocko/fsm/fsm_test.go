@@ -208,35 +208,35 @@ func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic s
 	}
 }
 
-func TestStore_RegisterCoordinator(t *testing.T) {
+func TestStore_RegisterGroup(t *testing.T) {
 	s := testStore(t)
 
-	testRegisterCoordinator(t, s, 0, "test-group", protocol.CoordinatorGroup)
+	testRegisterGroup(t, s, 0, "test-group", protocol.CoordinatorGroup)
 
-	if _, p, err := s.GetCoordinator("test-group", protocol.CoordinatorGroup); err != nil || p == nil {
-		t.Fatalf("err: %s, coordinator: %v", err, p)
+	if _, p, err := s.GetGroup("test-group", protocol.CoordinatorGroup); err != nil || p == nil {
+		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
-	// delete the coordinator
-	if err := s.DeleteCoordinator(1, "test-group", protocol.CoordinatorGroup); err != nil {
+	// delete the group
+	if err := s.DeleteGroup(1, "test-group", protocol.CoordinatorGroup); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
-	if idx, top, err := s.GetCoordinator("test-group", protocol.CoordinatorGroup); err != nil || top != nil || idx != 1 {
+	if idx, top, err := s.GetGroup("test-group", protocol.CoordinatorGroup); err != nil || top != nil || idx != 1 {
 		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
 	// check index is updated
-	if idx := s.maxIndex("coordinators"); idx != 1 {
+	if idx := s.maxIndex("groups"); idx != 1 {
 		t.Fatalf("err: %d", idx)
 	}
 
 	// deleting should be idempotent
-	if err := s.DeleteCoordinator(2, "test-group", 1); err != nil {
+	if err := s.DeleteGroup(2, "test-group", 1); err != nil {
 		t.Fatalf("err: %d", err)
 	}
-	if idx := s.maxIndex("coordinators"); idx != 1 {
+	if idx := s.maxIndex("groups"); idx != 1 {
 		t.Fatalf("err: %d", idx)
 	}
 }
@@ -245,17 +245,17 @@ const (
 	coordinator = int32(1)
 )
 
-func testRegisterCoordinator(t *testing.T, s *Store, idx uint64, id string, cType protocol.CoordinatorType) {
-	if err := s.EnsureCoordinator(idx, &structs.Coordinator{Group: id, Type: cType, Coordinator: coordinator}); err != nil {
+func testRegisterGroup(t *testing.T, s *Store, idx uint64, id string, cType protocol.CoordinatorType) {
+	if err := s.EnsureGroup(idx, &structs.Group{Group: id, Type: cType, Coordinator: coordinator}); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 	tx := s.db.Txn(false)
 	defer tx.Abort()
-	top, err := tx.First("coordinators", "id", id, cType)
+	top, err := tx.First("groups", "id", id, cType)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
-	if result, ok := top.(*structs.Coordinator); !ok || result.Coordinator != coordinator {
-		t.Fatalf("bad coordinator: %#v", result)
+	if result, ok := top.(*structs.Group); !ok || result.Coordinator != coordinator {
+		t.Fatalf("bad group: %#v", result)
 	}
 }

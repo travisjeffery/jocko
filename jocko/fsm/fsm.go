@@ -500,84 +500,84 @@ func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
 	return nil
 }
 
-func (s *Store) EnsureCoordinator(idx uint64, coordinator *structs.Coordinator) error {
-	sp := s.tracer.StartSpan("store: ensure coordinator")
-	s.vlog(sp, "coordinator", coordinator)
+func (s *Store) EnsureGroup(idx uint64, group *structs.Group) error {
+	sp := s.tracer.StartSpan("store: ensure group")
+	s.vlog(sp, "group", group)
 	sp.SetTag("node id", s.nodeID)
 	defer sp.Finish()
 
 	tx := s.db.Txn(true)
 	defer tx.Abort()
-	if err := s.ensureCoordinatorTxn(tx, idx, coordinator); err != nil {
+	if err := s.ensureGroupTxn(tx, idx, group); err != nil {
 		return err
 	}
 	tx.Commit()
 	return nil
 }
 
-func (s *Store) ensureCoordinatorTxn(tx *memdb.Txn, idx uint64, coordinator *structs.Coordinator) error {
-	var t *structs.Coordinator
-	existing, err := tx.First("coordinators", "id", coordinator.Group, coordinator.Type)
+func (s *Store) ensureGroupTxn(tx *memdb.Txn, idx uint64, group *structs.Group) error {
+	var t *structs.Group
+	existing, err := tx.First("groups", "id", group.Group, group.Type)
 	if err != nil {
-		return fmt.Errorf("coordinator lookup failed: %s", err)
+		return fmt.Errorf("group lookup failed: %s", err)
 	}
 
 	if existing != nil {
-		t = existing.(*structs.Coordinator)
+		t = existing.(*structs.Group)
 	}
 
 	if t != nil {
-		coordinator.CreateIndex = t.CreateIndex
-		coordinator.ModifyIndex = idx
+		group.CreateIndex = t.CreateIndex
+		group.ModifyIndex = idx
 	} else {
-		coordinator.CreateIndex = idx
-		coordinator.ModifyIndex = idx
+		group.CreateIndex = idx
+		group.ModifyIndex = idx
 	}
 
-	if err := tx.Insert("coordinators", coordinator); err != nil {
-		return fmt.Errorf("failed inserting coordinator: %s", err)
+	if err := tx.Insert("groups", group); err != nil {
+		return fmt.Errorf("failed inserting group: %s", err)
 	}
 
-	if err := tx.Insert("index", &IndexEntry{"coordinators", idx}); err != nil {
+	if err := tx.Insert("index", &IndexEntry{"groups", idx}); err != nil {
 		return fmt.Errorf("failed updating index: %s", err)
 	}
 
 	return nil
 }
 
-// GetCoordinator is used to get coordinators.
-func (s *Store) GetCoordinator(id string, t protocol.CoordinatorType) (uint64, *structs.Coordinator, error) {
-	sp := s.tracer.StartSpan("store: get coordinator")
+// GetGroup is used to get groups.
+func (s *Store) GetGroup(id string, t protocol.CoordinatorType) (uint64, *structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get group")
 	sp.LogKV("id", id)
 	sp.SetTag("node id", s.nodeID)
 	defer sp.Finish()
 
 	tx := s.db.Txn(false)
 	defer tx.Abort()
-	idx := maxIndexTxn(tx, "coordinators")
+	idx := maxIndexTxn(tx, "groups")
 
-	coordinator, err := tx.First("coordinators", "id", id, t)
+	group, err := tx.First("groups", "id", id, t)
 	if err != nil {
-		return 0, nil, fmt.Errorf("coordinator lookup failed: %s", err)
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
 	}
-	if coordinator != nil {
-		return idx, coordinator.(*structs.Coordinator), nil
+	if group != nil {
+		return idx, group.(*structs.Group), nil
 	}
 
 	return idx, nil, nil
 }
 
-// DeleteCoordinator is used to delete coordinators.
-func (s *Store) DeleteCoordinator(idx uint64, group string, cType protocol.CoordinatorType) error {
-	sp := s.tracer.StartSpan("store: delete coordinator")
-	sp.LogKV("group", group, "coordinator", cType)
+// DeleteGroup is used to delete groups.
+func (s *Store) DeleteGroup(idx uint64, group string, cType protocol.CoordinatorType) error {
+	sp := s.tracer.StartSpan("store: delete group")
+	sp.LogKV("group", group, "group", cType)
 	sp.SetTag("node id", s.nodeID)
 	defer sp.Finish()
 
 	tx := s.db.Txn(true)
 	defer tx.Abort()
 
-	if err := s.deleteCoordinatorTxn(tx, idx, group, cType); err != nil {
+	if err := s.deleteGroupTxn(tx, idx, group, cType); err != nil {
 		return err
 	}
 
@@ -585,20 +585,20 @@ func (s *Store) DeleteCoordinator(idx uint64, group string, cType protocol.Coord
 	return nil
 }
 
-func (s *Store) deleteCoordinatorTxn(tx *memdb.Txn, idx uint64, group string, cType protocol.CoordinatorType) error {
-	coordinator, err := tx.First("coordinators", "id", group, cType)
+func (s *Store) deleteGroupTxn(tx *memdb.Txn, idx uint64, id string, cType protocol.CoordinatorType) error {
+	group, err := tx.First("groups", "id", id, cType)
 	if err != nil {
-		s.logger.Error("failed coordinator lookup", log.Error("error", err))
+		s.logger.Error("failed group lookup", log.Error("error", err))
 		return err
 	}
-	if coordinator == nil {
+	if group == nil {
 		return nil
 	}
-	if err := tx.Delete("coordinators", coordinator); err != nil {
-		s.logger.Error("failed deleting coordinator", log.Error("error", err))
+	if err := tx.Delete("groups", group); err != nil {
+		s.logger.Error("failed deleting group", log.Error("error", err))
 		return err
 	}
-	if err := tx.Insert("index", &IndexEntry{"coordinators", idx}); err != nil {
+	if err := tx.Insert("index", &IndexEntry{"groups", idx}); err != nil {
 		s.logger.Error("failed updating index", log.Error("error", err))
 		return err
 	}
@@ -943,9 +943,9 @@ func partitionsTableSchema() *memdb.TableSchema {
 	}
 }
 
-func coordinatorTableSchema() *memdb.TableSchema {
+func groupTableSchema() *memdb.TableSchema {
 	return &memdb.TableSchema{
-		Name: "coordinators",
+		Name: "groups",
 		Indexes: map[string]*memdb.IndexSchema{
 			"id": &memdb.IndexSchema{
 				Name:   "id",
@@ -966,7 +966,7 @@ func init() {
 	registerSchema(nodesTableSchema)
 	registerSchema(topicsTableSchema)
 	registerSchema(partitionsTableSchema)
-	registerSchema(coordinatorTableSchema)
+	registerSchema(groupTableSchema)
 
 	e := os.Getenv("JOCKODEBUG")
 	if strings.Contains(e, "fsm=1") {
