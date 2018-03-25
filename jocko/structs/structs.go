@@ -3,7 +3,6 @@ package structs
 import (
 	"bytes"
 
-	"github.com/travisjeffery/jocko/protocol"
 	"github.com/ugorji/go/codec"
 )
 
@@ -150,11 +149,18 @@ type Partition struct {
 	RaftIndex
 }
 
+// Member
+type Member struct {
+	ID       string
+	Metadata []byte
+}
+
 // Group
 type Group struct {
 	ID          string
 	Group       string
-	Type        protocol.CoordinatorType
 	Coordinator int32
+	LeaderID    string
+	Members     []Member
 	RaftIndex
 }

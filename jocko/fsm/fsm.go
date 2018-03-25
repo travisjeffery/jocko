@@ -13,7 +13,6 @@ import (
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
 	"github.com/travisjeffery/jocko/log"
-	"github.com/travisjeffery/jocko/protocol"
 	"github.com/ugorji/go/codec"
 )
 
@@ -517,7 +516,7 @@ func (s *Store) EnsureGroup(idx uint64, group *structs.Group) error {
 
 func (s *Store) ensureGroupTxn(tx *memdb.Txn, idx uint64, group *structs.Group) error {
 	var t *structs.Group
-	existing, err := tx.First("groups", "id", group.Group, group.Type)
+	existing, err := tx.First("groups", "id", group.Group)
 	if err != nil {
 		return fmt.Errorf("group lookup failed: %s", err)
 	}
@@ -546,7 +545,7 @@ func (s *Store) ensureGroupTxn(tx *memdb.Txn, idx uint64, group *structs.Group) 
 }
 
 // GetGroup is used to get groups.
-func (s *Store) GetGroup(id string, t protocol.CoordinatorType) (uint64, *structs.Group, error) {
+func (s *Store) GetGroup(id string) (uint64, *structs.Group, error) {
 	sp := s.tracer.StartSpan("store: get group")
 	sp.LogKV("id", id)
 	sp.SetTag("node id", s.nodeID)
@@ -556,7 +555,7 @@ func (s *Store) GetGroup(id string, t protocol.CoordinatorType) (uint64, *struct
 	defer tx.Abort()
 	idx := maxIndexTxn(tx, "groups")
 
-	group, err := tx.First("groups", "id", id, t)
+	group, err := tx.First("groups", "id", id)
 	if err != nil {
 		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
 	}
@@ -568,16 +567,16 @@ func (s *Store) GetGroup(id string, t protocol.CoordinatorType) (uint64, *struct
 }
 
 // DeleteGroup is used to delete groups.
-func (s *Store) DeleteGroup(idx uint64, group string, cType protocol.CoordinatorType) error {
+func (s *Store) DeleteGroup(idx uint64, group string) error {
 	sp := s.tracer.StartSpan("store: delete group")
-	sp.LogKV("group", group, "group", cType)
+	sp.LogKV("group", group, "group")
 	sp.SetTag("node id", s.nodeID)
 	defer sp.Finish()
 
 	tx := s.db.Txn(true)
 	defer tx.Abort()
 
-	if err := s.deleteGroupTxn(tx, idx, group, cType); err != nil {
+	if err := s.deleteGroupTxn(tx, idx, group); err != nil {
 		return err
 	}
 
@@ -585,8 +584,8 @@ func (s *Store) DeleteGroup(idx uint64, group string, cType protocol.Coordinator
 	return nil
 }
 
-func (s *Store) deleteGroupTxn(tx *memdb.Txn, idx uint64, id string, cType protocol.CoordinatorType) error {
-	group, err := tx.First("groups", "id", id, cType)
+func (s *Store) deleteGroupTxn(tx *memdb.Txn, idx uint64, id string) error {
+	group, err := tx.First("groups", "id", id)
 	if err != nil {
 		s.logger.Error("failed group lookup", log.Error("error", err))
 		return err
@@ -948,13 +947,12 @@ func groupTableSchema() *memdb.TableSchema {
 		Name: "groups",
 		Indexes: map[string]*memdb.IndexSchema{
 			"id": &memdb.IndexSchema{
-				Name:   "id",
-				Unique: true,
-				Indexer: &memdb.CompoundIndex{
-					Indexes: []memdb.Indexer{
-						&memdb.StringFieldIndex{Field: "Group"},
-						&IntFieldIndex{Field: "Type"},
-					},
+				Name:         "id",
+				AllowMissing: false,
+				Unique:       true,
+				Indexer: &memdb.StringFieldIndex{
+					Field:     "Group",
+					Lowercase: true,
 				},
 			},
 		},

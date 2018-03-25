@@ -213,17 +213,17 @@ func TestStore_RegisterGroup(t *testing.T) {
 
 	testRegisterGroup(t, s, 0, "test-group", protocol.CoordinatorGroup)
 
-	if _, p, err := s.GetGroup("test-group", protocol.CoordinatorGroup); err != nil || p == nil {
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil {
 		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
 	// delete the group
-	if err := s.DeleteGroup(1, "test-group", protocol.CoordinatorGroup); err != nil {
+	if err := s.DeleteGroup(1, "test-group"); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
-	if idx, top, err := s.GetGroup("test-group", protocol.CoordinatorGroup); err != nil || top != nil || idx != 1 {
+	if idx, top, err := s.GetGroup("test-group"); err != nil || top != nil || idx != 1 {
 		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
@@ -233,7 +233,7 @@ func TestStore_RegisterGroup(t *testing.T) {
 	}
 
 	// deleting should be idempotent
-	if err := s.DeleteGroup(2, "test-group", 1); err != nil {
+	if err := s.DeleteGroup(2, "test-group"); err != nil {
 		t.Fatalf("err: %d", err)
 	}
 	if idx := s.maxIndex("groups"); idx != 1 {
@@ -246,12 +246,12 @@ const (
 )
 
 func testRegisterGroup(t *testing.T, s *Store, idx uint64, id string, cType protocol.CoordinatorType) {
-	if err := s.EnsureGroup(idx, &structs.Group{Group: id, Type: cType, Coordinator: coordinator}); err != nil {
+	if err := s.EnsureGroup(idx, &structs.Group{Group: id, Coordinator: coordinator}); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 	tx := s.db.Txn(false)
 	defer tx.Abort()
-	top, err := tx.First("groups", "id", id, cType)
+	top, err := tx.First("groups", "id", id)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
