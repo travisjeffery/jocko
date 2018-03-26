@@ -601,8 +601,7 @@ func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHe
 	}
 	if r.MemberID == "" {
 		// for group member IDs -- can replace with something else
-		u1 := uuid.Must(uuid.NewV1())
-		r.MemberID = u1.String()
+		r.MemberID = uuid.NewV1().String()
 		group.Members[r.MemberID] = structs.Member{ID: r.MemberID}
 	}
 	if group.LeaderID == "" {
