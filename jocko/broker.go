@@ -622,6 +622,40 @@ func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHe
 	return resp
 }
 
+func (b *Broker) handleLeaveGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.LeaveGroupRequest) *protocol.LeaveGroupResponse {
+	sp := span(ctx, b.tracer, "leave group")
+	defer sp.Finish()
+
+	resp := &protocol.LeaveGroupResponse{}
+
+	// // TODO: distribute this.
+	state := b.fsm.State()
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	if _, ok := group.Members[r.MemberID]; !ok {
+		resp.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return resp
+	}
+
+	delete(group.Members, r.MemberID)
+
+	_, err = b.raftApply(structs.RegisterGroupRequestType, group)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+
+	return resp
+}
+
 func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.SyncGroupRequest) *protocol.SyncGroupResponse {
 	sp := span(ctx, b.tracer, "sync group")
 	defer sp.Finish()
