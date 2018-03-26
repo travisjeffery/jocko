@@ -11,7 +11,7 @@ type JoinGroupResponse struct {
 	GroupProtocol string
 	LeaderID      string
 	MemberID      string
-	Members       map[string][]byte
+	Members       []Member
 }
 
 func (r *JoinGroupResponse) Encode(e PacketEncoder) error {
@@ -27,11 +27,14 @@ func (r *JoinGroupResponse) Encode(e PacketEncoder) error {
 	if err = e.PutString(r.MemberID); err != nil {
 		return err
 	}
-	for memberID, metadata := range r.Members {
-		if err = e.PutString(memberID); err != nil {
+	if err = e.PutArrayLength(len(r.Members)); err != nil {
+		return err
+	}
+	for _, member := range r.Members {
+		if err = e.PutString(member.MemberID); err != nil {
 			return err
 		}
-		if err = e.PutBytes(metadata); err != nil {
+		if err = e.PutBytes(member.MemberMetadata); err != nil {
 			return err
 		}
 	}
@@ -60,17 +63,17 @@ func (r *JoinGroupResponse) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	r.Members = make(map[string][]byte)
+	r.Members = make([]Member, memberCount)
 	for i := 0; i < memberCount; i++ {
-		k, err := d.String()
+		id, err := d.String()
 		if err != nil {
 			return err
 		}
-		v, err := d.Bytes()
+		metadata, err := d.Bytes()
 		if err != nil {
 			return err
 		}
-		r.Members[k] = v
+		r.Members[i] = Member{MemberID: id, MemberMetadata: metadata}
 	}
 	return nil
 }

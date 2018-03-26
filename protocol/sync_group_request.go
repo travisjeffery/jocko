@@ -1,10 +1,15 @@
 package protocol
 
+type GroupAssignment struct {
+	MemberID         string
+	MemberAssignment []byte
+}
+
 type SyncGroupRequest struct {
 	GroupID          string
 	GenerationID     int32
 	MemberID         string
-	GroupAssignments map[string][]byte
+	GroupAssignments []GroupAssignment
 }
 
 func (r *SyncGroupRequest) Encode(e PacketEncoder) error {
@@ -18,11 +23,11 @@ func (r *SyncGroupRequest) Encode(e PacketEncoder) error {
 	if err := e.PutArrayLength(len(r.GroupAssignments)); err != nil {
 		return err
 	}
-	for memberID, memberAssignment := range r.GroupAssignments {
-		if err := e.PutString(memberID); err != nil {
+	for _, member := range r.GroupAssignments {
+		if err := e.PutString(member.MemberID); err != nil {
 			return err
 		}
-		if err := e.PutBytes(memberAssignment); err != nil {
+		if err := e.PutBytes(member.MemberAssignment); err != nil {
 			return err
 		}
 	}
@@ -43,7 +48,7 @@ func (r *SyncGroupRequest) Decode(d PacketDecoder) (err error) {
 	if err != nil {
 		return err
 	}
-	r.GroupAssignments = make(map[string][]byte)
+	r.GroupAssignments = make([]GroupAssignment, groupAssignmentCount)
 	for i := 0; i < groupAssignmentCount; i++ {
 		memberID, err := d.String()
 		if err != nil {
@@ -53,7 +58,7 @@ func (r *SyncGroupRequest) Decode(d PacketDecoder) (err error) {
 		if err != nil {
 			return err
 		}
-		r.GroupAssignments[memberID] = memberAssignment
+		r.GroupAssignments[i] = GroupAssignment{MemberID: memberID, MemberAssignment: memberAssignment}
 	}
 	return nil
 }

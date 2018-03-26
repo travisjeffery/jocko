@@ -151,8 +151,9 @@ type Partition struct {
 
 // Member
 type Member struct {
-	ID       string
-	Metadata []byte
+	ID         string
+	Metadata   []byte
+	Assignment []byte
 }
 
 // Group
@@ -161,6 +162,6 @@ type Group struct {
 	Group       string
 	Coordinator int32
 	LeaderID    string
-	Members     []Member
+	Members     map[string]Member
 	RaftIndex
 }

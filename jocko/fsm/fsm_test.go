@@ -7,7 +7,6 @@ import (
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/log"
-	"github.com/travisjeffery/jocko/protocol"
 )
 
 func testStore(t *testing.T) *Store {
@@ -211,24 +210,40 @@ func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic s
 func TestStore_RegisterGroup(t *testing.T) {
 	s := testStore(t)
 
-	testRegisterGroup(t, s, 0, "test-group", protocol.CoordinatorGroup)
+	testRegisterGroup(t, s, 0, "test-group")
 
 	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil {
 		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
+	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, Members: []structs.Member{{ID: "member"}}}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || len(p.Members) != 1 || p.Members[0].ID != "member" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
+	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, LeaderID: "leader"}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || p.LeaderID != "leader" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
 	// delete the group
-	if err := s.DeleteGroup(1, "test-group"); err != nil {
+	if err := s.DeleteGroup(2, "test-group"); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
 	// check it's gone
-	if idx, top, err := s.GetGroup("test-group"); err != nil || top != nil || idx != 1 {
+	if idx, top, err := s.GetGroup("test-group"); err != nil || top != nil || idx != 2 {
 		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
 	}
 
 	// check index is updated
-	if idx := s.maxIndex("groups"); idx != 1 {
+	if idx := s.maxIndex("groups"); idx != 2 {
 		t.Fatalf("err: %d", idx)
 	}
 
@@ -236,7 +251,7 @@ func TestStore_RegisterGroup(t *testing.T) {
 	if err := s.DeleteGroup(2, "test-group"); err != nil {
 		t.Fatalf("err: %d", err)
 	}
-	if idx := s.maxIndex("groups"); idx != 1 {
+	if idx := s.maxIndex("groups"); idx != 2 {
 		t.Fatalf("err: %d", idx)
 	}
 }
@@ -245,7 +260,7 @@ const (
 	coordinator = int32(1)
 )
 
-func testRegisterGroup(t *testing.T, s *Store, idx uint64, id string, cType protocol.CoordinatorType) {
+func testRegisterGroup(t *testing.T, s *Store, idx uint64, id string) {
 	if err := s.EnsureGroup(idx, &structs.Group{Group: id, Coordinator: coordinator}); err != nil {
 		t.Fatalf("err: %s", err)
 	}

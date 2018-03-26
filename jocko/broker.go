@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/serf/serf"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/fsm"
@@ -546,18 +547,17 @@ func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.Req
 	state := b.fsm.State()
 
 	var broker *metadata.Broker
-	_, coordinator, err := state.GetCoordinator(r.CoordinatorKey, r.CoordinatorType)
+	_, group, err := state.GetGroup(r.CoordinatorKey)
 	if err != nil {
 		goto ERROR
 	}
 
-	if coordinator == nil {
+	if group == nil {
 		broker = b.brokerLookup.RandomBroker()
 
-		_, err := b.raftApply(structs.RegisterCoordinatorRequestType, structs.RegisterCoordinatorRequest{
-			Coordinator: structs.Coordinator{
+		_, err := b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
+			Group: structs.Group{
 				Group:       r.CoordinatorKey,
-				Type:        r.CoordinatorType,
 				Coordinator: broker.ID.Int32(),
 			},
 		})
@@ -584,12 +584,84 @@ ERROR:
 func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.JoinGroupRequest) *protocol.JoinGroupResponse {
 	sp := span(ctx, b.tracer, "join group")
 	defer sp.Finish()
-	return nil
-	// resp := &protocol.JoinGroupResponse{}
+
+	resp := &protocol.JoinGroupResponse{}
 
 	// // TODO: distribute this.
-	// state := b.fsm.State()
-	// r
+	state := b.fsm.State()
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	if r.MemberID == "" {
+		// for group member IDs -- can replace with something else
+		u1 := uuid.Must(uuid.NewV1())
+		r.MemberID = u1.String()
+		group.Members[r.MemberID] = structs.Member{ID: r.MemberID}
+	}
+	if group.LeaderID == "" {
+		group.LeaderID = r.MemberID
+	}
+	_, err = b.raftApply(structs.RegisterGroupRequestType, group)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	resp.GenerationID = 0
+	resp.LeaderID = group.LeaderID
+	resp.MemberID = r.MemberID
+	for _, m := range group.Members {
+		resp.Members = append(resp.Members, protocol.Member{MemberID: m.ID, MemberMetadata: m.Metadata})
+	}
+
+	return resp
+}
+
+func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.SyncGroupRequest) *protocol.SyncGroupResponse {
+	sp := span(ctx, b.tracer, "sync group")
+	defer sp.Finish()
+
+	state := b.fsm.State()
+	resp := &protocol.SyncGroupResponse{}
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	if group.LeaderID == r.MemberID {
+		// take the assignments from the leader and save them
+		for _, ga := range r.GroupAssignments {
+			if m, ok := group.Members[ga.MemberID]; ok {
+				m.Assignment = ga.MemberAssignment
+			} else {
+				panic("sync group: unknown member")
+			}
+		}
+		_, err = b.raftApply(structs.RegisterGroupRequestType, group)
+		if err != nil {
+			resp.ErrorCode = protocol.ErrUnknown.Code()
+			return resp
+		}
+	} else {
+		if m, ok := group.Members[r.MemberID]; ok {
+			resp.MemberAssignment = m.Assignment
+		} else {
+			panic("sync group: unknown member")
+		}
+	}
+
+	return resp
 }
 
 func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {
