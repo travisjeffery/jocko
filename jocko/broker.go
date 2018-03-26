@@ -697,6 +697,29 @@ func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHe
 	return resp
 }
 
+func (b *Broker) handleHeartbeat(ctx context.Context, header *protocol.RequestHeader, r *protocol.HeartbeatRequest) *protocol.HeartbeatResponse {
+	sp := span(ctx, b.tracer, "heartbeat")
+	defer sp.Finish()
+
+	resp := &protocol.HeartbeatResponse{}
+
+	state := b.fsm.State()
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	// TODO: need to handle case when rebalance is in process
+
+	resp.ErrorCode = protocol.ErrNone.Code()
+
+	return resp
+}
+
 func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {
 	sp := span(ctx, b.tracer, "fetch")
 	defer sp.Finish()
