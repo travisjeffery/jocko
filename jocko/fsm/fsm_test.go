@@ -216,11 +216,11 @@ func TestStore_RegisterGroup(t *testing.T) {
 		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
-	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, Members: []structs.Member{{ID: "member"}}}); err != nil {
+	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, Members: map[string]structs.Member{"member": structs.Member{ID: "member"}}}); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
-	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || len(p.Members) != 1 || p.Members[0].ID != "member" {
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || len(p.Members) != 1 || p.Members["member"].ID != "member" {
 		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
