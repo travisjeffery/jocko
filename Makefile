@@ -1,11 +1,11 @@
-BUILD_PATH := jocko
+BUILD_PATH := cmd/jocko/jocko
 DOCKER_TAG := latest
 
 all: deps test
 
 deps:
 	@which dep 2>/dev/null || go get -u github.com/golang/dep/cmd/dep
-	@dep ensure
+	@dep ensure -v
 
 vet:
 	@go list ./... | grep -v vendor | xargs go vet
