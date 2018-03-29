@@ -13,21 +13,35 @@ type CreateTopicRequests struct {
 	Timeout  int32
 }
 
-func (c *CreateTopicRequests) Encode(e PacketEncoder) error {
-	e.PutArrayLength(len(c.Requests))
+func (c *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
+	if err = e.PutArrayLength(len(c.Requests)); err != nil {
+		return err
+	}
 	for _, r := range c.Requests {
-		e.PutString(r.Topic)
+		if err = e.PutString(r.Topic); err != nil {
+			return err
+		}
 		e.PutInt32(r.NumPartitions)
 		e.PutInt16(r.ReplicationFactor)
-		e.PutArrayLength(len(r.ReplicaAssignment))
+		if err = e.PutArrayLength(len(r.ReplicaAssignment)); err != nil {
+			return err
+		}
 		for pid, ass := range r.ReplicaAssignment {
 			e.PutInt32(pid)
-			e.PutInt32Array(ass)
+			if err = e.PutInt32Array(ass); err != nil {
+				return err
+			}
 		}
-		e.PutArrayLength(len(r.Configs))
+		if err = e.PutArrayLength(len(r.Configs)); err != nil {
+			return err
+		}
 		for k, v := range r.Configs {
-			e.PutString(k)
-			e.PutNullableString(v)
+			if err = e.PutString(k); err != nil {
+				return err
+			}
+			if err = e.PutNullableString(v); err != nil {
+				return err
+			}
 		}
 	}
 	e.PutInt32(c.Timeout)
