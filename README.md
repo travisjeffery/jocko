@@ -40,6 +40,24 @@ Kafka/distributed commit log service in Go.
 
 ## Project Layout
 
+```
+├── broker        broker subsystem
+├── cmd           commands
+│   └── jocko     command to run a Jocko broker and manage topics
+├── commitlog     low-level commit log implementation
+├── examples      examples running/using Jocko
+│   ├── cluster   example booting up a 3-broker Jocko cluster
+│   └── sarama    example producing/consuming with Sarama
+├── protocol      golang implementation of Kafka's protocol
+├── prometheus    wrapper around Prometheus' client lib to handle metrics
+├── server        API subsystem
+└── testutil      test utils
+    └── mock      mocks of the various subsystems
+```
+
+## Building the Docker Image
+
+
 `docker build -t travisjeffery/jocko:latest .`
 
 
@@ -49,11 +67,11 @@ Kafka/distributed commit log service in Go.
 1. Install go
 1. Clone this repo to your $GOPATH/src dir
 
-   `git clone https://github.com/travisjeffery/jocko $GOPATH/src/github.com/travisjeffery/jocko`
+   `git clone  https://github.com/travisjeffery/jocko $GOPATH/src/github.com/travisjeffery/jocko`
 
 1. Build the jacko binary
 
-    `cd $GOPATH/src/github.com/travisjeffery/jocko; make`
+    `cd  $GOPATH/src/github.com/travisjeffery/jocko; make`
 
 
 ## License
