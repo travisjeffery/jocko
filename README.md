@@ -55,6 +55,21 @@ Kafka/distributed commit log service in Go.
     └── mock      mocks of the various subsystems
 ```
 
+## Building the Docker Image
+
+
+`docker build -t travisjeffery/jocko:latest .`
+
+
+## Building Locally
+
+1. Install make
+1. Install go
+1. Clone this repo to your $GOPATH/src dir
+   `git clone  https://github.com/travisjeffery/jocko $GOPATH/src/github.com/travisjeffery/jocko`
+1. cd  $GOPATH/src/github.com/travisjeffery/jocko`; make
+
+
 ## License
 
 MIT
