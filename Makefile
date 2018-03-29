@@ -1,7 +1,7 @@
 BUILD_PATH := cmd/jocko/jocko
 DOCKER_TAG := latest
 
-all: deps test
+all: test
 
 deps:
 	@which dep 2>/dev/null || go get -u github.com/golang/dep/cmd/dep
@@ -10,7 +10,7 @@ deps:
 vet:
 	@go list ./... | grep -v vendor | xargs go vet
 
-build:
+build: deps
 	@go build -o $(BUILD_PATH) cmd/jocko/main.go
 
 release:
@@ -26,7 +26,7 @@ build-docker:
 generate:
 	@go generate
 
-test:
+test: build
 	@go test -v ./...
 
 test-race:

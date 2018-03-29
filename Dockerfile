@@ -4,7 +4,7 @@ RUN apk update && apk upgrade && \
     go get -u github.com/golang/dep/cmd/dep
 ADD . /go/src/github.com/travisjeffery/jocko
 WORKDIR /go/src/github.com/travisjeffery/jocko
-RUN GOOS=linux GOARCH=amd64 make deps build
+RUN GOOS=linux GOARCH=amd64 make build
 
 FROM alpine:latest
 COPY --from=build-base /go/src/github.com/travisjeffery/jocko/cmd/jocko/jocko /usr/local/bin/jocko
