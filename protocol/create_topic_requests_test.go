@@ -15,7 +15,7 @@ func TestCreateTopicRequests(t *testing.T) {
 		ReplicaAssignment: map[int32][]int32{
 			1: []int32{2, 3, 4},
 		},
-		Configs: map[string]string{"config_key": "config_val"},
+		Configs: map[string]*string{"config_key": nil},
 	}}}
 	b, err := Encode(exp)
 	req.NoError(err)

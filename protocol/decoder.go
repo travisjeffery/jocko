@@ -169,7 +169,27 @@ func (d *ByteDecoder) String() (string, error) {
 	return tmpStr, nil
 }
 
+func (d *ByteDecoder) stringLength() (int, error) {
+	l, err := d.Int16()
+	if err != nil {
+		return 0, err
+	}
+	n := int(l)
+	switch {
+	case n < -1:
+		return 0, ErrInvalidStringLength
+	case n > d.remaining():
+		d.off = len(d.b)
+		return 0, ErrInsufficientData
+	}
+	return n, nil
+}
+
 func (d *ByteDecoder) NullableString() (*string, error) {
+	n, err := d.stringLength()
+	if err != nil || n == -1 {
+		return nil, err
+	}
 	tmpStr, err := d.String()
 	return &tmpStr, err
 

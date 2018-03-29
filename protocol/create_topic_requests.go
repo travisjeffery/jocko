@@ -5,7 +5,7 @@ type CreateTopicRequest struct {
 	NumPartitions     int32
 	ReplicationFactor int16
 	ReplicaAssignment map[int32][]int32
-	Configs           map[string]string
+	Configs           map[string]*string
 }
 
 type CreateTopicRequests struct {
@@ -27,7 +27,7 @@ func (c *CreateTopicRequests) Encode(e PacketEncoder) error {
 		e.PutArrayLength(len(r.Configs))
 		for k, v := range r.Configs {
 			e.PutString(k)
-			e.PutString(v)
+			e.PutNullableString(v)
 		}
 	}
 	e.PutInt32(c.Timeout)
@@ -86,13 +86,13 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 		if err != nil {
 			return err
 		}
-		c := make(map[string]string, configCount)
+		c := make(map[string]*string, configCount)
 		for j := 0; j < configCount; j++ {
 			k, err := d.String()
 			if err != nil {
 				return err
 			}
-			v, err := d.String()
+			v, err := d.NullableString()
 			if err != nil {
 				return err
 			}
