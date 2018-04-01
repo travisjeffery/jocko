@@ -612,6 +612,7 @@ func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHe
 		resp.ErrorCode = protocol.ErrUnknown.Code()
 		return resp
 	}
+
 	resp.GenerationID = 0
 	resp.LeaderID = group.LeaderID
 	resp.MemberID = r.MemberID

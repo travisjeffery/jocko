@@ -13,7 +13,6 @@ import (
 // Conn implemenets net.Conn for connections to Jocko brokers. It's used as an internal client for replication fetches and leader and ISR requests.
 type Conn struct {
 	conn          net.Conn
-	mutex         sync.Mutex
 	rlock         sync.Mutex
 	rbuf          bufio.Reader
 	rdeadline     connDeadline
