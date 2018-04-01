@@ -224,6 +224,10 @@ func TestStore_RegisterGroup(t *testing.T) {
 		t.Fatalf("err: %s, group: %v", err, p)
 	}
 
+	if _, p, err := s.GetGroupsByCoordinator(coordinator); err != nil || p == nil || len(p) != 1 || p[0].Members["member"].ID != "member" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
 	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, LeaderID: "leader"}); err != nil {
 		t.Fatalf("err: %s", err)
 	}

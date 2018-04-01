@@ -566,6 +566,30 @@ func (s *Store) GetGroup(id string) (uint64, *structs.Group, error) {
 	return idx, nil, nil
 }
 
+// GetGroupsByCoordinator looks up groups with the given coordinator.
+func (s *Store) GetGroupsByCoordinator(coordinator int32) (uint64, []*structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get groups by coordinator")
+	sp.LogKV("coordinator", coordinator)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "groups")
+
+	it, err := tx.Get("groups", "coordinator", coordinator)
+	if err != nil {
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
+	}
+
+	var groups []*structs.Group
+	for next := it.Next(); next != nil; next = it.Next() {
+		groups = append(groups, next.(*structs.Group))
+	}
+
+	return idx, groups, nil
+}
+
 // DeleteGroup is used to delete groups.
 func (s *Store) DeleteGroup(idx uint64, group string) error {
 	sp := s.tracer.StartSpan("store: delete group")
@@ -953,6 +977,12 @@ func groupTableSchema() *memdb.TableSchema {
 				Indexer: &memdb.StringFieldIndex{
 					Field:     "Group",
 					Lowercase: true,
+				},
+			},
+			"coordinator": &memdb.IndexSchema{
+				Name: "coordinator",
+				Indexer: &IntFieldIndex{
+					Field: "Coordinator",
 				},
 			},
 		},
