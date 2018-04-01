@@ -58,7 +58,6 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 	for i := range c.Requests {
 		req := new(CreateTopicRequest)
 		c.Requests[i] = req
-
 		req.Topic, err = d.String()
 		if err != nil {
 			return err
@@ -115,7 +114,6 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 		req.Configs = c
 	}
 	c.Timeout, err = d.Int32()
-
 	return err
 }
 

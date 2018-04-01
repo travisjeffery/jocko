@@ -190,9 +190,9 @@ func (d *ByteDecoder) NullableString() (*string, error) {
 	if err != nil || n == -1 {
 		return nil, err
 	}
-	tmpStr, err := d.String()
-	return &tmpStr, err
-
+	tmpStr := string(d.b[d.off : d.off+n])
+	d.off += n
+	return &tmpStr, nil
 }
 
 func (d *ByteDecoder) Int32Array() ([]int32, error) {

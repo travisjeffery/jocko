@@ -244,10 +244,14 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 			ReplicaAssignment: map[int32][]int32{
 				0: assignment,
 			},
-			Configs: map[string]string{
-				"config_key": "config_val",
+			Configs: map[string]*string{
+				"config_key": strPointer("config_val"),
 			},
 		}},
 	})
 	return err
+}
+
+func strPointer(v string) *string {
+	return &v
 }

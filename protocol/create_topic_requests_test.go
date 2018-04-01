@@ -15,7 +15,7 @@ func TestCreateTopicRequests(t *testing.T) {
 		ReplicaAssignment: map[int32][]int32{
 			1: []int32{2, 3, 4},
 		},
-		Configs: map[string]*string{"config_key": nil},
+		Configs: map[string]*string{"config_key": strPointer("config_val")},
 	}}}
 	b, err := Encode(exp)
 	req.NoError(err)
@@ -23,4 +23,8 @@ func TestCreateTopicRequests(t *testing.T) {
 	err = Decode(b, &act)
 	req.NoError(err)
 	req.Equal(exp, &act)
+}
+
+func strPointer(v string) *string {
+	return &v
 }
