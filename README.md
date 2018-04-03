@@ -61,11 +61,16 @@ Kafka/distributed commit log service in Go.
 
 1. Clone Jocko
 
-   `git clone github.com/travisjeffery/jocko $GOPATH/src/github.com/travisjeffery/jocko`
+    ```
+    $ go get github.com/travisjeffery/jocko
+    ```
 
 1. Build Jocko
 
-    `cd $GOPATH/src/github.com/travisjeffery/jocko; make`
+    ```
+    $ cd $GOPATH/src/github.com/travisjeffery/jocko
+    $ make
+    ```
 
 ### Docker
 
