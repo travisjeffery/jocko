@@ -525,7 +525,9 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 	for _, n := range passing {
 		broker := b.brokerLookup.BrokerByID(raft.ServerID(n.Node))
 		if broker == nil {
-			panic(fmt.Errorf("trying to assign partitions to unknown broker: %#v", n))
+			// TODO: this probably shouldn't happen -- likely a root issue to fix
+			b.logger.Error("trying to assign partitions to unknown broker", log.Any("broker", n))
+			continue
 		}
 		conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
 		if err != nil {

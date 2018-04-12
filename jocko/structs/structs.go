@@ -163,5 +163,6 @@ type Group struct {
 	Coordinator int32
 	LeaderID    string
 	Members     map[string]Member
+
 	RaftIndex
 }
