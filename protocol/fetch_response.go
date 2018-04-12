@@ -1,5 +1,7 @@
 package protocol
 
+import "time"
+
 type FetchPartitionResponse struct {
 	Partition     int32
 	ErrorCode     int16
@@ -13,12 +15,17 @@ type FetchResponse struct {
 }
 
 type FetchResponses struct {
-	ThrottleTimeMs int32
-	Responses      []*FetchResponse
+	APIVersion int16
+
+	ThrottleTime time.Duration
+	Responses    []*FetchResponse
 }
 
 func (r *FetchResponses) Encode(e PacketEncoder) (err error) {
-	e.PutInt32(r.ThrottleTimeMs)
+	if r.APIVersion >= 1 {
+		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
+	}
+
 	if err = e.PutArrayLength(len(r.Responses)); err != nil {
 		return err
 	}
@@ -41,12 +48,17 @@ func (r *FetchResponses) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *FetchResponses) Decode(d PacketDecoder) error {
-	var err error
-	r.ThrottleTimeMs, err = d.Int32()
-	if err != nil {
-		return err
+func (r *FetchResponses) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
+	if r.APIVersion >= 1 {
+		throttleTimeMs, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(throttleTimeMs) * time.Millisecond
 	}
+
 	responseCount, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -88,4 +100,8 @@ func (r *FetchResponses) Decode(d PacketDecoder) error {
 		r.Responses[i] = resp
 	}
 	return nil
+}
+
+func (r *FetchResponses) Version() int16 {
+	return r.APIVersion
 }

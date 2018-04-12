@@ -20,7 +20,7 @@ func TestCreateTopicRequests(t *testing.T) {
 	b, err := Encode(exp)
 	req.NoError(err)
 	var act CreateTopicRequests
-	err = Decode(b, &act)
+	err = Decode(b, &act, exp.APIVersion)
 	req.NoError(err)
 	req.Equal(exp, &act)
 }

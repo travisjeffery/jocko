@@ -1,10 +1,18 @@
 package protocol
 
+import "time"
+
 type DeleteTopicsResponse struct {
+	APIVersion int16
+
+	ThrottleTime    time.Duration
 	TopicErrorCodes []*TopicErrorCode
 }
 
 func (c *DeleteTopicsResponse) Encode(e PacketEncoder) error {
+	if c.APIVersion >= 1 {
+		e.PutInt32(int32(c.ThrottleTime / time.Millisecond))
+	}
 	e.PutArrayLength(len(c.TopicErrorCodes))
 	for _, t := range c.TopicErrorCodes {
 		e.PutString(t.Topic)
@@ -13,7 +21,15 @@ func (c *DeleteTopicsResponse) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (c *DeleteTopicsResponse) Decode(d PacketDecoder) error {
+func (c *DeleteTopicsResponse) Decode(d PacketDecoder, version int16) error {
+	c.APIVersion = version
+	if version >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		c.ThrottleTime = time.Duration(throttle) * time.Millisecond
+	}
 	l, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -34,4 +50,8 @@ func (c *DeleteTopicsResponse) Decode(d PacketDecoder) error {
 		}
 	}
 	return nil
+}
+
+func (r *DeleteTopicsResponse) Version() int16 {
+	return r.APIVersion
 }

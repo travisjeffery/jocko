@@ -30,7 +30,7 @@ func TestLeaderAndISRRequest(t *testing.T) {
 	b, err := Encode(exp)
 	req.NoError(err)
 	var act LeaderAndISRRequest
-	err = Decode(b, &act)
+	err = Decode(b, &act, exp.Version())
 	req.NoError(err)
 	req.Equal(exp, &act)
 }

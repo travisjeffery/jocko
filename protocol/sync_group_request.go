@@ -6,6 +6,8 @@ type GroupAssignment struct {
 }
 
 type SyncGroupRequest struct {
+	APIVersion int16
+
 	GroupID          string
 	GenerationID     int32
 	MemberID         string
@@ -34,7 +36,8 @@ func (r *SyncGroupRequest) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *SyncGroupRequest) Decode(d PacketDecoder) (err error) {
+func (r *SyncGroupRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
 	if r.GroupID, err = d.String(); err != nil {
 		return
 	}
@@ -68,5 +71,5 @@ func (r *SyncGroupRequest) Key() int16 {
 }
 
 func (r *SyncGroupRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

@@ -1,10 +1,18 @@
 package protocol
 
+import "time"
+
 type DescribeGroupsResponse struct {
-	Groups []*Group
+	APIVersion int16
+
+	ThrottleTime time.Duration
+	Groups       []*Group
 }
 
 func (r *DescribeGroupsResponse) Encode(e PacketEncoder) error {
+	if r.APIVersion >= 1 {
+		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
+	}
 	if err := e.PutArrayLength(len(r.Groups)); err != nil {
 		return err
 	}
@@ -16,12 +24,20 @@ func (r *DescribeGroupsResponse) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *DescribeGroupsResponse) Decode(d PacketDecoder) (err error) {
+func (r *DescribeGroupsResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+	if version >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
+	}
 	groupCount, err := d.ArrayLength()
 	r.Groups = make([]*Group, groupCount)
 	for i := 0; i < groupCount; i++ {
 		r.Groups[i] = new(Group)
-		if err := r.Groups[i].Decode(d); err != nil {
+		if err := r.Groups[i].Decode(d, version); err != nil {
 			return err
 		}
 	}
@@ -30,10 +46,6 @@ func (r *DescribeGroupsResponse) Decode(d PacketDecoder) (err error) {
 
 func (r *DescribeGroupsResponse) Key() int16 {
 	return 15
-}
-
-func (r *DescribeGroupsResponse) Version() int16 {
-	return 0
 }
 
 type Group struct {
@@ -73,7 +85,7 @@ func (r *Group) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *Group) Decode(d PacketDecoder) (err error) {
+func (r *Group) Decode(d PacketDecoder, version int16) (err error) {
 	if r.ErrorCode, err = d.Int16(); err != nil {
 		return err
 	}
@@ -103,7 +115,7 @@ func (r *Group) Decode(d PacketDecoder) (err error) {
 			return err
 		}
 		r.GroupMembers[memberID] = new(GroupMember)
-		if err := r.GroupMembers[memberID].Decode(d); err != nil {
+		if err := r.GroupMembers[memberID].Decode(d, version); err != nil {
 			return err
 		}
 	}
@@ -134,7 +146,7 @@ func (r *GroupMember) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *GroupMember) Decode(d PacketDecoder) (err error) {
+func (r *GroupMember) Decode(d PacketDecoder, version int16) (err error) {
 	if r.ClientID, err = d.String(); err != nil {
 		return err
 	}

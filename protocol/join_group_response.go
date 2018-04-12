@@ -1,11 +1,16 @@
 package protocol
 
+import "time"
+
 type Member struct {
 	MemberID       string
 	MemberMetadata []byte
 }
 
 type JoinGroupResponse struct {
+	APIVersion int16
+
+	ThrottleTime  time.Duration
 	ErrorCode     int16
 	GenerationID  int32
 	GroupProtocol string
@@ -14,8 +19,10 @@ type JoinGroupResponse struct {
 	Members       []Member
 }
 
-func (r *JoinGroupResponse) Encode(e PacketEncoder) error {
-	var err error
+func (r *JoinGroupResponse) Encode(e PacketEncoder) (err error) {
+	if r.APIVersion >= 1 {
+		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
+	}
 	e.PutInt16(r.ErrorCode)
 	e.PutInt32(r.GenerationID)
 	if err = e.PutString(r.GroupProtocol); err != nil {
@@ -41,8 +48,16 @@ func (r *JoinGroupResponse) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *JoinGroupResponse) Decode(d PacketDecoder) error {
-	var err error
+func (r *JoinGroupResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
+	if version >= 2 {
+		timeout, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(timeout) * time.Millisecond
+	}
 	if r.ErrorCode, err = d.Int16(); err != nil {
 		return err
 	}
@@ -83,5 +98,5 @@ func (r *JoinGroupResponse) Key() int16 {
 }
 
 func (r *JoinGroupResponse) Version() int16 {
-	return 0
+	return r.APIVersion
 }

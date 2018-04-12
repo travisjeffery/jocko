@@ -6,6 +6,7 @@ type StopReplicaPartition struct {
 }
 
 type StopReplicaRequest struct {
+	APIVersion       int16
 	ControllerID     int32
 	ControllerEpoch  int32
 	DeletePartitions bool
@@ -32,7 +33,9 @@ func (r *StopReplicaRequest) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *StopReplicaRequest) Decode(d PacketDecoder) (err error) {
+func (r *StopReplicaRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	if r.ControllerID, err = d.Int32(); err != nil {
 		return err
 	}
@@ -64,5 +67,5 @@ func (r *StopReplicaRequest) Key() int16 {
 }
 
 func (r *StopReplicaRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

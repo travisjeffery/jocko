@@ -1,7 +1,12 @@
 package protocol
 
+import "time"
+
 type HeartbeatResponse struct {
-	ErrorCode int16
+	APIVersion int16
+
+	ThrottleTime time.Duration
+	ErrorCode    int16
 }
 
 func (r *HeartbeatResponse) Encode(e PacketEncoder) error {
@@ -9,15 +14,24 @@ func (r *HeartbeatResponse) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *HeartbeatResponse) Decode(d PacketDecoder) (err error) {
+func (r *HeartbeatResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
+	if version >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(throttle) / time.Millisecond
+	}
 	r.ErrorCode, err = d.Int16()
 	return err
 }
 
 func (r *HeartbeatResponse) Key() int16 {
-	return 12
+	return HeartbeatKey
 }
 
 func (r *HeartbeatResponse) Version() int16 {
-	return 0
+	return r.APIVersion
 }

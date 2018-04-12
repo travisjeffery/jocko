@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -9,7 +10,8 @@ import (
 func TestFetchResponse(t *testing.T) {
 	req := require.New(t)
 	exp := &FetchResponses{
-		ThrottleTimeMs: 1,
+		APIVersion:   2,
+		ThrottleTime: time.Millisecond,
 		Responses: []*FetchResponse{{
 			Topic: "test_topic",
 			PartitionResponses: []*FetchPartitionResponse{{
@@ -23,7 +25,7 @@ func TestFetchResponse(t *testing.T) {
 	b, err := Encode(exp)
 	req.NoError(err)
 	var act FetchResponses
-	err = Decode(b, &act)
+	err = Decode(b, &act, exp.Version())
 	req.NoError(err)
 	req.Equal(exp, &act)
 }

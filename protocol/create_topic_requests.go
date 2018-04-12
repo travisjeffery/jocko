@@ -9,8 +9,11 @@ type CreateTopicRequest struct {
 }
 
 type CreateTopicRequests struct {
-	Requests []*CreateTopicRequest
-	Timeout  int32
+	APIVersion int16
+
+	Requests     []*CreateTopicRequest
+	Timeout      int32
+	ValidateOnly bool
 }
 
 func (c *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
@@ -45,10 +48,13 @@ func (c *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
 		}
 	}
 	e.PutInt32(c.Timeout)
+	if c.APIVersion >= 1 {
+		e.PutBool(c.ValidateOnly)
+	}
 	return nil
 }
 
-func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
+func (c *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
 	var err error
 	requestCount, err := d.ArrayLength()
 	if err != nil {
@@ -114,13 +120,22 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder) error {
 		req.Configs = c
 	}
 	c.Timeout, err = d.Int32()
-	return err
+	if err != nil {
+		return err
+	}
+	if version >= 1 {
+		c.ValidateOnly, err = d.Bool()
+		if err != nil {
+			return nil
+		}
+	}
+	return nil
 }
 
 func (c *CreateTopicRequests) Key() int16 {
 	return CreateTopicsKey
 }
 
-func (c *CreateTopicRequests) Version() int16 {
-	return 0
+func (r *CreateTopicRequests) Version() int16 {
+	return r.APIVersion
 }

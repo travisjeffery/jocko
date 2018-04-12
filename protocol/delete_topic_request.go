@@ -1,6 +1,8 @@
 package protocol
 
 type DeleteTopicsRequest struct {
+	APIVersion int16
+
 	Topics  []string
 	Timeout int32
 }
@@ -13,7 +15,8 @@ func (c *DeleteTopicsRequest) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (c *DeleteTopicsRequest) Decode(d PacketDecoder) (err error) {
+func (c *DeleteTopicsRequest) Decode(d PacketDecoder, version int16) (err error) {
+	c.APIVersion = version
 	c.Topics, err = d.StringArray()
 	if err != nil {
 		return err
@@ -26,6 +29,6 @@ func (c *DeleteTopicsRequest) Key() int16 {
 	return DeleteTopicsKey
 }
 
-func (c *DeleteTopicsRequest) Version() int16 {
-	return 0
+func (r *DeleteTopicsRequest) Version() int16 {
+	return r.APIVersion
 }

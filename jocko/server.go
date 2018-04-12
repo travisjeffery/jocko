@@ -190,10 +190,9 @@ func (s *Server) handleRequest(conn net.Conn) {
 		span.SetTag("node_id", s.broker.config.ID) // can I set this globally for the tracer?
 		span.SetTag("addr", s.broker.config.Addr)
 
-		var req protocol.Decoder
+		var req protocol.VersionedDecoder
+
 		switch header.APIKey {
-		case protocol.APIVersionsKey:
-			req = &protocol.APIVersionsRequest{}
 		case protocol.ProduceKey:
 			req = &protocol.ProduceRequest{}
 		case protocol.FetchKey:
@@ -202,15 +201,43 @@ func (s *Server) handleRequest(conn net.Conn) {
 			req = &protocol.OffsetsRequest{}
 		case protocol.MetadataKey:
 			req = &protocol.MetadataRequest{}
+		case protocol.LeaderAndISRKey:
+			req = &protocol.LeaderAndISRRequest{}
+		case protocol.StopReplicaKey:
+			req = &protocol.StopReplicaRequest{}
+		case protocol.UpdateMetadataKey:
+			req = &protocol.UpdateMetadataRequest{}
+		case protocol.ControlledShutdownKey:
+			req = &protocol.ControlledShutdownRequest{}
+		case protocol.OffsetCommitKey:
+			req = &protocol.OffsetCommitRequest{}
+		case protocol.OffsetFetchKey:
+			req = &protocol.OffsetFetchRequest{}
+		case protocol.FindCoordinatorKey:
+			req = &protocol.FindCoordinatorRequest{}
+		case protocol.JoinGroupKey:
+			req = &protocol.JoinGroupRequest{}
+		case protocol.HeartbeatKey:
+			req = &protocol.HeartbeatRequest{}
+		case protocol.LeaveGroupKey:
+			req = &protocol.LeaveGroupRequest{}
+		case protocol.SyncGroupKey:
+			req = &protocol.SyncGroupRequest{}
+		case protocol.DescribeGroupsKey:
+			req = &protocol.DescribeGroupsRequest{}
+		case protocol.ListGroupsKey:
+			req = &protocol.ListGroupsRequest{}
+		case protocol.SaslHandshakeKey:
+			req = &protocol.SaslHandshakeRequest{}
+		case protocol.APIVersionsKey:
+			req = &protocol.APIVersionsRequest{}
 		case protocol.CreateTopicsKey:
 			req = &protocol.CreateTopicRequests{}
 		case protocol.DeleteTopicsKey:
 			req = &protocol.DeleteTopicsRequest{}
-		case protocol.LeaderAndISRKey:
-			req = &protocol.LeaderAndISRRequest{}
 		}
 
-		if err := req.Decode(d); err != nil {
+		if err := req.Decode(d, header.APIVersion); err != nil {
 			s.logger.Error("failed to decode request", log.Error("err", err), log.Any("header", header))
 			span.LogKV("msg", "failed to decode request", "err", err)
 			span.Finish()
