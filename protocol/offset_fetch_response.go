@@ -73,6 +73,7 @@ func (r *OffsetFetchResponse) Decode(d PacketDecoder, version int16) (err error)
 			}
 		}
 	}
+	return nil
 }
 
 func (r *OffsetFetchResponse) Version() int16 {

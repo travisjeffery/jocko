@@ -917,7 +917,7 @@ func (b *Broker) handleOffsetFetch(ctx context.Context, header *protocol.Request
 
 	resp := new(protocol.OffsetFetchResponse)
 	resp.APIVersion = req.Version()
-	state := b.fsm.State()
+	// state := b.fsm.State()
 
 	// group := protocol.Group{}
 	// _, g, err := state.GetGroup(req.GroupID)

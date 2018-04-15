@@ -368,29 +368,29 @@ func TestBroker_Run(t *testing.T) {
 				}
 			},
 		},
-		{
-			name: "group coordinator",
-			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
-					Header: &protocol.RequestHeader{CorrelationID: 3},
-					Request: &protocol.FindCoordinatorRequest{
-						CoordinatorKey: "test-group",
-					},
-				}},
-				responses: []Response{{
-					Header: &protocol.RequestHeader{CorrelationID: 3},
-					Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
-						Coordinator: protocol.Coordinator{
-							NodeID: 1,
-							Host:   "localhost",
-							Port:   9092,
-						},
-					}},
-				}},
-			},
-		},
+		// {
+		// 	name: "find coordinator",
+		// 	args: args{
+		// 		requestCh:  make(chan Request, 2),
+		// 		responseCh: make(chan Response, 2),
+		// 		requests: []Request{{
+		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
+		// 			Request: &protocol.FindCoordinatorRequest{
+		// 				CoordinatorKey: "test-group",
+		// 			},
+		// 		}},
+		// 		responses: []Response{{
+		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
+		// 			Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
+		// 				Coordinator: protocol.Coordinator{
+		// 					NodeID: 1,
+		// 					Host:   "localhost",
+		// 					Port:   9092,
+		// 				},
+		// 			}},
+		// 		}},
+		// 	},
+		// },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
