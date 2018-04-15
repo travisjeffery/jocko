@@ -6,7 +6,7 @@ type DescribeGroupsResponse struct {
 	APIVersion int16
 
 	ThrottleTime time.Duration
-	Groups       []*Group
+	Groups       []Group
 }
 
 func (r *DescribeGroupsResponse) Encode(e PacketEncoder) error {
@@ -34,9 +34,12 @@ func (r *DescribeGroupsResponse) Decode(d PacketDecoder, version int16) (err err
 		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
 	}
 	groupCount, err := d.ArrayLength()
-	r.Groups = make([]*Group, groupCount)
+	if err != nil {
+		return err
+	}
+	r.Groups = make([]Group, groupCount)
 	for i := 0; i < groupCount; i++ {
-		r.Groups[i] = new(Group)
+		r.Groups[i] = Group{}
 		if err := r.Groups[i].Decode(d, version); err != nil {
 			return err
 		}
