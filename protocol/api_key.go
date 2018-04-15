@@ -12,7 +12,7 @@ const (
 	ControlledShutdownKey = 7
 	OffsetCommitKey       = 8
 	OffsetFetchKey        = 9
-	GroupCoordinatorKey   = 10
+	FindCoordinatorKey    = 10
 	JoinGroupKey          = 11
 	HeartbeatKey          = 12
 	LeaveGroupKey         = 13

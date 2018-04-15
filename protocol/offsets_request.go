@@ -1,8 +1,9 @@
 package protocol
 
 type OffsetsPartition struct {
-	Partition int32
-	Timestamp int64 // -1 to receive latest offset, -2 to receive earliest offset
+	Partition     int32
+	Timestamp     int64 // -1 to receive latest offset, -2 to receive earliest offset
+	MaxNumOffsets int32
 }
 
 type OffsetsTopic struct {
@@ -11,14 +12,18 @@ type OffsetsTopic struct {
 }
 
 type OffsetsRequest struct {
-	ReplicaID     int32
-	Topics        []*OffsetsTopic
-	MaxNumOffsets int32
+	APIVersion int16
+
+	ReplicaID      int32
+	IsolationLevel int8
+	Topics         []*OffsetsTopic
 }
 
-func (r *OffsetsRequest) Encode(e PacketEncoder) error {
-	var err error
+func (r *OffsetsRequest) Encode(e PacketEncoder) (err error) {
 	e.PutInt32(-1)
+	if r.APIVersion >= 2 {
+		e.PutInt8(r.IsolationLevel)
+	}
 	err = e.PutArrayLength(len(r.Topics))
 	if err != nil {
 		return err
@@ -35,17 +40,27 @@ func (r *OffsetsRequest) Encode(e PacketEncoder) error {
 		for _, p := range t.Partitions {
 			e.PutInt32(p.Partition)
 			e.PutInt64(p.Timestamp)
+
+			if r.APIVersion == 0 {
+				e.PutInt32(p.MaxNumOffsets)
+			}
 		}
 	}
-	e.PutInt32(r.MaxNumOffsets)
 	return nil
 }
 
-func (r *OffsetsRequest) Decode(d PacketDecoder) error {
-	var err error
+func (r *OffsetsRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	r.ReplicaID, err = d.Int32()
 	if err != nil {
 		return err
+	}
+	if version >= 2 {
+		r.IsolationLevel, err = d.Int8()
+		if err != nil {
+			return err
+		}
 	}
 	topicCount, err := d.ArrayLength()
 	if err != nil {
@@ -73,11 +88,16 @@ func (r *OffsetsRequest) Decode(d PacketDecoder) error {
 			if err != nil {
 				return err
 			}
+			if version == 0 {
+				p.MaxNumOffsets, err = d.Int32()
+				if err != nil {
+					return err
+				}
+			}
 			ot.Partitions[j] = p
 		}
 		r.Topics[i] = ot
 	}
-	r.MaxNumOffsets, err = d.Int32()
 	return err
 }
 
@@ -86,5 +106,5 @@ func (r *OffsetsRequest) Key() int16 {
 }
 
 func (r *OffsetsRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

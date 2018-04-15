@@ -18,7 +18,10 @@ func (r *RequestHeader) Encode(e PacketEncoder) {
 	e.PutInt16(r.APIKey)
 	e.PutInt16(r.APIVersion)
 	e.PutInt32(r.CorrelationID)
-	e.PutString(r.ClientID)
+	if err := e.PutString(r.ClientID); err != nil {
+		// TODO: better err handling
+		panic(err)
+	}
 }
 
 func (r *RequestHeader) Decode(d PacketDecoder) error {

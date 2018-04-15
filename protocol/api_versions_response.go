@@ -1,8 +1,13 @@
 package protocol
 
+import "time"
+
 type APIVersionsResponse struct {
-	APIVersions []APIVersion
-	ErrorCode   int16
+	APIVersion int16
+
+	ErrorCode    int16
+	APIVersions  []APIVersion
+	ThrottleTime time.Duration
 }
 
 type APIVersion struct {
@@ -22,10 +27,14 @@ func (c *APIVersionsResponse) Encode(e PacketEncoder) error {
 		e.PutInt16(av.MinVersion)
 		e.PutInt16(av.MaxVersion)
 	}
+	if c.APIVersion >= 1 {
+		e.PutInt32(int32(c.ThrottleTime / time.Millisecond))
+	}
 	return nil
 }
 
-func (c *APIVersionsResponse) Decode(d PacketDecoder) error {
+func (c *APIVersionsResponse) Decode(d PacketDecoder, version int16) error {
+	c.APIVersion = version
 	l, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -53,5 +62,16 @@ func (c *APIVersionsResponse) Decode(d PacketDecoder) error {
 			MaxVersion: maxVersion,
 		}
 	}
+	if version >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		c.ThrottleTime = time.Duration(throttle) * time.Millisecond
+	}
 	return nil
+}
+
+func (r *APIVersionsResponse) Version() int16 {
+	return r.APIVersion
 }

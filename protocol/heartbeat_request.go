@@ -1,23 +1,24 @@
 package protocol
 
 type HeartbeatRequest struct {
+	APIVersion int16
+
 	GroupID           string
 	GroupGenerationID int32
 	MemberID          string
 }
 
-func (r *HeartbeatRequest) encode(e PacketEncoder) error {
-	if err := e.PutString(r.GroupID); err != nil {
+func (r *HeartbeatRequest) Encode(e PacketEncoder) (err error) {
+	if err = e.PutString(r.GroupID); err != nil {
 		return err
 	}
 	e.PutInt32(r.GroupGenerationID)
-	if err := e.PutString(r.MemberID); err != nil {
-		return err
-	}
-	return nil
+	return e.PutString(r.MemberID)
 }
 
-func (r *HeartbeatRequest) Decode(d PacketDecoder) (err error) {
+func (r *HeartbeatRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	if r.GroupID, err = d.String(); err != nil {
 		return
 	}
@@ -35,5 +36,5 @@ func (r *HeartbeatRequest) Key() int16 {
 }
 
 func (r *HeartbeatRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

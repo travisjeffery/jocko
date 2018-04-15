@@ -1,27 +1,48 @@
 package protocol
 
+import "time"
+
+type ListGroup struct {
+	GroupID      string
+	ProtocolType string
+}
+
 type ListGroupsResponse struct {
-	ErrorCode int16
-	Groups    map[string]string
+	APIVersion int16
+
+	ThrottleTime time.Duration
+	ErrorCode    int16
+	Groups       []ListGroup
 }
 
 func (r *ListGroupsResponse) Encode(e PacketEncoder) error {
+	if r.APIVersion >= 1 {
+		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
+	}
 	e.PutInt16(r.ErrorCode)
 	if err := e.PutArrayLength(len(r.Groups)); err != nil {
 		return err
 	}
-	for groupID, protocolType := range r.Groups {
-		if err := e.PutString(groupID); err != nil {
+	for _, group := range r.Groups {
+		if err := e.PutString(group.GroupID); err != nil {
 			return err
 		}
-		if err := e.PutString(protocolType); err != nil {
+		if err := e.PutString(group.ProtocolType); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *ListGroupsResponse) Decode(d PacketDecoder) (err error) {
+func (r *ListGroupsResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+	if version >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
+	}
 	if r.ErrorCode, err = d.Int16(); err != nil {
 		return err
 	}
@@ -29,7 +50,7 @@ func (r *ListGroupsResponse) Decode(d PacketDecoder) (err error) {
 	if err != nil {
 		return err
 	}
-	r.Groups = make(map[string]string)
+	r.Groups = make([]ListGroup, groupCount)
 	for i := 0; i < groupCount; i++ {
 		groupID, err := d.String()
 		if err != nil {
@@ -39,7 +60,7 @@ func (r *ListGroupsResponse) Decode(d PacketDecoder) (err error) {
 		if err != nil {
 			return err
 		}
-		r.Groups[groupID] = protocolType
+		r.Groups[i] = ListGroup{GroupID: groupID, ProtocolType: protocolType}
 	}
 	return nil
 }
@@ -49,5 +70,5 @@ func (r *ListGroupsResponse) Key() int16 {
 }
 
 func (r *ListGroupsResponse) Version() int16 {
-	return 0
+	return r.APIVersion
 }

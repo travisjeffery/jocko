@@ -19,7 +19,6 @@ import (
 
 	"github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
 var (
@@ -50,12 +49,12 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.BrokerConfig), cbServe
 		},
 	}
 
-	jLogger := jaegerlog.StdLogger
+	// jLogger := jaegerlog.StdLogger
 	jMetricsFactory := metrics.NullFactory
 
 	tracer, closer, err := cfg.New(
 		"jocko",
-		jaegercfg.Logger(jLogger),
+		// jaegercfg.Logger(jLogger),
 		jaegercfg.Metrics(jMetricsFactory),
 	)
 	if err != nil {

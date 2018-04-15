@@ -39,7 +39,7 @@ var (
 	ErrInvalidTimestamp                   = Error{code: 32, msg: "invalid timestamp"}
 	ErrUnsupportedSaslMechanism           = Error{code: 33, msg: "unsupported sasl mechanism"}
 	ErrIllegalSaslState                   = Error{code: 34, msg: "illegal sasl state"}
-	ErrUnsupportedVersion                 = Error{code: 35, msg: "unsupported version"}
+	ErrUnsupportedVersion                 = Error{code: 35, msg: "unsupported Version"}
 	ErrTopicAlreadyExists                 = Error{code: 36, msg: "topic already exists"}
 	ErrInvalidPartitions                  = Error{code: 37, msg: "invalid partitions"}
 	ErrInvalidReplicationFactor           = Error{code: 38, msg: "invalid replication factor"}

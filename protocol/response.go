@@ -2,7 +2,7 @@ package protocol
 
 type ResponseBody interface {
 	Encoder
-	Decoder
+	VersionedDecoder
 }
 
 type Response struct {
@@ -25,7 +25,7 @@ func (r *Response) Encode(pe PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *Response) Decode(pd PacketDecoder) (err error) {
+func (r *Response) Decode(pd PacketDecoder, version int16) (err error) {
 	r.Size, err = pd.Int32()
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func (r *Response) Decode(pd PacketDecoder) (err error) {
 		return err
 	}
 	if r.Body != nil {
-		return r.Body.Decode(pd)
+		return r.Body.Decode(pd, version)
 	}
 	return nil
 }

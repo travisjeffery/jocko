@@ -206,3 +206,75 @@ func testRegisterPartition(t *testing.T, s *Store, idx uint64, id int32, topic s
 		t.Fatalf("bad partition: %#v", result)
 	}
 }
+
+func TestStore_RegisterGroup(t *testing.T) {
+	s := testStore(t)
+
+	testRegisterGroup(t, s, 0, "test-group")
+
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
+	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, Members: map[string]structs.Member{"member": structs.Member{ID: "member"}}}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || len(p.Members) != 1 || p.Members["member"].ID != "member" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
+	if _, p, err := s.GetGroupsByCoordinator(coordinator); err != nil || p == nil || len(p) != 1 || p[0].Members["member"].ID != "member" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
+	if err := s.EnsureGroup(1, &structs.Group{Group: "test-group", Coordinator: coordinator, LeaderID: "leader"}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if _, p, err := s.GetGroup("test-group"); err != nil || p == nil || p.LeaderID != "leader" {
+		t.Fatalf("err: %s, group: %v", err, p)
+	}
+
+	// delete the group
+	if err := s.DeleteGroup(2, "test-group"); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// check it's gone
+	if idx, top, err := s.GetGroup("test-group"); err != nil || top != nil || idx != 2 {
+		t.Fatalf("bad: %#v %d (err: %s)", top, idx, err)
+	}
+
+	// check index is updated
+	if idx := s.maxIndex("groups"); idx != 2 {
+		t.Fatalf("err: %d", idx)
+	}
+
+	// deleting should be idempotent
+	if err := s.DeleteGroup(2, "test-group"); err != nil {
+		t.Fatalf("err: %d", err)
+	}
+	if idx := s.maxIndex("groups"); idx != 2 {
+		t.Fatalf("err: %d", idx)
+	}
+}
+
+const (
+	coordinator = int32(1)
+)
+
+func testRegisterGroup(t *testing.T, s *Store, idx uint64, id string) {
+	if err := s.EnsureGroup(idx, &structs.Group{Group: id, Coordinator: coordinator}); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	top, err := tx.First("groups", "id", id)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if result, ok := top.(*structs.Group); !ok || result.Coordinator != coordinator {
+		t.Fatalf("bad group: %#v", result)
+	}
+}

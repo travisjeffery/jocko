@@ -9,6 +9,7 @@ type PartitionState struct {
 	ISR             []int32
 	ZKVersion       int32
 	Replicas        []int32
+	IsNew           bool
 }
 
 type LiveLeader struct {
@@ -18,6 +19,8 @@ type LiveLeader struct {
 }
 
 type LeaderAndISRRequest struct {
+	APIVersion int16
+
 	ControllerID    int32
 	ControllerEpoch int32
 	PartitionStates []*PartitionState
@@ -46,6 +49,9 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 		if err = e.PutInt32Array(p.Replicas); err != nil {
 			return err
 		}
+		if r.APIVersion >= 1 {
+			e.PutBool(p.IsNew)
+		}
 	}
 	if err = e.PutArrayLength(len(r.LiveLeaders)); err != nil {
 		return err
@@ -60,8 +66,9 @@ func (r *LeaderAndISRRequest) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *LeaderAndISRRequest) Decode(d PacketDecoder) error {
-	var err error
+func (r *LeaderAndISRRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	if r.ControllerID, err = d.Int32(); err != nil {
 		return err
 	}
@@ -127,5 +134,5 @@ func (r *LeaderAndISRRequest) Key() int16 {
 }
 
 func (r *LeaderAndISRRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

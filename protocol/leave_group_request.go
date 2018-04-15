@@ -1,6 +1,8 @@
 package protocol
 
 type LeaveGroupRequest struct {
+	APIVersion int16
+
 	GroupID  string
 	MemberID string
 }
@@ -12,7 +14,8 @@ func (r *LeaveGroupRequest) Encode(e PacketEncoder) error {
 	return e.PutString(r.MemberID)
 }
 
-func (r *LeaveGroupRequest) Decode(d PacketDecoder) (err error) {
+func (r *LeaveGroupRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
 	if r.GroupID, err = d.String(); err != nil {
 		return err
 	}
@@ -25,5 +28,5 @@ func (r *LeaveGroupRequest) Key() int16 {
 }
 
 func (r *LeaveGroupRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

@@ -1,5 +1,7 @@
 package protocol
 
+import "time"
+
 type Data struct {
 	Partition int32
 	RecordSet []byte
@@ -11,14 +13,22 @@ type TopicData struct {
 }
 
 type ProduceRequest struct {
-	Acks      int16
-	Timeout   int32
-	TopicData []*TopicData
+	APIVersion int16
+
+	TransactionalID *string
+	Acks            int16
+	Timeout         time.Duration
+	TopicData       []*TopicData
 }
 
 func (r *ProduceRequest) Encode(e PacketEncoder) (err error) {
+	if r.APIVersion >= 3 {
+		if err = e.PutNullableString(r.TransactionalID); err != nil {
+			return err
+		}
+	}
 	e.PutInt16(r.Acks)
-	e.PutInt32(r.Timeout)
+	e.PutInt32(int32(r.Timeout / time.Millisecond))
 	if err = e.PutArrayLength(len(r.TopicData)); err != nil {
 		return err
 	}
@@ -39,16 +49,28 @@ func (r *ProduceRequest) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *ProduceRequest) Decode(d PacketDecoder) (err error) {
+func (r *ProduceRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
+	if version >= 3 {
+		r.TransactionalID, err = d.NullableString()
+		if err != nil {
+			return err
+		}
+	}
 	r.Acks, err = d.Int16()
 	if err != nil {
 		return err
 	}
-	r.Timeout, err = d.Int32()
+	timeout, err := d.Int32()
 	if err != nil {
 		return err
 	}
+	r.Timeout = time.Duration(timeout) * time.Millisecond
 	topicCount, err := d.ArrayLength()
+	if err != nil {
+		return err
+	}
 	r.TopicData = make([]*TopicData, topicCount)
 	for i := range r.TopicData {
 		td := new(TopicData)
@@ -83,5 +105,5 @@ func (r *ProduceRequest) Key() int16 {
 }
 
 func (r *ProduceRequest) Version() int16 {
-	return 2
+	return r.APIVersion
 }

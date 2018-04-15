@@ -26,7 +26,7 @@ func (r *StopReplicaResponse) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *StopReplicaResponse) Decode(d PacketDecoder) (err error) {
+func (r *StopReplicaResponse) Decode(d PacketDecoder, version int16) (err error) {
 	if r.ErrorCode, err = d.Int16(); err != nil {
 		return err
 	}

@@ -1,5 +1,12 @@
 package protocol
 
+type IsolationLevel int8
+
+const (
+	ReadUncommitted IsolationLevel = 0
+	ReadCommitted   IsolationLevel = 1
+)
+
 type FetchPartition struct {
 	Partition   int32
 	FetchOffset int64
@@ -12,15 +19,17 @@ type FetchTopic struct {
 }
 
 type FetchRequest struct {
-	ReplicaID   int32
-	MaxWaitTime int32
-	MinBytes    int32
-	// MaxBytes    int32
-	Topics []*FetchTopic
+	APIVersion int16
+
+	ReplicaID      int32
+	MaxWaitTime    int32
+	MinBytes       int32
+	MaxBytes       int32
+	IsolationLevel IsolationLevel
+	Topics         []*FetchTopic
 }
 
-func (r *FetchRequest) Encode(e PacketEncoder) error {
-	var err error
+func (r *FetchRequest) Encode(e PacketEncoder) (err error) {
 	if r.ReplicaID == 0 {
 		e.PutInt32(-1) // replica ID is -1 for clients
 	} else {
@@ -28,7 +37,12 @@ func (r *FetchRequest) Encode(e PacketEncoder) error {
 	}
 	e.PutInt32(r.MaxWaitTime)
 	e.PutInt32(r.MinBytes)
-	// e.PutInt32(r.MaxBytes)
+	if r.APIVersion >= 3 {
+		e.PutInt32(r.MaxBytes)
+	}
+	if r.APIVersion >= 4 {
+		e.PutInt8(int8(r.IsolationLevel))
+	}
 	if err = e.PutArrayLength(len(r.Topics)); err != nil {
 		return err
 	}
@@ -48,8 +62,8 @@ func (r *FetchRequest) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *FetchRequest) Decode(d PacketDecoder) error {
-	var err error
+func (r *FetchRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
 	r.ReplicaID, err = d.Int32()
 	if err != nil {
 		return err
@@ -62,10 +76,19 @@ func (r *FetchRequest) Decode(d PacketDecoder) error {
 	if err != nil {
 		return err
 	}
-	// r.MaxBytes, err = d.Int32()
-	// if err != nil {
-	// 	return err
-	// }
+	if r.APIVersion >= 3 {
+		r.MaxBytes, err = d.Int32()
+		if err != nil {
+			return err
+		}
+	}
+	if r.APIVersion >= 4 {
+		isolationLevel, err := d.Int8()
+		if err != nil {
+			return err
+		}
+		r.IsolationLevel = IsolationLevel(isolationLevel)
+	}
 	topicCount, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -110,5 +133,5 @@ func (r *FetchRequest) Key() int16 {
 }
 
 func (r *FetchRequest) Version() int16 {
-	return 1
+	return r.APIVersion
 }

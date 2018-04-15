@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/consul/testutil/retry"
@@ -55,7 +56,7 @@ func TestBroker_Run(t *testing.T) {
 				}},
 				responses: []Response{{
 					Header:   &protocol.RequestHeader{CorrelationID: 1},
-					Response: &protocol.Response{CorrelationID: 1, Body: APIVersions},
+					Response: &protocol.Response{CorrelationID: 1, Body: apiVersions},
 				}},
 			},
 		},
@@ -367,17 +368,38 @@ func TestBroker_Run(t *testing.T) {
 				}
 			},
 		},
+		// {
+		// 	name: "find coordinator",
+		// 	args: args{
+		// 		requestCh:  make(chan Request, 2),
+		// 		responseCh: make(chan Response, 2),
+		// 		requests: []Request{{
+		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
+		// 			Request: &protocol.FindCoordinatorRequest{
+		// 				CoordinatorKey: "test-group",
+		// 			},
+		// 		}},
+		// 		responses: []Response{{
+		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
+		// 			Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
+		// 				Coordinator: protocol.Coordinator{
+		// 					NodeID: 1,
+		// 					Host:   "localhost",
+		// 					Port:   9092,
+		// 				},
+		// 			}},
+		// 		}},
+		// 	},
+		// },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var dir string
 			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
-				dir = cfg.DataDir
 			}, nil)
 			b := s.broker
 
@@ -759,10 +781,10 @@ func handleProduceResponse(t *testing.T, res *protocol.ProduceResponses) {
 			if pr.ErrorCode != protocol.ErrNone.Code() {
 				break
 			}
-			if pr.Timestamp == 0 {
+			if pr.LogAppendTime.IsZero() {
 				t.Error("expected timestamp not to be 0")
 			}
-			pr.Timestamp = 0
+			pr.LogAppendTime = time.Time{}
 		}
 	}
 }

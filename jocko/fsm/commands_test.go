@@ -101,6 +101,37 @@ func TestRegisterPartition(t *testing.T) {
 	}
 }
 
+func TestRegisterGroup(t *testing.T) {
+	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	req := structs.RegisterGroupRequest{
+		Group: structs.Group{Group: "group-id", Members: map[string]structs.Member{}},
+	}
+	buf, err := structs.Encode(structs.RegisterGroupRequestType, req)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	resp := fsm.Apply(makeLog(buf))
+	if resp != nil {
+		t.Fatalf("resp: %v", resp)
+	}
+
+	_, group, err := fsm.state.GetGroup("group-id")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if group == nil {
+		t.Fatalf("group not found")
+	}
+	if group.ModifyIndex != 1 {
+		t.Fatalf("bad index: %d", group.ModifyIndex)
+	}
+}
+
 func makeLog(buf []byte) *raft.Log {
 	return &raft.Log{
 		Index: 1,

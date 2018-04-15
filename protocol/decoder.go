@@ -32,15 +32,19 @@ type Decoder interface {
 	Decode(d PacketDecoder) error
 }
 
+type VersionedDecoder interface {
+	Decode(d PacketDecoder, version int16) error
+}
+
 type PushDecoder interface {
 	SaveOffset(in int)
 	ReserveSize() int
 	Fill(curOffset int, buf []byte) error
 }
 
-func Decode(b []byte, in Decoder) error {
+func Decode(b []byte, in VersionedDecoder, version int16) error {
 	d := NewDecoder(b)
-	return in.Decode(d)
+	return in.Decode(d, version)
 }
 
 type ByteDecoder struct {
@@ -169,10 +173,30 @@ func (d *ByteDecoder) String() (string, error) {
 	return tmpStr, nil
 }
 
-func (d *ByteDecoder) NullableString() (*string, error) {
-	tmpStr, err := d.String()
-	return &tmpStr, err
+func (d *ByteDecoder) stringLength() (int, error) {
+	l, err := d.Int16()
+	if err != nil {
+		return 0, err
+	}
+	n := int(l)
+	switch {
+	case n < -1:
+		return 0, ErrInvalidStringLength
+	case n > d.remaining():
+		d.off = len(d.b)
+		return 0, ErrInsufficientData
+	}
+	return n, nil
+}
 
+func (d *ByteDecoder) NullableString() (*string, error) {
+	n, err := d.stringLength()
+	if err != nil || n == -1 {
+		return nil, err
+	}
+	tmpStr := string(d.b[d.off : d.off+n])
+	d.off += n
+	return &tmpStr, nil
 }
 
 func (d *ByteDecoder) Int32Array() ([]int32, error) {

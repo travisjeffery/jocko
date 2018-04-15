@@ -499,6 +499,154 @@ func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
 	return nil
 }
 
+func (s *Store) EnsureGroup(idx uint64, group *structs.Group) error {
+	sp := s.tracer.StartSpan("store: ensure group")
+	s.vlog(sp, "group", group)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+	if err := s.ensureGroupTxn(tx, idx, group); err != nil {
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) ensureGroupTxn(tx *memdb.Txn, idx uint64, group *structs.Group) error {
+	var t *structs.Group
+	existing, err := tx.First("groups", "id", group.Group)
+	if err != nil {
+		return fmt.Errorf("group lookup failed: %s", err)
+	}
+
+	if existing != nil {
+		t = existing.(*structs.Group)
+	}
+
+	if t != nil {
+		group.CreateIndex = t.CreateIndex
+		group.ModifyIndex = idx
+	} else {
+		group.CreateIndex = idx
+		group.ModifyIndex = idx
+	}
+
+	if err := tx.Insert("groups", group); err != nil {
+		return fmt.Errorf("failed inserting group: %s", err)
+	}
+
+	if err := tx.Insert("index", &IndexEntry{"groups", idx}); err != nil {
+		return fmt.Errorf("failed updating index: %s", err)
+	}
+
+	return nil
+}
+
+// GetGroup is used to get groups.
+func (s *Store) GetGroup(id string) (uint64, *structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get group")
+	sp.LogKV("id", id)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "groups")
+
+	group, err := tx.First("groups", "id", id)
+	if err != nil {
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
+	}
+	if group != nil {
+		return idx, group.(*structs.Group), nil
+	}
+
+	return idx, nil, nil
+}
+
+func (s *Store) GetGroups() (uint64, []*structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get groups")
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+
+	idx := maxIndexTxn(tx, "groups")
+	it, err := tx.Get("groups", "id")
+	if err != nil {
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
+	}
+	var groups []*structs.Group
+	for next := it.Next(); next != nil; next = it.Next() {
+		groups = append(groups, next.(*structs.Group))
+	}
+	return idx, groups, nil
+}
+
+// GetGroupsByCoordinator looks up groups with the given coordinator.
+func (s *Store) GetGroupsByCoordinator(coordinator int32) (uint64, []*structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get groups by coordinator")
+	sp.LogKV("coordinator", coordinator)
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+	idx := maxIndexTxn(tx, "groups")
+
+	it, err := tx.Get("groups", "coordinator", coordinator)
+	if err != nil {
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
+	}
+
+	var groups []*structs.Group
+	for next := it.Next(); next != nil; next = it.Next() {
+		groups = append(groups, next.(*structs.Group))
+	}
+
+	return idx, groups, nil
+}
+
+// DeleteGroup is used to delete groups.
+func (s *Store) DeleteGroup(idx uint64, group string) error {
+	sp := s.tracer.StartSpan("store: delete group")
+	sp.LogKV("group", group, "group")
+	sp.SetTag("node id", s.nodeID)
+	defer sp.Finish()
+
+	tx := s.db.Txn(true)
+	defer tx.Abort()
+
+	if err := s.deleteGroupTxn(tx, idx, group); err != nil {
+		return err
+	}
+
+	tx.Commit()
+	return nil
+}
+
+func (s *Store) deleteGroupTxn(tx *memdb.Txn, idx uint64, id string) error {
+	group, err := tx.First("groups", "id", id)
+	if err != nil {
+		s.logger.Error("failed group lookup", log.Error("error", err))
+		return err
+	}
+	if group == nil {
+		return nil
+	}
+	if err := tx.Delete("groups", group); err != nil {
+		s.logger.Error("failed deleting group", log.Error("error", err))
+		return err
+	}
+	if err := tx.Insert("index", &IndexEntry{"groups", idx}); err != nil {
+		s.logger.Error("failed updating index", log.Error("error", err))
+		return err
+	}
+	return nil
+}
+
 func (s *Store) EnsurePartition(idx uint64, partition *structs.Partition) error {
 	sp := s.tracer.StartSpan("store: ensure partition")
 	s.vlog(sp, "partition", partition)
@@ -837,11 +985,35 @@ func partitionsTableSchema() *memdb.TableSchema {
 	}
 }
 
+func groupTableSchema() *memdb.TableSchema {
+	return &memdb.TableSchema{
+		Name: "groups",
+		Indexes: map[string]*memdb.IndexSchema{
+			"id": &memdb.IndexSchema{
+				Name:         "id",
+				AllowMissing: false,
+				Unique:       true,
+				Indexer: &memdb.StringFieldIndex{
+					Field:     "Group",
+					Lowercase: true,
+				},
+			},
+			"coordinator": &memdb.IndexSchema{
+				Name: "coordinator",
+				Indexer: &IntFieldIndex{
+					Field: "Coordinator",
+				},
+			},
+		},
+	}
+}
+
 func init() {
 	registerSchema(indexTableSchema)
 	registerSchema(nodesTableSchema)
 	registerSchema(topicsTableSchema)
 	registerSchema(partitionsTableSchema)
+	registerSchema(groupTableSchema)
 
 	e := os.Getenv("JOCKODEBUG")
 	if strings.Contains(e, "fsm=1") {

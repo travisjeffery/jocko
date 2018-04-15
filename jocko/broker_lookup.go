@@ -2,6 +2,7 @@ package jocko
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 
 	"github.com/hashicorp/raft"
@@ -21,50 +22,56 @@ func NewBrokerLookup() *brokerLookup {
 	}
 }
 
-func (sl *brokerLookup) AddBroker(broker *metadata.Broker) {
-	sl.lock.Lock()
-	defer sl.lock.Unlock()
-	sl.addressToBroker[raft.ServerAddress(broker.RaftAddr)] = broker
-	sl.idToBroker[raft.ServerID(broker.ID.Int32())] = broker
+func (b *brokerLookup) AddBroker(broker *metadata.Broker) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+	b.addressToBroker[raft.ServerAddress(broker.RaftAddr)] = broker
+	b.idToBroker[raft.ServerID(broker.ID.Int32())] = broker
 }
 
-func (sl *brokerLookup) BrokerByAddr(addr raft.ServerAddress) *metadata.Broker {
-	sl.lock.RLock()
-	defer sl.lock.RUnlock()
-	svr, _ := sl.addressToBroker[addr]
+func (b *brokerLookup) BrokerByAddr(addr raft.ServerAddress) *metadata.Broker {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
+	svr, _ := b.addressToBroker[addr]
 	return svr
 }
 
-func (sl *brokerLookup) BrokerByID(id raft.ServerID) *metadata.Broker {
-	sl.lock.RLock()
-	defer sl.lock.RUnlock()
-	svr, _ := sl.idToBroker[id]
+func (b *brokerLookup) BrokerByID(id raft.ServerID) *metadata.Broker {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
+	svr, _ := b.idToBroker[id]
 	return svr
 }
 
-func (sl *brokerLookup) BrokerAddr(id raft.ServerID) (raft.ServerAddress, error) {
-	sl.lock.RLock()
-	defer sl.lock.RUnlock()
-	svr, ok := sl.idToBroker[id]
+func (b *brokerLookup) BrokerAddr(id raft.ServerID) (raft.ServerAddress, error) {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
+	svr, ok := b.idToBroker[id]
 	if !ok {
 		return "", fmt.Errorf("no broker for id %v", id)
 	}
 	return raft.ServerAddress(svr.RaftAddr), nil
 }
 
-func (sl *brokerLookup) RemoveBroker(broker *metadata.Broker) {
-	sl.lock.Lock()
-	defer sl.lock.Unlock()
-	delete(sl.addressToBroker, raft.ServerAddress(broker.RaftAddr))
-	delete(sl.idToBroker, raft.ServerID(broker.ID.Int32()))
+func (b *brokerLookup) RemoveBroker(broker *metadata.Broker) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+	delete(b.addressToBroker, raft.ServerAddress(broker.RaftAddr))
+	delete(b.idToBroker, raft.ServerID(broker.ID.Int32()))
 }
 
-func (sl *brokerLookup) Brokers() []*metadata.Broker {
-	sl.lock.RLock()
-	defer sl.lock.RUnlock()
+func (b *brokerLookup) Brokers() []*metadata.Broker {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
 	var ret []*metadata.Broker
-	for _, svr := range sl.addressToBroker {
+	for _, svr := range b.addressToBroker {
 		ret = append(ret, svr)
 	}
 	return ret
+}
+
+func (b *brokerLookup) RandomBroker() *metadata.Broker {
+	brokers := b.Brokers()
+	i := rand.Intn(len(brokers))
+	return brokers[i]
 }

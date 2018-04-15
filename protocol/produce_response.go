@@ -1,10 +1,13 @@
 package protocol
 
+import "time"
+
 type ProducePartitionResponse struct {
-	Partition  int32
-	ErrorCode  int16
-	BaseOffset int64
-	Timestamp  int64
+	Partition      int32
+	ErrorCode      int16
+	BaseOffset     int64
+	LogAppendTime  time.Time
+	LogStartOffset int64
 }
 
 type ProduceResponse struct {
@@ -13,28 +16,43 @@ type ProduceResponse struct {
 }
 
 type ProduceResponses struct {
-	Responses      []*ProduceResponse
-	ThrottleTimeMs int32
+	APIVersion int16
+
+	Responses    []*ProduceResponse
+	ThrottleTime time.Duration
 }
 
-func (r *ProduceResponses) Encode(e PacketEncoder) error {
-	e.PutArrayLength(len(r.Responses))
-	for _, r := range r.Responses {
-		e.PutString(r.Topic)
-		e.PutArrayLength(len(r.PartitionResponses))
-		for _, p := range r.PartitionResponses {
+func (r *ProduceResponses) Encode(e PacketEncoder) (err error) {
+	if err = e.PutArrayLength(len(r.Responses)); err != nil {
+		return err
+	}
+	for _, resp := range r.Responses {
+		if err = e.PutString(resp.Topic); err != nil {
+			return err
+		}
+		if err = e.PutArrayLength(len(resp.PartitionResponses)); err != nil {
+			return err
+		}
+		for _, p := range resp.PartitionResponses {
 			e.PutInt32(p.Partition)
 			e.PutInt16(p.ErrorCode)
-			e.PutInt64(p.BaseOffset)
-			e.PutInt64(p.Timestamp)
+			if r.APIVersion >= 2 {
+				e.PutInt64(p.BaseOffset)
+				e.PutInt64(int64(p.LogAppendTime.UnixNano() / int64(time.Millisecond)))
+			}
+			if r.APIVersion >= 5 {
+				e.PutInt64(p.LogStartOffset)
+			}
 		}
 	}
-	e.PutInt32(r.ThrottleTimeMs)
+	if r.APIVersion >= 1 {
+		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
+	}
 	return nil
 }
 
-func (r *ProduceResponses) Decode(d PacketDecoder) error {
-	var err error
+func (r *ProduceResponses) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
 	l, err := d.ArrayLength()
 	if err != nil {
 		return err
@@ -68,20 +86,29 @@ func (r *ProduceResponses) Decode(d PacketDecoder) error {
 			if err != nil {
 				return err
 			}
-			p.Timestamp, err = d.Int64()
-			if err != nil {
-				return err
+			if r.APIVersion >= 2 {
+				millis, err := d.Int64()
+				if err != nil {
+					return err
+				}
+				p.LogAppendTime = time.Unix(millis/1000, (millis%1000)*int64(time.Millisecond))
+			}
+			if r.APIVersion >= 5 {
+				p.LogStartOffset, err = d.Int64()
+				if err != nil {
+					return err
+				}
 			}
 		}
 		resp.PartitionResponses = ps
 	}
-	r.ThrottleTimeMs, err = d.Int32()
-	if err != nil {
-		return err
+	if r.APIVersion >= 1 {
+		throttle, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
 	}
 	return nil
-}
 
-func (r *ProduceResponses) Version() int16 {
-	return 2
 }

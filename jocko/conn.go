@@ -13,7 +13,6 @@ import (
 // Conn implemenets net.Conn for connections to Jocko brokers. It's used as an internal client for replication fetches and leader and ISR requests.
 type Conn struct {
 	conn          net.Conn
-	mutex         sync.Mutex
 	rlock         sync.Mutex
 	rbuf          bufio.Reader
 	rdeadline     connDeadline
@@ -86,7 +85,7 @@ func (c *Conn) LeaderAndISR(req *protocol.LeaderAndISRRequest) (*protocol.Leader
 	err := c.writeOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {
-		return c.readResponse(&resp, size)
+		return c.readResponse(&resp, size, req.Version())
 	})
 	if err != nil {
 		return nil, err
@@ -100,7 +99,7 @@ func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.Create
 	err := c.writeOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {
-		return c.readResponse(&resp, size)
+		return c.readResponse(&resp, size, req.Version())
 	})
 	if err != nil {
 		return nil, err
@@ -114,7 +113,7 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 	err := c.readOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {
-		return c.readResponse(&resp, size)
+		return c.readResponse(&resp, size, req.Version())
 	})
 	if err != nil {
 		return nil, err
@@ -122,12 +121,12 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 	return &resp, nil
 }
 
-func (c *Conn) readResponse(resp protocol.Decoder, size int) error {
+func (c *Conn) readResponse(resp protocol.VersionedDecoder, size int, version int16) error {
 	b, err := c.rbuf.Peek(size)
 	if err != nil {
 		return err
 	}
-	err = protocol.Decode(b, resp)
+	err = protocol.Decode(b, resp, version)
 	c.rbuf.Discard(size)
 	return err
 }

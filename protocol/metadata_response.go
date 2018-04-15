@@ -22,9 +22,10 @@ type TopicMetadata struct {
 }
 
 type MetadataResponse struct {
-	Brokers []*Broker
-	// unsupported: ClusterID *string
-	// unsupported: ControllerID string
+	APIVersion int16
+
+	Brokers       []*Broker
+	ControllerID  int32
 	TopicMetadata []*TopicMetadata
 }
 
@@ -38,6 +39,9 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 			return err
 		}
 		e.PutInt32(b.Port)
+	}
+	if r.APIVersion >= 1 {
+		e.PutInt32(r.ControllerID)
 	}
 	if err = e.PutArrayLength(len(r.TopicMetadata)); err != nil {
 		return err
@@ -65,8 +69,13 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *MetadataResponse) Decode(d PacketDecoder) error {
+func (r *MetadataResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	brokerCount, err := d.ArrayLength()
+	if err != nil {
+		return err
+	}
 	r.Brokers = make([]*Broker, brokerCount)
 	for i := range r.Brokers {
 		nodeID, err := d.Int32()
@@ -87,7 +96,16 @@ func (r *MetadataResponse) Decode(d PacketDecoder) error {
 			Port:   port,
 		}
 	}
+	if version >= 1 {
+		r.ControllerID, err = d.Int32()
+		if err != nil {
+			return err
+		}
+	}
 	topicCount, err := d.ArrayLength()
+	if err != nil {
+		return err
+	}
 	r.TopicMetadata = make([]*TopicMetadata, topicCount)
 	for i := range r.TopicMetadata {
 		m := &TopicMetadata{}
@@ -129,4 +147,8 @@ func (r *MetadataResponse) Decode(d PacketDecoder) error {
 		r.TopicMetadata[i] = m
 	}
 	return nil
+}
+
+func (r *MetadataResponse) Version() int16 {
+	return r.APIVersion
 }

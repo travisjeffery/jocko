@@ -15,6 +15,7 @@ const (
 	DeregisterTopicRequestType                 = 3
 	RegisterPartitionRequestType               = 4
 	DeregisterPartitionRequestType             = 5
+	RegisterGroupRequestType                   = 6
 )
 
 type CheckID string
@@ -35,6 +36,10 @@ const (
 	HealthCritical = "critical"
 	HealthMaint    = "maintenance"
 )
+
+type RegisterGroupRequest struct {
+	Group Group
+}
 
 type RegisterNodeRequest struct {
 	Node Node
@@ -140,6 +145,24 @@ type Partition struct {
 	// the leader and ISR info. TODO: this will probably have to change to fit better.
 	ControllerEpoch int32
 	LeaderEpoch     int32
+
+	RaftIndex
+}
+
+// Member
+type Member struct {
+	ID         string
+	Metadata   []byte
+	Assignment []byte
+}
+
+// Group
+type Group struct {
+	ID          string
+	Group       string
+	Coordinator int32
+	LeaderID    string
+	Members     map[string]Member
 
 	RaftIndex
 }

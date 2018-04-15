@@ -7,6 +7,8 @@ type LeaderAndISRPartition struct {
 }
 
 type LeaderAndISRResponse struct {
+	APIVersion int16
+
 	ErrorCode  int16
 	Partitions []*LeaderAndISRPartition
 }
@@ -27,8 +29,9 @@ func (r *LeaderAndISRResponse) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *LeaderAndISRResponse) Decode(d PacketDecoder) error {
-	var err error
+func (r *LeaderAndISRResponse) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	if r.ErrorCode, err = d.Int16(); err != nil {
 		return err
 	}
@@ -53,10 +56,10 @@ func (r *LeaderAndISRResponse) Decode(d PacketDecoder) error {
 	return nil
 }
 
-func (r *LeaderAndISRResponse) Version() int16 {
-	return 0
-}
-
 func (r *LeaderAndISRResponse) Key() int16 {
 	return 4
+}
+
+func (r *LeaderAndISRResponse) Version() int16 {
+	return r.APIVersion
 }

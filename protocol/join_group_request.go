@@ -6,19 +6,24 @@ type GroupProtocol struct {
 }
 
 type JoinGroupRequest struct {
-	GroupID        string
-	SessionTimeout int32
-	MemberID       string
-	ProtocolType   string
-	GroupProtocols []*GroupProtocol
+	APIVersion int16
+
+	GroupID          string
+	SessionTimeout   int32
+	RebalanceTimeout int32
+	MemberID         string
+	ProtocolType     string
+	GroupProtocols   []*GroupProtocol
 }
 
-func (r *JoinGroupRequest) Encode(e PacketEncoder) error {
-	var err error
+func (r *JoinGroupRequest) Encode(e PacketEncoder) (err error) {
 	if err = e.PutString(r.GroupID); err != nil {
 		return err
 	}
 	e.PutInt32(r.SessionTimeout)
+	if r.APIVersion >= 1 {
+		e.PutInt32(r.RebalanceTimeout)
+	}
 	if err = e.PutString(r.MemberID); err != nil {
 		return err
 	}
@@ -36,13 +41,19 @@ func (r *JoinGroupRequest) Encode(e PacketEncoder) error {
 	return nil
 }
 
-func (r *JoinGroupRequest) Decode(d PacketDecoder) error {
-	var err error
+func (r *JoinGroupRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+
 	if r.GroupID, err = d.String(); err != nil {
 		return err
 	}
 	if r.SessionTimeout, err = d.Int32(); err != nil {
 		return err
+	}
+	if r.APIVersion >= 1 {
+		if r.RebalanceTimeout, err = d.Int32(); err != nil {
+			return err
+		}
 	}
 	if r.MemberID, err = d.String(); err != nil {
 		return err
@@ -72,5 +83,5 @@ func (r *JoinGroupRequest) Key() int16 {
 }
 
 func (r *JoinGroupRequest) Version() int16 {
-	return 0
+	return r.APIVersion
 }

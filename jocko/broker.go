@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,11 +20,13 @@ import (
 	"github.com/hashicorp/serf/serf"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	"github.com/travisjeffery/jocko/commitlog"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/fsm"
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
+	"github.com/travisjeffery/jocko/jocko/util"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
@@ -34,8 +34,10 @@ import (
 var (
 	brokerVerboseLogs bool
 
-	ErrTopicExists     = errors.New("topic exists already")
-	ErrInvalidArgument = errors.New("no logger set")
+	ErrTopicExists            = errors.New("topic exists already")
+	ErrInvalidArgument        = errors.New("no logger set")
+	OffsetsTopicName          = "__consumer_offsets"
+	OffsetsTopicNumPartitions = 50
 )
 
 const (
@@ -146,8 +148,6 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 			}
 
 			switch req := request.Request.(type) {
-			case *protocol.APIVersionsRequest:
-				resp = b.handleAPIVersions(reqCtx, header, req)
 			case *protocol.ProduceRequest:
 				resp = b.handleProduce(reqCtx, header, req)
 			case *protocol.FetchRequest:
@@ -156,13 +156,42 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 				resp = b.handleOffsets(reqCtx, header, req)
 			case *protocol.MetadataRequest:
 				resp = b.handleMetadata(reqCtx, header, req)
+			case *protocol.LeaderAndISRRequest:
+				resp = b.handleLeaderAndISR(reqCtx, header, req)
+			case *protocol.StopReplicaRequest:
+				resp = b.handleStopReplica(reqCtx, header, req)
+			case *protocol.UpdateMetadataRequest:
+				resp = b.handleUpdateMetadata(reqCtx, header, req)
+			case *protocol.ControlledShutdownRequest:
+				resp = b.handleControlledShutdown(reqCtx, header, req)
+			case *protocol.OffsetCommitRequest:
+				resp = b.handleOffsetCommit(reqCtx, header, req)
+			case *protocol.OffsetFetchRequest:
+				resp = b.handleOffsetFetch(reqCtx, header, req)
+			case *protocol.FindCoordinatorRequest:
+				resp = b.handleFindCoordinator(reqCtx, header, req)
+			case *protocol.JoinGroupRequest:
+				resp = b.handleJoinGroup(reqCtx, header, req)
+			case *protocol.HeartbeatRequest:
+				resp = b.handleHeartbeat(reqCtx, header, req)
+			case *protocol.LeaveGroupRequest:
+				resp = b.handleLeaveGroup(reqCtx, header, req)
+			case *protocol.SyncGroupRequest:
+				resp = b.handleSyncGroup(reqCtx, header, req)
+			case *protocol.DescribeGroupsRequest:
+				resp = b.handleDescribeGroups(reqCtx, header, req)
+			case *protocol.ListGroupsRequest:
+				resp = b.handleListGroups(reqCtx, header, req)
+			case *protocol.SaslHandshakeRequest:
+				resp = b.handleSaslHandshake(reqCtx, header, req)
+			case *protocol.APIVersionsRequest:
+				resp = b.handleAPIVersions(reqCtx, header, req)
 			case *protocol.CreateTopicRequests:
 				resp = b.handleCreateTopic(reqCtx, header, req)
 			case *protocol.DeleteTopicsRequest:
 				resp = b.handleDeleteTopics(reqCtx, header, req)
-			case *protocol.LeaderAndISRRequest:
-				resp = b.handleLeaderAndISR(reqCtx, header, req)
 			}
+
 		case <-ctx.Done():
 			return
 		}
@@ -189,29 +218,6 @@ func (b *Broker) JoinLAN(addrs ...string) protocol.Error {
 
 // Request handling.
 
-var (
-	APIVersions = &protocol.APIVersionsResponse{
-		APIVersions: []protocol.APIVersion{
-			{APIKey: protocol.ProduceKey, MinVersion: 2, MaxVersion: 2},
-			{APIKey: protocol.FetchKey},
-			{APIKey: protocol.OffsetsKey},
-			{APIKey: protocol.MetadataKey},
-			{APIKey: protocol.LeaderAndISRKey},
-			{APIKey: protocol.StopReplicaKey},
-			{APIKey: protocol.GroupCoordinatorKey},
-			{APIKey: protocol.JoinGroupKey},
-			{APIKey: protocol.HeartbeatKey},
-			{APIKey: protocol.LeaveGroupKey},
-			{APIKey: protocol.SyncGroupKey},
-			{APIKey: protocol.DescribeGroupsKey},
-			{APIKey: protocol.ListGroupsKey},
-			{APIKey: protocol.APIVersionsKey},
-			{APIKey: protocol.CreateTopicsKey},
-			{APIKey: protocol.DeleteTopicsKey},
-		},
-	}
-)
-
 func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing.Span {
 	if ctx == nil {
 		// only done for unit tests
@@ -225,16 +231,19 @@ func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing
 	return tracer.StartSpan("broker: "+op, opentracing.ChildOf(parentSpan.Context()))
 }
 
+var apiVersions = &protocol.APIVersionsResponse{APIVersions: protocol.APIVersions}
+
 func (b *Broker) handleAPIVersions(ctx context.Context, header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
 	sp := span(ctx, b.tracer, "api versions")
 	defer sp.Finish()
-	return APIVersions
+	return apiVersions
 }
 
 func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
 	sp := span(ctx, b.tracer, "create topic")
 	defer sp.Finish()
 	resp := new(protocol.CreateTopicsResponse)
+	resp.APIVersion = reqs.Version()
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Requests))
 	isController := b.isController()
 	sp.LogKV("is controller", isController)
@@ -266,6 +275,7 @@ func (b *Broker) handleDeleteTopics(ctx context.Context, header *protocol.Reques
 	sp := span(ctx, b.tracer, "delete topics")
 	defer sp.Finish()
 	resp := new(protocol.DeleteTopicsResponse)
+	resp.APIVersion = reqs.Version()
 	resp.TopicErrorCodes = make([]*protocol.TopicErrorCode, len(reqs.Topics))
 	isController := b.isController()
 	for i, topic := range reqs.Topics {
@@ -303,6 +313,7 @@ func (b *Broker) handleLeaderAndISR(ctx context.Context, header *protocol.Reques
 	resp := &protocol.LeaderAndISRResponse{
 		Partitions: make([]*protocol.LeaderAndISRPartition, len(req.PartitionStates)),
 	}
+	resp.APIVersion = req.Version()
 	setErr := func(i int, p *protocol.PartitionState, err protocol.Error) {
 		resp.Partitions[i] = &protocol.LeaderAndISRPartition{
 			ErrorCode: err.Code(),
@@ -357,6 +368,7 @@ func (b *Broker) handleOffsets(ctx context.Context, header *protocol.RequestHead
 	sp := span(ctx, b.tracer, "offsets")
 	defer sp.Finish()
 	oResp := new(protocol.OffsetsResponse)
+	oResp.APIVersion = req.Version()
 	oResp.Responses = make([]*protocol.OffsetResponse, len(req.Topics))
 	for i, t := range req.Topics {
 		oResp.Responses[i] = new(protocol.OffsetResponse)
@@ -389,6 +401,7 @@ func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHead
 	sp := span(ctx, b.tracer, "produce")
 	defer sp.Finish()
 	resp := new(protocol.ProduceResponses)
+	resp.APIVersion = req.Version()
 	resp.Responses = make([]*protocol.ProduceResponse, len(req.TopicData))
 	for i, td := range req.TopicData {
 		presps := make([]*protocol.ProducePartitionResponse, len(td.Data))
@@ -423,7 +436,7 @@ func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHead
 			}
 			presp.Partition = p.Partition
 			presp.BaseOffset = offset
-			presp.Timestamp = time.Now().Unix()
+			presp.LogAppendTime = time.Now()
 			presps[j] = presp
 		}
 		resp.Responses[i] = &protocol.ProduceResponse{
@@ -463,19 +476,10 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 		if !ok {
 			continue
 		}
-		// TODO: replace this -- just use the addr
-		host, portStr, err := net.SplitHostPort(m.BrokerAddr)
-		if err != nil {
-			panic(err)
-		}
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			panic(err)
-		}
 		brokers = append(brokers, &protocol.Broker{
 			NodeID: m.ID.Int32(),
-			Host:   host,
-			Port:   int32(port),
+			Host:   m.Host(),
+			Port:   m.Port(),
 		})
 	}
 	var topicMetadata []*protocol.TopicMetadata
@@ -542,6 +546,201 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 		Brokers:       brokers,
 		TopicMetadata: topicMetadata,
 	}
+	resp.APIVersion = req.Version()
+	return resp
+}
+
+func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.RequestHeader, req *protocol.FindCoordinatorRequest) *protocol.FindCoordinatorResponse {
+	sp := span(ctx, b.tracer, "find coordinator")
+	defer sp.Finish()
+
+	resp := &protocol.FindCoordinatorResponse{}
+	resp.APIVersion = req.Version()
+
+	// TODO: distribute this.
+	state := b.fsm.State()
+
+	var broker *metadata.Broker
+	var p *structs.Partition
+	var i int32
+
+	topic, err := b.offsetsTopic(ctx)
+	if err != nil {
+		goto ERROR
+	}
+	i = int32(util.Hash(req.CoordinatorKey) % uint32(len(topic.Partitions)))
+	_, p, err = state.GetPartition(OffsetsTopicName, i)
+	if err != nil {
+		goto ERROR
+	}
+	broker = b.brokerLookup.BrokerByID(raft.ServerID(p.Leader))
+
+	resp.Coordinator.NodeID = broker.ID.Int32()
+	resp.Coordinator.Host = broker.Host()
+	resp.Coordinator.Port = broker.Port()
+
+	return resp
+
+ERROR:
+	// todo: which err code to use?
+	resp.ErrorCode = protocol.ErrUnknown.Code()
+	b.logger.Error("find coordinator failed", log.Error("error", err), log.Any("coordinator key", req.CoordinatorKey), log.Any("broker", broker))
+
+	return resp
+}
+
+func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.JoinGroupRequest) *protocol.JoinGroupResponse {
+	sp := span(ctx, b.tracer, "join group")
+	defer sp.Finish()
+
+	resp := &protocol.JoinGroupResponse{}
+	resp.APIVersion = r.Version()
+
+	// // TODO: distribute this.
+	state := b.fsm.State()
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		b.logger.Error("failed getting group", log.Error("error", err))
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		// group doesn't exist so let's create it
+		group = &structs.Group{
+			Group:       r.GroupID,
+			Coordinator: b.config.ID,
+		}
+	}
+	if r.MemberID == "" {
+		// for group member IDs -- can replace with something else
+		r.MemberID = uuid.NewV1().String()
+		group.Members[r.MemberID] = structs.Member{ID: r.MemberID}
+	}
+	if group.LeaderID == "" {
+		group.LeaderID = r.MemberID
+	}
+	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
+		Group: *group,
+	})
+	if err != nil {
+		b.logger.Error("failed to register group", log.Error("error", err))
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+
+	resp.GenerationID = 0
+	resp.LeaderID = group.LeaderID
+	resp.MemberID = r.MemberID
+	for _, m := range group.Members {
+		resp.Members = append(resp.Members, protocol.Member{MemberID: m.ID, MemberMetadata: m.Metadata})
+	}
+
+	return resp
+}
+
+func (b *Broker) handleLeaveGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.LeaveGroupRequest) *protocol.LeaveGroupResponse {
+	sp := span(ctx, b.tracer, "leave group")
+	defer sp.Finish()
+
+	resp := &protocol.LeaveGroupResponse{}
+	resp.APIVersion = r.Version()
+
+	// // TODO: distribute this.
+	state := b.fsm.State()
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	if _, ok := group.Members[r.MemberID]; !ok {
+		resp.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return resp
+	}
+
+	delete(group.Members, r.MemberID)
+
+	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
+		Group: *group,
+	})
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+
+	return resp
+}
+
+func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.SyncGroupRequest) *protocol.SyncGroupResponse {
+	sp := span(ctx, b.tracer, "sync group")
+	defer sp.Finish()
+
+	state := b.fsm.State()
+	resp := &protocol.SyncGroupResponse{}
+	resp.APIVersion = r.Version()
+
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	if group.LeaderID == r.MemberID {
+		// take the assignments from the leader and save them
+		for _, ga := range r.GroupAssignments {
+			if m, ok := group.Members[ga.MemberID]; ok {
+				m.Assignment = ga.MemberAssignment
+			} else {
+				panic("sync group: unknown member")
+			}
+		}
+		_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
+			Group: *group,
+		})
+		if err != nil {
+			resp.ErrorCode = protocol.ErrUnknown.Code()
+			return resp
+		}
+	} else {
+		if m, ok := group.Members[r.MemberID]; ok {
+			resp.MemberAssignment = m.Assignment
+		} else {
+			panic("sync group: unknown member")
+		}
+	}
+
+	return resp
+}
+
+func (b *Broker) handleHeartbeat(ctx context.Context, header *protocol.RequestHeader, r *protocol.HeartbeatRequest) *protocol.HeartbeatResponse {
+	sp := span(ctx, b.tracer, "heartbeat")
+	defer sp.Finish()
+
+	resp := &protocol.HeartbeatResponse{}
+	resp.APIVersion = r.Version()
+
+	state := b.fsm.State()
+	_, group, err := state.GetGroup(r.GroupID)
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	if group == nil {
+		resp.ErrorCode = protocol.ErrInvalidGroupId.Code()
+		return resp
+	}
+	// TODO: need to handle case when rebalance is in process
+
+	resp.ErrorCode = protocol.ErrNone.Code()
+
 	return resp
 }
 
@@ -551,6 +750,7 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 	fresp := &protocol.FetchResponses{
 		Responses: make([]*protocol.FetchResponse, len(r.Topics)),
 	}
+	fresp.APIVersion = r.Version()
 	received := time.Now()
 	for i, topic := range r.Topics {
 		fr := &protocol.FetchResponse{
@@ -618,6 +818,131 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 		fresp.Responses[i] = fr
 	}
 	return fresp
+}
+
+func (b *Broker) handleSaslHandshake(ctx context.Context, header *protocol.RequestHeader, req *protocol.SaslHandshakeRequest) *protocol.SaslHandshakeResponse {
+	panic("not implemented: sasl handshake")
+	return nil
+}
+
+func (b *Broker) handleListGroups(ctx context.Context, header *protocol.RequestHeader, req *protocol.ListGroupsRequest) *protocol.ListGroupsResponse {
+	sp := span(ctx, b.tracer, "create topic")
+	defer sp.Finish()
+	resp := new(protocol.ListGroupsResponse)
+	resp.APIVersion = req.Version()
+	state := b.fsm.State()
+
+	fmt.Println("list")
+	fmt.Println("list")
+	fmt.Println("list")
+
+	_, groups, err := state.GetGroups()
+	if err != nil {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+		return resp
+	}
+	for _, group := range groups {
+		resp.Groups = append(resp.Groups, protocol.ListGroup{
+			GroupID: group.Group,
+			// TODO: add protocol type
+			ProtocolType: "consumer",
+		})
+	}
+	return resp
+}
+
+func (b *Broker) handleDescribeGroups(ctx context.Context, header *protocol.RequestHeader, req *protocol.DescribeGroupsRequest) *protocol.DescribeGroupsResponse {
+	sp := span(ctx, b.tracer, "create topic")
+	defer sp.Finish()
+	resp := new(protocol.DescribeGroupsResponse)
+	resp.APIVersion = req.Version()
+	state := b.fsm.State()
+
+	fmt.Println("describe")
+	fmt.Println("describe")
+	fmt.Println("describe")
+
+	for _, id := range req.GroupIDs {
+		group := protocol.Group{}
+		_, g, err := state.GetGroup(id)
+		if err != nil {
+			group.ErrorCode = protocol.ErrUnknown.Code()
+			group.GroupID = id
+			resp.Groups = append(resp.Groups, group)
+			return resp
+		}
+		group.GroupID = id
+		group.State = "Stable"
+		group.ProtocolType = "consumer"
+		group.Protocol = "consumer"
+		for id, member := range g.Members {
+			group.GroupMembers[id] = &protocol.GroupMember{
+				ClientID: member.ID,
+				// TODO: ???
+				ClientHost:            "",
+				GroupMemberMetadata:   member.Metadata,
+				GroupMemberAssignment: member.Assignment,
+			}
+		}
+		resp.Groups = append(resp.Groups)
+
+	}
+
+	return resp
+}
+
+func (b *Broker) handleStopReplica(ctx context.Context, header *protocol.RequestHeader, req *protocol.StopReplicaRequest) *protocol.StopReplicaResponse {
+	panic("not implemented: stop replica")
+	return nil
+}
+
+func (b *Broker) handleUpdateMetadata(ctx context.Context, header *protocol.RequestHeader, req *protocol.UpdateMetadataRequest) *protocol.UpdateMetadataResponse {
+	panic("not implemented: update metadata")
+	return nil
+}
+
+func (b *Broker) handleControlledShutdown(ctx context.Context, header *protocol.RequestHeader, req *protocol.ControlledShutdownRequest) *protocol.ControlledShutdownResponse {
+	panic("not implemented: controlled shutdown")
+	return nil
+}
+
+func (b *Broker) handleOffsetCommit(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetCommitRequest) *protocol.OffsetCommitResponse {
+	panic("not implemented: offset commit")
+	return nil
+}
+
+func (b *Broker) handleOffsetFetch(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetFetchRequest) *protocol.OffsetFetchResponse {
+	sp := span(ctx, b.tracer, "create topic")
+	defer sp.Finish()
+
+	resp := new(protocol.OffsetFetchResponse)
+	resp.APIVersion = req.Version()
+	// state := b.fsm.State()
+
+	// group := protocol.Group{}
+	// _, g, err := state.GetGroup(req.GroupID)
+	// if err != nil {
+	// 	group.ErrorCode = protocol.ErrUnknown.Code()
+	// 	group.GroupID = id
+	// 	resp.Groups = append(resp.Groups, group)
+	// 	return resp
+	// }
+	// group.GroupID = id
+	// group.State = "Stable"
+	// group.ProtocolType = "consumer"
+	// group.Protocol = "consumer"
+	// for id, member := range g.Members {
+	// 	group.GroupMembers[id] = &protocol.GroupMember{
+	// 		ClientID: member.ID,
+	// 		// TODO: ???
+	// 		ClientHost:            "",
+	// 		GroupMemberMetadata:   member.Metadata,
+	// 		GroupMemberAssignment: member.Assignment,
+	// 	}
+	// }
+
+	return resp
+
 }
 
 // isController returns true if this is the cluster controller.
@@ -947,4 +1272,32 @@ type Replica struct {
 	Leo        int64
 	Replicator *Replicator
 	sync.Mutex
+}
+
+func (b *Broker) offsetsTopic(ctx context.Context) (topic *structs.Topic, err error) {
+	state := b.fsm.State()
+	name := "__consumer_offsets"
+
+	// check if the topic exists already
+	_, topic, err = state.GetTopic(name)
+	if err != nil {
+		return
+	}
+	if topic != nil {
+		return
+	}
+
+	// doesn't exist so let's create it
+	partitions := b.buildPartitions(name, 50, 3)
+	topic = &structs.Topic{
+		Topic:      "__consumer_offsets",
+		Partitions: make(map[int32][]int32),
+	}
+	for _, p := range partitions {
+		topic.Partitions[p.Partition] = p.AR
+	}
+	_, err = b.raftApply(structs.RegisterTopicRequestType, structs.RegisterTopicRequest{
+		Topic: *topic,
+	})
+	return
 }

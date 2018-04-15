@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/hashicorp/serf/serf"
@@ -27,6 +28,26 @@ type Broker struct {
 	RaftAddr    string
 	SerfLANAddr string
 	BrokerAddr  string
+}
+
+func (b Broker) Host() string {
+	host, _, err := net.SplitHostPort(b.BrokerAddr)
+	if err != nil {
+		panic(err)
+	}
+	return host
+}
+
+func (b Broker) Port() int32 {
+	_, portStr, err := net.SplitHostPort(b.BrokerAddr)
+	if err != nil {
+		panic(err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		panic(err)
+	}
+	return int32(port)
 }
 
 // IsBroker checks if the given serf.Member is a broker, building and returning Broker instance from the Member's tags if so.
