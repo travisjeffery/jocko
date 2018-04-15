@@ -32,6 +32,12 @@
   version = "v1.3.1"
 
 [[projects]]
+  name = "github.com/bsm/sarama-cluster"
+  packages = ["."]
+  revision = "abf039439f66c1ce78017f560b490612552f6472"
+  version = "v2.1.10"
+
+[[projects]]
   branch = "master"
   name = "github.com/codahale/hdrhistogram"
   packages = ["."]
@@ -375,6 +381,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d1087fe0c72c3d83ac4a298df000cd89ab43942650f9fb3749274c4979f0f7f7"
+  inputs-digest = "c39c4bd12d53f16a1b61e610a89e5f753ba43b956d304f2d8adb37468c0d7c4f"
   solver-name = "gps-cdcl"
   solver-version = 1

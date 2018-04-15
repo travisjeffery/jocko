@@ -566,6 +566,25 @@ func (s *Store) GetGroup(id string) (uint64, *structs.Group, error) {
 	return idx, nil, nil
 }
 
+func (s *Store) GetGroups() (uint64, []*structs.Group, error) {
+	sp := s.tracer.StartSpan("store: get groups")
+	defer sp.Finish()
+
+	tx := s.db.Txn(false)
+	defer tx.Abort()
+
+	idx := maxIndexTxn(tx, "groups")
+	it, err := tx.Get("groups", "id")
+	if err != nil {
+		return 0, nil, fmt.Errorf("group lookup failed: %s", err)
+	}
+	var groups []*structs.Group
+	for next := it.Next(); next != nil; next = it.Next() {
+		groups = append(groups, next.(*structs.Group))
+	}
+	return idx, groups, nil
+}
+
 // GetGroupsByCoordinator looks up groups with the given coordinator.
 func (s *Store) GetGroupsByCoordinator(coordinator int32) (uint64, []*structs.Group, error) {
 	sp := s.tracer.StartSpan("store: get groups by coordinator")

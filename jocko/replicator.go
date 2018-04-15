@@ -83,7 +83,7 @@ func (r *Replicator) fetchMessages() {
 						continue
 					}
 					if p.RecordSet == nil {
-						r.logger.Debug("replicator: fetch messages: record set is nil")
+						// r.logger.Debug("replicator: fetch messages: record set is nil")
 						continue
 					}
 					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8]))
