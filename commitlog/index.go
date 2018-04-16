@@ -3,6 +3,7 @@ package commitlog
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"os"
 	"sync"
 
@@ -25,7 +26,7 @@ const (
 	entryWidth = offsetWidth + positionWidth
 )
 
-type index struct {
+type Index struct {
 	options
 	mmap     gommap.MMap
 	file     *os.File
@@ -38,7 +39,7 @@ type Entry struct {
 	Position int64
 }
 
-// relEntry is an Entry relative to the base offset
+// relEntry is an Entry relative to the base fileOffset
 type relEntry struct {
 	Offset   int32
 	Position int32
@@ -62,14 +63,14 @@ type options struct {
 	baseOffset int64
 }
 
-func newIndex(opts options) (idx *index, err error) {
+func NewIndex(opts options) (idx *Index, err error) {
 	if opts.bytes == 0 {
 		opts.bytes = 10 * 1024 * 1024
 	}
 	if opts.path == "" {
 		return nil, errors.New("path is empty")
 	}
-	idx = &index{
+	idx = &Index{
 		options: opts,
 	}
 	idx.file, err = os.OpenFile(opts.path, os.O_RDWR|os.O_CREATE, 0666)
@@ -93,7 +94,7 @@ func newIndex(opts options) (idx *index, err error) {
 	return idx, nil
 }
 
-func (idx *index) WriteEntry(entry Entry) (err error) {
+func (idx *Index) WriteEntry(entry Entry) (err error) {
 	b := new(bytes.Buffer)
 	relEntry := newRelEntry(entry, idx.baseOffset)
 	if err = binary.Write(b, Encoding, relEntry); err != nil {
@@ -106,12 +107,17 @@ func (idx *index) WriteEntry(entry Entry) (err error) {
 	return nil
 }
 
-func (idx *index) ReadEntry(e *Entry, offset int64) error {
+// ReadEntryAtFileOffset is used to read an Index entry at the given
+// byte offset of the Index file. ReadEntryAtLogOffset is generally
+// more useful for higher level use.
+func (idx *Index) ReadEntryAtFileOffset(e *Entry, fileOffset int64) (err error) {
 	p := make([]byte, entryWidth)
-	idx.ReadAt(p, offset)
+	if _, err = idx.ReadAt(p, fileOffset); err != nil {
+		return err
+	}
 	b := bytes.NewReader(p)
 	rel := &relEntry{}
-	err := binary.Read(b, Encoding, rel)
+	err = binary.Read(b, Encoding, rel)
 	if err != nil {
 		return errors.Wrap(err, "binary read failed")
 	}
@@ -121,23 +127,33 @@ func (idx *index) ReadEntry(e *Entry, offset int64) error {
 	return nil
 }
 
-func (idx *index) ReadAt(p []byte, offset int64) (n int) {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return copy(p, idx.mmap[offset:offset+entryWidth])
+// ReadEntryAtLogOffset is used to read an Index entry at the given
+// log offset of the Index file.
+func (idx *Index) ReadEntryAtLogOffset(e *Entry, logOffset int64) error {
+	return idx.ReadEntryAtFileOffset(e, logOffset*entryWidth)
 }
 
-func (idx *index) Write(p []byte) (n int, err error) {
+func (idx *Index) ReadAt(p []byte, offset int64) (n int, err error) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if idx.position < offset+entryWidth {
+		return 0, io.EOF
+	}
+	n = copy(p, idx.mmap[offset:offset+entryWidth])
+	return n, nil
+}
+
+func (idx *Index) Write(p []byte) (n int, err error) {
 	return idx.WriteAt(p, idx.position), nil
 }
 
-func (idx *index) WriteAt(p []byte, offset int64) (n int) {
+func (idx *Index) WriteAt(p []byte, offset int64) (n int) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	return copy(idx.mmap[offset:offset+entryWidth], p)
 }
 
-func (idx *index) Sync() error {
+func (idx *Index) Sync() error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if err := idx.file.Sync(); err != nil {
@@ -149,7 +165,7 @@ func (idx *index) Sync() error {
 	return nil
 }
 
-func (idx *index) Close() (err error) {
+func (idx *Index) Close() (err error) {
 	if err = idx.Sync(); err != nil {
 		return
 	}
@@ -159,11 +175,11 @@ func (idx *index) Close() (err error) {
 	return idx.file.Close()
 }
 
-func (idx *index) Name() string {
+func (idx *Index) Name() string {
 	return idx.file.Name()
 }
 
-func (idx *index) TruncateEntries(number int) error {
+func (idx *Index) TruncateEntries(number int) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if int64(number*entryWidth) > idx.position {
@@ -173,7 +189,7 @@ func (idx *index) TruncateEntries(number int) error {
 	return nil
 }
 
-func (idx *index) SanityCheck() error {
+func (idx *Index) SanityCheck() error {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	if idx.position == 0 {
@@ -183,7 +199,7 @@ func (idx *index) SanityCheck() error {
 	} else {
 		//read last entry
 		entry := new(Entry)
-		if err := idx.ReadEntry(entry, idx.position-entryWidth); err != nil {
+		if err := idx.ReadEntryAtFileOffset(entry, idx.position-entryWidth); err != nil {
 			return err
 		}
 		if entry.Offset < idx.baseOffset {
@@ -191,4 +207,26 @@ func (idx *index) SanityCheck() error {
 		}
 		return nil
 	}
+}
+
+type IndexScanner struct {
+	idx    *Index
+	entry  *Entry
+	offset int64
+}
+
+func NewIndexScanner(idx *Index) *IndexScanner {
+	return &IndexScanner{idx: idx, entry: &Entry{}}
+}
+
+func (s *IndexScanner) Scan() (*Entry, error) {
+	err := s.idx.ReadEntryAtLogOffset(s.entry, s.offset)
+	if err != nil {
+		return nil, err
+	}
+	if s.entry.Offset == 0 && s.offset != 0 {
+		return nil, io.EOF
+	}
+	s.offset++
+	return s.entry, err
 }
