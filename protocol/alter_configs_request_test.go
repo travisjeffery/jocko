@@ -10,11 +10,11 @@ func TestAlterConfigsRequest(t *testing.T) {
 	req := require.New(t)
 	val := "max"
 	exp := &AlterConfigsRequest{
-		Resources: []ConfigResource{
+		Resources: []AlterConfigsResource{
 			{
 				Type: 1,
 				Name: "system",
-				Entries: []ConfigEntry{{
+				Entries: []AlterConfigsEntry{{
 					Name:  "memory",
 					Value: &val,
 				}},

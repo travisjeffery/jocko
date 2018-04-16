@@ -3,17 +3,17 @@ package protocol
 type AlterConfigsRequest struct {
 	APIVersion int16
 
-	Resources    []ConfigResource
+	Resources    []AlterConfigsResource
 	ValidateOnly bool
 }
 
-type ConfigResource struct {
+type AlterConfigsResource struct {
 	Type    int8
 	Name    string
-	Entries []ConfigEntry
+	Entries []AlterConfigsEntry
 }
 
-type ConfigEntry struct {
+type AlterConfigsEntry struct {
 	Name  string
 	Value *string
 }
@@ -50,9 +50,9 @@ func (r *AlterConfigsRequest) Decode(d PacketDecoder, version int16) (err error)
 	if err != nil {
 		return err
 	}
-	r.Resources = make([]ConfigResource, resourceCount)
+	r.Resources = make([]AlterConfigsResource, resourceCount)
 	for i := 0; i < resourceCount; i++ {
-		resource := ConfigResource{}
+		resource := AlterConfigsResource{}
 		if resource.Type, err = d.Int8(); err != nil {
 			return err
 		}
@@ -63,9 +63,9 @@ func (r *AlterConfigsRequest) Decode(d PacketDecoder, version int16) (err error)
 		if err != nil {
 			return err
 		}
-		resource.Entries = make([]ConfigEntry, entryCount)
+		resource.Entries = make([]AlterConfigsEntry, entryCount)
 		for j := 0; j < entryCount; j++ {
-			entry := ConfigEntry{}
+			entry := AlterConfigsEntry{}
 			if entry.Name, err = d.String(); err != nil {
 				return err
 			}

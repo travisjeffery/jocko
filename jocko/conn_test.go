@@ -187,14 +187,29 @@ func testConnAlterConfigs(t *testing.T, conn *Conn) {
 
 	val := "max"
 	if _, err := conn.AlterConfigs(&protocol.AlterConfigsRequest{
-		Resources: []protocol.ConfigResource{
+		Resources: []protocol.AlterConfigsResource{
 			{
 				Type: 1,
 				Name: "system",
-				Entries: []protocol.ConfigEntry{{
+				Entries: []protocol.AlterConfigsEntry{{
 					Name:  "memory",
 					Value: &val,
 				}},
+			},
+		},
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnDescribeConfigs(t *testing.T, conn *Conn) {
+	t.Skip()
+
+	if _, err := conn.DescribeConfigs(&protocol.DescribeConfigsRequest{
+		Resources: []protocol.DescribeConfigsResource{
+			{
+				Type: 1,
+				Name: "system",
 			},
 		},
 	}); err != nil {
