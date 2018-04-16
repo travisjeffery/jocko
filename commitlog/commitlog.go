@@ -92,6 +92,9 @@ func (l *CommitLog) open() error {
 		} else if strings.HasSuffix(file.Name(), LogFileSuffix) {
 			offsetStr := strings.TrimSuffix(file.Name(), LogFileSuffix)
 			baseOffset, err := strconv.Atoi(offsetStr)
+			if err != nil {
+				return err
+			}
 			segment, err := NewSegment(l.Path, int64(baseOffset), l.MaxSegmentBytes)
 			if err != nil {
 				return err

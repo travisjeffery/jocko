@@ -32,23 +32,24 @@ func TestNewCommitLog(t *testing.T) {
 	l := setup(t)
 	defer cleanup(t)
 
-	for _, msgSet := range msgSets {
-		_, err = l.Append(msgSet)
+	for _, exp := range msgSets {
+		_, err = l.Append(exp)
 		require.NoError(t, err)
 	}
 	maxBytes := msgSets[0].Size()
 	r, err := l.NewReader(0, maxBytes)
 	require.NoError(t, err)
 
-	for i := range msgSets {
+	for i, exp := range msgSets {
 		p := make([]byte, maxBytes)
 		_, err = r.Read(p)
 		require.NoError(t, err)
 
-		ms := commitlog.MessageSet(p)
-		require.Equal(t, int64(i), ms.Offset())
+		act := commitlog.MessageSet(p)
+		require.Equal(t, exp, act)
+		require.Equal(t, int64(i), act.Offset())
 
-		payload := ms.Payload()
+		payload := act.Payload()
 		var offset int
 		for _, msg := range msgs {
 			require.Equal(t, []byte(msg), payload[offset:offset+len(msg)])

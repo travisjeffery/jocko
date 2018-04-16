@@ -21,7 +21,7 @@ type Segment struct {
 	writer     io.Writer
 	reader     io.Reader
 	log        *os.File
-	Index      *index
+	Index      *Index
 	BaseOffset int64
 	NextOffset int64
 	Position   int64
@@ -53,14 +53,14 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 	return s, err
 }
 
-// SetupIndex creates and initializes an index.
+// SetupIndex creates and initializes an Index.
 // Initialization is:
-// - Sanity check of the loaded index
-// - Truncates the index (clears it)
-// - Reads the log file from the beginning and re-initializes the index
+// - Sanity check of the loaded Index
+// - Truncates the Index (clears it)
+// - Reads the log file from the beginning and re-initializes the Index
 func (s *Segment) SetupIndex(path string) (err error) {
 	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, s.BaseOffset))
-	s.Index, err = newIndex(options{
+	s.Index, err = NewIndex(options{
 		path:       indexPath,
 		baseOffset: s.BaseOffset,
 	})
@@ -167,7 +167,7 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	e = &Entry{}
 	n := int(s.Index.bytes / entryWidth)
 	idx := sort.Search(n, func(i int) bool {
-		_ = s.Index.ReadEntry(e, int64(i*entryWidth))
+		_ = s.Index.ReadEntryAtFileOffset(e, int64(i*entryWidth))
 		return e.Offset >= offset || e.Offset == 0
 	})
 	if idx == n {
@@ -189,4 +189,33 @@ func (s *Segment) Delete() error {
 		return err
 	}
 	return nil
+}
+
+type SegmentScanner struct {
+	s  *Segment
+	is *IndexScanner
+}
+
+func NewSegmentScanner(segment *Segment) *SegmentScanner {
+	return &SegmentScanner{s: segment, is: NewIndexScanner(segment.Index)}
+}
+
+func (s *SegmentScanner) Scan() (ms MessageSet, err error) {
+	entry, err := s.is.Scan()
+	if err != nil {
+		return nil, err
+	}
+	header := make(MessageSet, msgSetHeaderLen)
+	_, err = s.s.ReadAt(header, entry.Position)
+	if err != nil {
+		return nil, err
+	}
+	size := int64(header.Size() - msgSetHeaderLen)
+	payload := make([]byte, size)
+	_, err = s.s.ReadAt(payload, entry.Position+msgSetHeaderLen)
+	if err != nil {
+		return nil, err
+	}
+	msgSet := append(header, payload...)
+	return msgSet, nil
 }
