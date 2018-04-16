@@ -4,6 +4,9 @@ type Cleaner interface {
 	Clean([]*Segment) ([]*Segment, error)
 }
 
+// The delete cleaner implements the delete cleanup policy which
+// deletes old log segments.
+
 type DeleteCleaner struct {
 	Retention struct {
 		Bytes int64
