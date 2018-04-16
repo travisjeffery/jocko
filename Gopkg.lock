@@ -38,6 +38,12 @@
   version = "v2.1.10"
 
 [[projects]]
+  name = "github.com/cespare/xxhash"
+  packages = ["."]
+  revision = "5c37fe3735342a2e0d01c87a907579987c8936cc"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/codahale/hdrhistogram"
   packages = ["."]
@@ -381,6 +387,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c39c4bd12d53f16a1b61e610a89e5f753ba43b956d304f2d8adb37468c0d7c4f"
+  inputs-digest = "4bc2b9b1d05a6cfcbb3d7dd74e863fc6d6f7ffa6b37f4f84cb9aabbf03de97b8"
   solver-name = "gps-cdcl"
   solver-version = 1

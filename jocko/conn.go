@@ -121,6 +121,20 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 	return &resp, nil
 }
 
+// AlterConfigs sends an alter configs request and returns the response.
+func (c *Conn) AlterConfigs(req *protocol.AlterConfigsRequest) (*protocol.AlterConfigsResponse, error) {
+	var resp protocol.AlterConfigsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func (c *Conn) readResponse(resp protocol.VersionedDecoder, size int, version int16) error {
 	b, err := c.rbuf.Peek(size)
 	if err != nil {

@@ -568,7 +568,7 @@ func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.Req
 	if err != nil {
 		goto ERROR
 	}
-	i = int32(util.Hash(req.CoordinatorKey) % uint32(len(topic.Partitions)))
+	i = int32(util.Hash(req.CoordinatorKey) % uint64(len(topic.Partitions)))
 	_, p, err = state.GetPartition(OffsetsTopicName, i)
 	if err != nil {
 		goto ERROR

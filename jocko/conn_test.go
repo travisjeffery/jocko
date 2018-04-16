@@ -113,6 +113,10 @@ func TestConn(t *testing.T) {
 			name: "fetch",
 			fn:   testConnFetch,
 		},
+		{
+			name: "alter configs",
+			fn:   testConnAlterConfigs,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -173,6 +177,26 @@ func testConnFetch(t *testing.T, conn *Conn) {
 				FetchOffset: 0,
 			}},
 		}},
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnAlterConfigs(t *testing.T, conn *Conn) {
+	t.Skip()
+
+	val := "max"
+	if _, err := conn.AlterConfigs(&protocol.AlterConfigsRequest{
+		Resources: []protocol.ConfigResource{
+			{
+				Type: 1,
+				Name: "system",
+				Entries: []protocol.ConfigEntry{{
+					Name:  "memory",
+					Value: &val,
+				}},
+			},
+		},
 	}); err != nil {
 		t.Error(err)
 	}
