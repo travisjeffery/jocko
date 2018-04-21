@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  jocko_a:
+    build:
+      context: .
+    image: travisjeffery:jocko
+    command: jocko broker --id 0 --raft-addr=jocko_a:9093
+
+  jocko_b:
+    build:
+      context: .
+    image: travisjeffery:jocko
+    command: jocko broker --serf-members=jocko_a:9094 --id 1 --raft-addr=jocko_b:9093
+
+  jocko_c:
+    build:
+      context: .
+    image: travisjeffery:jocko
+    command: jocko broker --serf-members=jocko_a:9094 --id 2 --raft-addr=jocko_c:9093

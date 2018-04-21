@@ -1,4 +1,4 @@
-package jocko
+package client
 
 import (
 	"bufio"
@@ -107,9 +107,37 @@ func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.Create
 	return &resp, nil
 }
 
-// CreateTopics sends a fetch request and returns the response.
+// DeleteTopics sends a delete topics request and returns the response.
+func (c *Conn) DeleteTopics(req *protocol.DeleteTopicsRequest) (*protocol.DeleteTopicsResponse, error) {
+	var resp protocol.DeleteTopicsResponse
+	err := c.writeOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Fetch sends a fetch request and returns the response.
 func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, error) {
 	var resp protocol.FetchResponses
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Metadata sends a metadata request and returns the response.
+func (c *Conn) Metadata(req *protocol.MetadataRequest) (*protocol.MetadataResponse, error) {
+	var resp protocol.MetadataResponse
 	err := c.readOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {
@@ -249,11 +277,11 @@ func (c *Conn) waitResponse(d *connDeadline, id int32) (deadline time.Time, size
 	}
 }
 
-func (c *Conn) readDeadline() time.Time {
+func (c *Conn) ReadDeadline() time.Time {
 	return c.rdeadline.deadline()
 }
 
-func (c *Conn) writeDeadline() time.Time {
+func (c *Conn) WriteDeadline() time.Time {
 	return c.wdeadline.deadline()
 }
 

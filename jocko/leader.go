@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
+	jockocli "github.com/travisjeffery/jocko/client"
 	"github.com/travisjeffery/jocko/jocko/fsm"
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
@@ -529,7 +530,7 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 			b.logger.Error("trying to assign partitions to unknown broker", log.Any("broker", n))
 			continue
 		}
-		conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
+		conn, err := jockocli.Dial("tcp", broker.BrokerAddr)
 		if err != nil {
 			return err
 		}

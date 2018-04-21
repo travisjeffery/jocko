@@ -8,9 +8,13 @@ type MetadataRequest struct {
 }
 
 func (r *MetadataRequest) Encode(e PacketEncoder) (err error) {
-	err = e.PutStringArray(r.Topics)
-	if err != nil {
-		return err
+	if r.APIVersion==0 || r.Topics!=nil {
+		err = e.PutStringArray(r.Topics)
+		if err != nil {
+			return err
+		}
+	} else {
+		e.PutInt32(-1)
 	}
 	if r.APIVersion >= 4 {
 		e.PutBool(r.AllowAutoTopicCreation)

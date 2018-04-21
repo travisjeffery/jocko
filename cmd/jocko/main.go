@@ -11,7 +11,6 @@ import (
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
-	"github.com/travisjeffery/jocko/protocol"
 	"github.com/uber/jaeger-lib/metrics"
 
 	"github.com/uber/jaeger-client-go"
@@ -36,13 +35,6 @@ var (
 		Broker: config.DefaultBrokerConfig(),
 		Server: &config.ServerConfig{},
 	}
-
-	topicCfg = struct {
-		BrokerAddr        string
-		Topic             string
-		Partitions        int32
-		ReplicationFactor int
-	}{}
 )
 
 func init() {
@@ -55,16 +47,12 @@ func init() {
 	brokerCmd.Flags().StringSliceVar(&brokerCfg.Broker.StartJoinAddrsWAN, "join-wan", nil, "Address of an broker serf to join -wan at start time. Can be specified multiple times.")
 	brokerCmd.Flags().Int32Var(&brokerCfg.ID, "id", 0, "Broker ID")
 
-	topicCmd := &cobra.Command{Use: "topic", Short: "Manage topics"}
-	createTopicCmd := &cobra.Command{Use: "create", Short: "Create a topic", Run: createTopic}
-	createTopicCmd.Flags().StringVar(&topicCfg.BrokerAddr, "broker-addr", "0.0.0.0:9092", "Address for Broker to bind on")
-	createTopicCmd.Flags().StringVar(&topicCfg.Topic, "topic", "", "Name of topic to create")
-	createTopicCmd.Flags().Int32Var(&topicCfg.Partitions, "partitions", 1, "Number of partitions")
-	createTopicCmd.Flags().IntVar(&topicCfg.ReplicationFactor, "replication-factor", 1, "Replication factor")
-
 	cli.AddCommand(brokerCmd)
-	cli.AddCommand(topicCmd)
-	topicCmd.AddCommand(createTopicCmd)
+
+	//add client commands
+	for _, ccmd := range clientCmds() {
+		cli.AddCommand(ccmd)
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -119,36 +107,6 @@ func run(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "error shutting down store: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func createTopic(cmd *cobra.Command, args []string) {
-	conn, err := jocko.Dial("tcp", topicCfg.BrokerAddr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
-		os.Exit(1)
-	}
-
-	resp, err := conn.CreateTopics(&protocol.CreateTopicRequests{
-		Requests: []*protocol.CreateTopicRequest{{
-			Topic:             topicCfg.Topic,
-			NumPartitions:     topicCfg.Partitions,
-			ReplicationFactor: int16(topicCfg.ReplicationFactor),
-			ReplicaAssignment: nil,
-			Configs:           nil,
-		}},
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error with request to broker: %v\n", err)
-		os.Exit(1)
-	}
-	for _, topicErrCode := range resp.TopicErrorCodes {
-		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
-			err := protocol.Errs[topicErrCode.ErrorCode]
-			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
-			os.Exit(1)
-		}
-	}
-	fmt.Printf("created topic: %v\n", topicCfg.Topic)
 }
 
 func main() {
