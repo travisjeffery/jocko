@@ -19,8 +19,8 @@ func (m Message) Attributes() int8 {
 }
 
 func (m Message) Timestamp() int64 {
-	if m.MagicByte() < 1 {
-		panic("magic byte < 1")
+	if m.MagicByte() == 0 {
+		panic("v0 doesn't have timestamp")
 	}
 	return int64(Encoding.Uint64(m[6:]))
 }
@@ -39,6 +39,24 @@ func (m Message) Value() []byte {
 		return nil
 	}
 	return m[start+4 : end]
+}
+
+func (m Message) Size() int32 {
+	var size int32 = 4 + 1 + 1
+	if m.MagicByte() == 1 {
+		size += 8
+	}
+	size += 4
+	_, _, keySize := m.keyOffsets()
+	if keySize != -1 {
+		size += keySize
+	}
+	size += 4
+	_, _, valueSize := m.valueOffsets()
+	if valueSize != -1 {
+		size += valueSize
+	}
+	return size
 }
 
 func (m Message) keyOffsets() (start, end, size int32) {

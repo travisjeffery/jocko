@@ -35,3 +35,18 @@ func (ms MessageSet) Size() int32 {
 func (ms MessageSet) Payload() []byte {
 	return ms[msgSetHeaderLen:]
 }
+
+func (ms MessageSet) Messages() (msgs []Message) {
+	var offset int32
+	var msg Message
+	b := ms.Payload()
+	payloadSize := int32(len(b))
+	for offset < payloadSize {
+		msg = NewMessage(b)
+		offset = msg.Size()
+		msgs = append(msgs, NewMessage(b[:offset]))
+		b = b[offset:]
+		offset += offset
+	}
+	return msgs
+}
