@@ -2,7 +2,6 @@ package client
 
 import (
 	"time"
-	"sync"
 	"errors"
 	"fmt"
 
@@ -11,51 +10,43 @@ import (
 
 //simple admin client (derived from KIP-117)
 type AdminClient struct {
-	conn *Conn //conn to any non-controller broker
-	ctrlConn *Conn //conn to controller broker
-	sync.Mutex
-	bootstrapBrokers []string
-	ctrlBroker string
-	config *AdminConfig
+	*Client
 	//controller broker of cluster
-	controller *protocol.Broker
+	ctrlConn *Conn //conn to controller broker
+	ctrlBroker string
+	//controller *protocol.Broker
 }
 
-type AdminConfig struct {
-	//net conn
-	DialTimeout time.Duration
-	ReadTimeout time.Duration
-	WriteTimeout time.Duration
-	//metadata
-	MaxRetry int
-	RetryBackoff time.Duration
-	RefreshFrequency time.Duration
+func NewAdminClient(bootBrokers []string, cfg *ClientConfig) (adminCli *AdminClient, err error) {
+	adminCli = &AdminClient{}
+	adminCli.Client, err = NewClient(bootBrokers,cfg)
+	return adminCli, nil
 }
 
-func NewAdminClient(bootBrokers []string, cfg *AdminConfig) (adminCli *AdminClient, err error) {
-	adminCli = &AdminClient{bootstrapBrokers:bootBrokers,config:cfg}
-	var broker string
-	for _, broker = range bootBrokers {
-		adminCli.conn, err = Dial("tcp",broker)
-		if err == nil {
-			break
-		}
-	}
-	if err != nil { //failed to conn to any broker
-		return nil, errors.New(fmt.Sprintf("fail to connect to any of %v\n",bootBrokers))
-	}
+func (adm *AdminClient) connectController() (err error) {
 	//fetch metadata and controller broker info
 	//for create_topic/delete_topic, need conn to controller
-	cinfo, err := adminCli.DescribeCluster(DefaultOptions)
+	if adm.conn == nil {
+		return errors.New("Admin client is not connected to any broker")
+	} else if adm.ctrlConn != nil {
+		return
+	}
+	cinfo, err := adm.DescribeCluster(DefaultOptions)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	adminCli.ctrlBroker = cinfo.Controller.Addr()
+	adm.ctrlBroker = cinfo.Controller.Addr()
 
-	if broker == adminCli.ctrlBroker {
-		adminCli.ctrlConn = adminCli.conn
+	if adm.connBroker == adm.ctrlBroker {
+		adm.ctrlConn = adm.conn
+	} else {
+		adm.ctrlConn, err = Dial("tcp", adm.ctrlBroker)
+		if err!=nil {
+			return errors.New(fmt.Sprintf("failed to dial controller broker %s\n",adm.ctrlBroker))
+		}
+		fmt.Println("connect to controller broker: ",adm.ctrlBroker)
 	}
-	return adminCli, nil
+	return nil
 }
 
 func (adm *AdminClient) Close() {
@@ -76,23 +67,22 @@ var (
 
 
 type TopicInfo struct {
-	BrokerAddr        string
 	Topic             string
 	Partitions        int32
 	ReplicationFactor int32
 }
 
 func (adm *AdminClient) CreateTopics(topics []*TopicInfo, opt *Options) (err error) {
-	adm.Lock()
-	defer adm.Unlock()
+	fmt.Println("create topic")
 	// Create/Delete_Topics need conn to controller borker
-	if adm.ctrlConn==nil {
-		adm.ctrlConn, err = Dial("tcp", adm.ctrlBroker)
-		if err!=nil {
-			return errors.New(fmt.Sprintf("failed to dial controller broker %s\n",adm.ctrlBroker))
-		}
+	//do connectController() outside local lock, since it internally locks too in DescribeLock()
+	if err = adm.connectController(); err!=nil {
+		return err
+	} else {
 		fmt.Println("connect to controller broker: ",adm.ctrlBroker)
 	}
+	adm.Lock()
+	defer adm.Unlock()
 	var reqs []*protocol.CreateTopicRequest
 	for _, ti := range topics {
 		reqs = append(reqs, &protocol.CreateTopicRequest{
@@ -120,16 +110,15 @@ func (adm *AdminClient) CreateTopics(topics []*TopicInfo, opt *Options) (err err
 }
 
 func (adm *AdminClient) DeleteTopics(topics []string, opt *Options) (err error) {
-	adm.Lock()
-	defer adm.Unlock()
 	// Create/Delete_Topics need conn to controller borker
-	if adm.ctrlConn==nil {
-		adm.ctrlConn, err = Dial("tcp", adm.ctrlBroker)
-		if err!=nil {
-			return errors.New(fmt.Sprintf("failed to dial controller broker %s\n",adm.ctrlBroker))
-		}
+	//do connectController() outside local lock, since it internally locks too in DescribeCluster()
+	if err = adm.connectController(); err!=nil {
+		return err
+	} else {
 		fmt.Println("connect to controller broker: ",adm.ctrlBroker)
 	}
+	adm.Lock()
+	defer adm.Unlock()
 	resp, err := adm.ctrlConn.DeleteTopics(&protocol.DeleteTopicsRequest{
 		Topics: topics,
 	})
@@ -247,4 +236,42 @@ func (adm *AdminClient) DescribeCluster(opt *Options) (cinfo *ClusterInfo, err e
 		}
 	}
 	return cinfo, nil
+}
+
+type APIVersion struct {
+	APIKey     int16
+	MinVersion int16
+	MaxVersion int16
+}
+
+func (adm *AdminClient) APIVersions(nodes []string, opt *Options) (versionInfo map[string][]APIVersion, err error) {
+	if len(nodes) == 0 {
+		return nil, errors.New("Invalid broker nodes info")
+	}
+	versionInfo = make(map[string][]APIVersion)
+	adm.Lock()
+	defer adm.Unlock()
+	for _, nname := range nodes {
+		nconn, err := Dial("tcp", nname)
+		if err!=nil {
+			fmt.Printf("failed to dial broker node %s\n",nname)
+			continue
+		}
+		fmt.Println("connect to broker: ",nname)
+
+		resp, err := nconn.APIVersions(&protocol.APIVersionsRequest{
+			APIVersion: 1,
+		})
+		nconn.Close()
+
+		if err != nil {
+			fmt.Printf("failed to retrieve api version info %v\n",err)
+			continue
+		}
+		fmt.Printf("%s verinfo: %v error: %v\n",nname,resp.APIVersions,resp.ErrorCode)
+		for _, v := range resp.APIVersions {
+			versionInfo[nname] = append(versionInfo[nname], APIVersion{v.APIKey,v.MinVersion,v.MaxVersion})
+		}
+	}
+	return versionInfo, nil
 }

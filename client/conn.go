@@ -135,6 +135,20 @@ func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, erro
 	return &resp, nil
 }
 
+//APIVersions send a APIVersions request and return a response
+func (c *Conn) APIVersions(req *protocol.APIVersionsRequest) (*protocol.APIVersionsResponse, error) {
+	var resp protocol.APIVersionsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // Metadata sends a metadata request and returns the response.
 func (c *Conn) Metadata(req *protocol.MetadataRequest) (*protocol.MetadataResponse, error) {
 	var resp protocol.MetadataResponse
