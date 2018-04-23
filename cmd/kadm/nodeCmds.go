@@ -17,7 +17,7 @@ func nodeCmds(globalCfg *globalConfig) *cobra.Command {
 		Use: "apiversion [hostName ...]",
 		Short: "Retrieve nodes api version",
 		Run: func(cmd *cobra.Command, args []string) {
-			apiVersions(args)
+			apiVersions(globalCfg,args)
 		},
 	}
 	apiVersionCmd.Aliases = []string{"apiv"}
@@ -45,7 +45,7 @@ func nodeCmds(globalCfg *globalConfig) *cobra.Command {
 	return nodeCmd
 }
 
-func apiVersions(args []string) {
+func apiVersions(globalCfg *globalConfig,args []string) {
 	adm, err := client.NewAdminClient(nil,nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
@@ -54,10 +54,14 @@ func apiVersions(args []string) {
 	defer adm.Close()
 	hosts := args
 	versionInfo, err := adm.APIVersions(hosts,nil)
-	for hname, versions := range versionInfo {
-		fmt.Println(hname, "supports [APIKey, MinVersion, MaxVersion]: ")
-		for _, v := range versions {
-			fmt.Printf("\t%d\t%d\t%d\n",v.APIKey, v.MinVersion, v.MaxVersion)
+	if globalCfg.printJson {
+		printJson(versionInfo)
+	} else { //print tabular
+		for hname, versions := range versionInfo {
+			fmt.Println(hname, "supports [APIKey, MinVersion, MaxVersion]: ")
+			for _, v := range versions {
+				fmt.Printf("\t%d\t%d\t%d\n",v.APIKey, v.MinVersion, v.MaxVersion)
+			}
 		}
 	}
 }
@@ -75,10 +79,14 @@ func describeCluster(globalCfg *globalConfig) {
 		fmt.Fprintf(os.Stderr, "error with describeCluster request: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Cluster controller:\n\t%v\n",cinfo.Controller)
-	fmt.Println("Nodes:")
-	for _,n := range cinfo.Nodes {
-		fmt.Printf("\t%v\n",n)
+	if globalCfg.printJson {
+		printJson(cinfo)
+	} else {
+		fmt.Printf("Cluster controller:\n\t%v\n",cinfo.Controller)
+		fmt.Println("Nodes:")
+		for _,n := range cinfo.Nodes {
+			fmt.Printf("\t%v\n",n)
+		}
 	}
 }
 
@@ -95,11 +103,15 @@ func describeNodes(globalCfg *globalConfig, args []string) {
 		fmt.Fprintf(os.Stderr, "error with describeNodes request: %v\n", err)
 		os.Exit(1)
 	}
-	for nname,nodeTopInfo := range info {
-		fmt.Println(nname,"topic partition info:")
-		for _,nti := range nodeTopInfo {
-			fmt.Printf("\tTopic:%s\tPartition:%d\tInternal:%v\tLeader:%v\tReplicas:%v\tIsr:%v\n",nti.TopicName,nti.PartitionID,nti.IsInternal,nti.IsLeader,nti.Replicas,nti.Isr)
+	if globalCfg.printJson {
+		printJson(info)
+	} else {
+		for nname,nodeTopInfo := range info {
+			fmt.Println(nname,"topic partition info:")
+			for _,nti := range nodeTopInfo {
+				fmt.Printf("\tTopic:%s\tPartition:%d\tInternal:%v\tLeader:%v\tReplicas:%v\tIsr:%v\n",nti.TopicName,nti.PartitionID,nti.IsInternal,nti.IsLeader,nti.Replicas,nti.Isr)
+			}
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 }

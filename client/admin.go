@@ -152,16 +152,16 @@ func (adm *AdminClient) ListTopics(opt *Options) (res map[string]bool, err error
 }
 
 type TopicPartitionInfo struct {
-	ID int32
-	Leader int32
-	Replicas []int32
-	Isr []int32
+	ID int32           `json:"id"`
+	Leader int32       `json:"leader"`
+	Replicas []int32   `json:"replicas"`
+	Isr []int32        `json:"isr"`
 }
 
 type TopicDescription struct {
-	Name string
-	Internal bool
-	Partitions []*TopicPartitionInfo
+	Name string                        `json:"name"`
+	Internal bool                      `json:"internal"`
+	Partitions []*TopicPartitionInfo   `json:"partitions"`
 }
 
 func (adm *AdminClient) DescribeTopics(topics []string, opt *Options) (topinfo []*TopicDescription, err error) {
@@ -196,9 +196,9 @@ func (adm *AdminClient) DescribeTopics(topics []string, opt *Options) (topinfo [
 }
 
 type Node struct {
-	ID int32
-	Host   string
-	Port   int32
+	ID int32        `json:"id"`
+	Host   string   `json:"host"`
+	Port   int32    `json:"port"`
 	// unsupported: Rack *string
 }
 func (n *Node) Addr() string {
@@ -209,8 +209,8 @@ func (n *Node) String() string {
 }
 
 type ClusterInfo struct {
-	Nodes []*Node
-	Controller *Node
+	Controller *Node   `json:"controller"`
+	Nodes []*Node      `json:"nodes"`
 }
 func (ci *ClusterInfo) String() string {
 	return fmt.Sprintf("Controller: %v\nNodes: %v\n",ci.Controller,ci.Nodes)
@@ -239,9 +239,9 @@ func (adm *AdminClient) DescribeCluster(opt *Options) (cinfo *ClusterInfo, err e
 }
 
 type APIVersion struct {
-	APIKey     int16
-	MinVersion int16
-	MaxVersion int16
+	APIKey     int16    `json:"key"`
+	MinVersion int16    `json:"minVersion"`
+	MaxVersion int16    `json:"maxVersion"`
 }
 
 func (adm *AdminClient) APIVersions(nodes []string, opt *Options) (versionInfo map[string][]APIVersion, err error) {

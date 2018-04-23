@@ -56,12 +56,12 @@ func (cli *Client) Close() {
 }
 
 type NodeTopicInfo struct {
-	TopicName string
-	PartitionID int32
-	IsInternal bool
-	IsLeader bool
-	Replicas []int32
-	Isr []int32
+	TopicName string    `json:"topicName"`
+	PartitionID int32   `json:"partitionId"`
+	IsInternal bool     `json:"internal"`
+	IsLeader bool       `json:"leader"`
+	Replicas []int32    `json:"replicas"`
+	Isr []int32         `json:"isr"`
 }
 
 func (cli *Client) DescribeNodes(nodes []string, opt *Options) (info map[string][]*NodeTopicInfo, err error) {

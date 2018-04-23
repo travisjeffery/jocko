@@ -110,8 +110,12 @@ func listTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []strin
 		fmt.Fprintf(os.Stderr, "error with listTopic request: %v\n", err)
 		os.Exit(1)
 	}
-	for k,_ := range topics {
-		fmt.Println(k)
+	if globalCfg.printJson {
+		printJson(topics)
+	} else {
+		for k,_ := range topics {
+			fmt.Println(k)
+		}
 	}
 }
 
@@ -128,11 +132,15 @@ func describeTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []s
 		fmt.Fprintf(os.Stderr, "error with deleteTopic request: %v\n", err)
 		os.Exit(1)
 	}
-	for _, ti := range topinfo {
-		fmt.Printf("Topic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:\n",ti.Name,len(ti.Partitions),len(ti.Partitions[0].Replicas))
-		for i, p := range ti.Partitions {
-			fmt.Printf("\tTopic:%s\tPartition:%d\tLeader:%d\tReplicas:%v\tIsr:%v\n",ti.Name,i,p.Leader,p.Replicas,p.Isr);
+	if globalCfg.printJson {
+		printJson(topinfo)
+	} else {
+		for _, ti := range topinfo {
+			fmt.Printf("Topic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:\n",ti.Name,len(ti.Partitions),len(ti.Partitions[0].Replicas))
+			for i, p := range ti.Partitions {
+				fmt.Printf("\tTopic:%s\tPartition:%d\tLeader:%d\tReplicas:%v\tIsr:%v\n",ti.Name,i,p.Leader,p.Replicas,p.Isr);
+			}
 		}
+		fmt.Printf("described topics: %v\n", args)
 	}
-	fmt.Printf("described topics: %v\n", args)
 }
