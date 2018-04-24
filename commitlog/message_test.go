@@ -1,10 +1,9 @@
-package commitlog_test
+package commitlog
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/travisjeffery/jocko/commitlog"
 )
 
 var (
@@ -30,13 +29,13 @@ var (
 func TestMessage(t *testing.T) {
 	req := require.New(t)
 
-	m := commitlog.Message(emptyMessage)
+	m := Message(emptyMessage)
 	req.Equal(int8(0), m.MagicByte())
 	req.Nil(m.Key())
 	req.Nil(m.Value())
 	req.Equal(int32(14), m.Size())
 
-	m = commitlog.Message(emptyV1Message)
+	m = Message(emptyV1Message)
 	req.Equal(int8(1), m.MagicByte())
 	req.Nil(m.Key())
 	req.Nil(m.Value())
