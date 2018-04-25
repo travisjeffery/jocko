@@ -167,7 +167,7 @@ func (cli *Client) ListTopics(opt *Options) (res map[string]bool, err error) {
 	for _, tm := range resp.TopicMetadata {
 		res[tm.Topic]=tm.IsInternal
 	}
-	cli.clusterState.updateNodesTopics(resp)
+	cli.clusterState.updateNodes(resp)
 	return
 }
 
@@ -192,7 +192,7 @@ func (cli *Client) DescribeTopics(topics []string, opt *Options) (topinfo []*Top
 	if err != nil {
 		return nil, err
 	}
-	cli.clusterState.updateNodesTopics(resp)
+	cli.clusterState.updateNodes(resp)
 	for _, tm := range resp.TopicMetadata {
 		//broker return non-exist topic without partition data with no error
 		//skip it
@@ -248,7 +248,7 @@ func (cli *Client) DescribeCluster(opt *Options) (cinfo *ClusterInfo, err error)
 	if err != nil {
 		return nil, err
 	}
-	cli.clusterState.updateNodesTopics(resp)
+	cli.clusterState.updateNodes(resp)
 	cinfo = &ClusterInfo{}
 	for _, b := range resp.Brokers {
 		n := &Node{b.NodeID,b.Host,b.Port}
@@ -379,7 +379,7 @@ func (cli *Client) DescribeNodes(nodes []string, opt *Options) (info map[string]
 	if err != nil {
 		return nil, err
 	}
-	cli.clusterState.updateNodesTopics(resp)
+	cli.clusterState.updateNodes(resp)
 	info = make(map[string][]*NodeTopicInfo)
 	for _, nname := range nodes {
 		nid := int32(-1)
