@@ -16,12 +16,6 @@ build: deps
 build-kadm: 
 	@go build -o cmd/kadm/kadm cmd/kadm/*.go
 
-build-static:
-	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o $(BUILD_PATH) cmd/jocko/*.go
-
-build-static-kadm:
-	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o cmd/kadm/kadm cmd/kadm/*.go
-
 release:
 	@which goreleaser 2>/dev/null || go get -u github.com/goreleaser/goreleaser
 	@goreleaser
