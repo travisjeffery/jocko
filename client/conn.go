@@ -163,6 +163,34 @@ func (c *Conn) Metadata(req *protocol.MetadataRequest) (*protocol.MetadataRespon
 	return &resp, nil
 }
 
+// ListGroups sends a list group request and returns the response.
+func (c *Conn) ListGroups(req *protocol.ListGroupsRequest) (*protocol.ListGroupsResponse, error) {
+	var resp protocol.ListGroupsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DescribeGroups sends a describe group request and returns the response.
+func (c *Conn) DescribeGroups(req *protocol.DescribeGroupsRequest) (*protocol.DescribeGroupsResponse, error) {
+	var resp protocol.DescribeGroupsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // AlterConfigs sends an alter configs request and returns the response.
 func (c *Conn) AlterConfigs(req *protocol.AlterConfigsRequest) (*protocol.AlterConfigsResponse, error) {
 	var resp protocol.AlterConfigsResponse

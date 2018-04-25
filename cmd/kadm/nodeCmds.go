@@ -46,7 +46,7 @@ func nodeCmds(globalCfg *globalConfig) *cobra.Command {
 }
 
 func apiVersions(globalCfg *globalConfig,args []string) {
-	adm, err := client.NewAdminClient(nil,nil)
+	adm, err := client.NewAdminClient(nil,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)
@@ -67,7 +67,8 @@ func apiVersions(globalCfg *globalConfig,args []string) {
 }
 
 func describeCluster(globalCfg *globalConfig) {
-	adm, err := client.NewAdminClient(globalCfg.brokers,nil)
+	fmt.Println("call describeCluster...")
+	adm, err := client.NewAdminClient(globalCfg.brokers,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)
@@ -91,7 +92,7 @@ func describeCluster(globalCfg *globalConfig) {
 }
 
 func describeNodes(globalCfg *globalConfig, args []string) {
-	cli, err := client.NewClient(globalCfg.brokers,nil)
+	cli, err := client.NewClient(globalCfg.brokers,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create Client: %v\n", err)
 		os.Exit(1)

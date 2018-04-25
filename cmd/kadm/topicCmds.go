@@ -61,7 +61,7 @@ func topicCmds(globalCfg *globalConfig) *cobra.Command {
 }
 
 func createTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []string) {
-	adm, err := client.NewAdminClient(globalCfg.brokers, nil)
+	adm, err := client.NewAdminClient(globalCfg.brokers, nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)
@@ -82,7 +82,7 @@ func createTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []str
 }
 
 func deleteTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []string) {
-	adm, err := client.NewAdminClient(globalCfg.brokers,nil)
+	adm, err := client.NewAdminClient(globalCfg.brokers,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)
@@ -98,7 +98,7 @@ func deleteTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []str
 }
 
 func listTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []string) {
-	adm, err := client.NewAdminClient(globalCfg.brokers,nil)
+	adm, err := client.NewAdminClient(globalCfg.brokers,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)
@@ -120,7 +120,7 @@ func listTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []strin
 }
 
 func describeTopic(globalCfg *globalConfig, topicCfg *client.TopicInfo, args []string) {
-	adm, err := client.NewAdminClient(globalCfg.brokers,nil)
+	adm, err := client.NewAdminClient(globalCfg.brokers,nil,globalCfg.state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create AdminClient: %v\n", err)
 		os.Exit(1)

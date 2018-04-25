@@ -119,6 +119,26 @@ func TestConn(t *testing.T) {
 			name: "alter configs",
 			fn:   testConnAlterConfigs,
 		},
+		{
+			name: "metadata",
+			fn:   testConnMetadata,
+		},
+		{
+			name: "api versions",
+			fn:   testConnAPIVersions,
+		},
+		{
+			name: "api versions",
+			fn:   testConnAPIVersions,
+		},
+		{
+			name: "list groups",
+			fn:   testConnListGroups,
+		},
+		{
+			name: "describe groups",
+			fn:   testConnDescribeGroups,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -179,6 +199,41 @@ func testConnFetch(t *testing.T, conn *client.Conn) {
 				FetchOffset: 0,
 			}},
 		}},
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnMetadata(t *testing.T, conn *client.Conn) {
+	if _, err := conn.Metadata(&protocol.MetadataRequest{
+		APIVersion: 1,
+		Topics: []string{},
+		AllowAutoTopicCreation: true,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnAPIVersions(t *testing.T, conn *client.Conn) {
+	if _, err := conn.APIVersions(&protocol.APIVersionsRequest{
+		APIVersion: 0,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnListGroups(t *testing.T, conn *client.Conn) {
+	if _, err := conn.ListGroups(&protocol.ListGroupsRequest{
+		APIVersion: 0,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnDescribeGroups(t *testing.T, conn *client.Conn) {
+	if _, err := conn.DescribeGroups(&protocol.DescribeGroupsRequest{
+		APIVersion: 0,
+		GroupIDs: []string{},
 	}); err != nil {
 		t.Error(err)
 	}
