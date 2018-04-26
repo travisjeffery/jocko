@@ -917,28 +917,16 @@ func (b *Broker) handleOffsetFetch(ctx context.Context, header *protocol.Request
 
 	resp := new(protocol.OffsetFetchResponse)
 	resp.APIVersion = req.Version()
+	resp.Responses = make([]protocol.OffsetFetchTopicResponse, len(req.Topics))
+
 	// state := b.fsm.State()
 
-	// group := protocol.Group{}
 	// _, g, err := state.GetGroup(req.GroupID)
+
+	// // If group doesn't exist then create it?
 	// if err != nil {
-	// 	group.ErrorCode = protocol.ErrUnknown.Code()
-	// 	group.GroupID = id
-	// 	resp.Groups = append(resp.Groups, group)
-	// 	return resp
-	// }
-	// group.GroupID = id
-	// group.State = "Stable"
-	// group.ProtocolType = "consumer"
-	// group.Protocol = "consumer"
-	// for id, member := range g.Members {
-	// 	group.GroupMembers[id] = &protocol.GroupMember{
-	// 		ClientID: member.ID,
-	// 		// TODO: ???
-	// 		ClientHost:            "",
-	// 		GroupMemberMetadata:   member.Metadata,
-	// 		GroupMemberAssignment: member.Assignment,
-	// 	}
+	// 	// TODO: handle err
+	// 	panic(err)
 	// }
 
 	return resp

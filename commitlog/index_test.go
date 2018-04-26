@@ -11,7 +11,7 @@ import (
 )
 
 func TestIndex(t *testing.T) {
-	path := filepath.Join(os.TempDir(), fmt.Sprintf(indexNameFormat, rand.Int63()))
+	path := filepath.Join(os.TempDir(), fmt.Sprintf(fileFormat, rand.Int63(), indexSuffix))
 	totalEntries := rand.Intn(10) + 10
 	//case for roundDown
 	bytes := int64(totalEntries*entryWidth + 1)
@@ -72,7 +72,7 @@ func TestIndex(t *testing.T) {
 }
 
 func TestIndexScanner(t *testing.T) {
-	path := filepath.Join(os.TempDir(), fmt.Sprintf(indexNameFormat, rand.Int63()))
+	path := filepath.Join(os.TempDir(), fmt.Sprintf(fileFormat, rand.Int63(), indexSuffix))
 	totalEntries := rand.Intn(10) + 10
 	//case for roundDown
 	bytes := int64(totalEntries*entryWidth + 1)

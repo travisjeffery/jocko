@@ -3,16 +3,18 @@ package protocol
 import "time"
 
 type Message struct {
-	Timestamp time.Time
-	Key       []byte
-	Value     []byte
-	MagicByte int8
+	Crc        int32
+	MagicByte  int8
+	Attributes int8
+	Timestamp  time.Time
+	Key        []byte
+	Value      []byte
 }
 
 func (m *Message) Encode(e PacketEncoder) error {
 	e.Push(&CRCField{})
 	e.PutInt8(m.MagicByte)
-	e.PutInt8(0) // attributes
+	e.PutInt8(m.Attributes)
 	if m.MagicByte > 0 {
 		e.PutInt64(m.Timestamp.UnixNano() / int64(time.Millisecond))
 	}
@@ -34,7 +36,7 @@ func (m *Message) Decode(d PacketDecoder) error {
 	if m.MagicByte, err = d.Int8(); err != nil {
 		return err
 	}
-	if _, err := d.Int8(); err != nil {
+	if m.Attributes, err = d.Int8(); err != nil {
 		return err
 	}
 	if m.MagicByte > 0 {
