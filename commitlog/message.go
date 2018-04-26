@@ -43,7 +43,7 @@ func (m Message) Value() []byte {
 
 func (m Message) Size() int32 {
 	var size int32 = 4 + 1 + 1
-	if m.MagicByte() == 1 {
+	if m.MagicByte() > 0 {
 		size += 8
 	}
 	size += 4
@@ -71,13 +71,9 @@ func (m Message) keyOffsets() (start, end, size int32) {
 }
 
 func (m Message) valueOffsets() (start, end, size int32) {
-	keyStart, keyEnd, keySize := m.keyOffsets()
-	if keySize == -1 {
-		start = keyStart + 4
-	} else {
-		start = keyEnd + 1
-	}
+	_, keyEnd, _ := m.keyOffsets()
+	start = keyEnd
 	size = int32(Encoding.Uint32(m[start:]))
-	end = start + size
+	end = start + 4 + size
 	return
 }
