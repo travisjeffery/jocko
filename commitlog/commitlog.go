@@ -33,7 +33,9 @@ type CommitLog struct {
 }
 
 type Options struct {
-	Path            string
+	Path string
+	// MaxSegmentBytes is the max number of bytes a segment can contain, once the limit is hit a
+	// new segment will be split off.
 	MaxSegmentBytes int64
 	MaxLogBytes     int64
 }
