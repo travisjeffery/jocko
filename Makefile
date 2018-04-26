@@ -27,7 +27,7 @@ generate:
 	@go generate
 
 test: build
-	./go_test.sh
+	@go test -v ./...
 
 test-race:
 	@go test -v -race -p=1 ./...
