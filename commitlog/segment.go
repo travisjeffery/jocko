@@ -13,8 +13,10 @@ import (
 )
 
 const (
-	logNameFormat   = "%020d.log"
-	indexNameFormat = "%020d.index"
+	fileFormat    = "%020d%s"
+	logSuffix     = ".log"
+	cleanedSuffix = ".cleaned"
+	indexSuffix   = ".index"
 )
 
 type Segment struct {
@@ -26,30 +28,32 @@ type Segment struct {
 	NextOffset int64
 	Position   int64
 	maxBytes   int64
+	path       string
+	suffix     string
 
 	sync.Mutex
 }
 
-func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error) {
-	logPath := filepath.Join(path, fmt.Sprintf(logNameFormat, baseOffset))
-	log, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, errors.Wrap(err, "open file failed")
+func NewSegment(path string, baseOffset, maxBytes int64, args ...interface{}) (*Segment, error) {
+	var suffix string
+	if len(args) != 0 {
+		suffix = args[0].(string)
 	}
-
 	s := &Segment{
-		log:        log,
-		writer:     log,
-		reader:     log,
 		maxBytes:   maxBytes,
 		BaseOffset: baseOffset,
 		NextOffset: baseOffset,
+		path:       path,
+		suffix:     suffix,
 	}
-	err = s.SetupIndex(path)
-	if err == io.EOF {
-		return s, nil
+	log, err := os.OpenFile(s.logPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, errors.Wrap(err, "open file failed")
 	}
-
+	s.log = log
+	s.writer = log
+	s.reader = log
+	err = s.SetupIndex()
 	return s, err
 }
 
@@ -58,15 +62,18 @@ func NewSegment(path string, baseOffset int64, maxBytes int64) (*Segment, error)
 // - Sanity check of the loaded Index
 // - Truncates the Index (clears it)
 // - Reads the log file from the beginning and re-initializes the Index
-func (s *Segment) SetupIndex(path string) (err error) {
-	indexPath := filepath.Join(path, fmt.Sprintf(indexNameFormat, s.BaseOffset))
+func (s *Segment) SetupIndex() (err error) {
 	s.Index, err = NewIndex(options{
-		path:       indexPath,
+		path:       s.indexPath(),
 		baseOffset: s.BaseOffset,
 	})
 	if err != nil {
 		return err
 	}
+	return s.BuildIndex()
+}
+
+func (s *Segment) BuildIndex() (err error) {
 	if err = s.Index.SanityCheck(); err != nil {
 		return err
 	}
@@ -80,44 +87,55 @@ func (s *Segment) SetupIndex(path string) (err error) {
 	}
 
 	b := new(bytes.Buffer)
+
+	nextOffset := s.BaseOffset
+	position := int64(0)
+
+loop:
 	for {
 		// get offset and size
-		_, err := io.CopyN(b, s.log, 8)
+		_, err = io.CopyN(b, s.log, 8)
 		if err != nil {
-			return err
+			break loop
 		}
-		s.NextOffset = int64(Encoding.Uint64(b.Bytes()[0:8]))
 
 		_, err = io.CopyN(b, s.log, 4)
 		if err != nil {
-			return err
+			break loop
 		}
 		size := int64(Encoding.Uint32(b.Bytes()[8:12]))
 
 		_, err = io.CopyN(b, s.log, size)
 		if err != nil {
-			return err
+			break loop
 		}
 
 		// Reset the buffer to not get an overflow
 		b.Truncate(0)
 
-		err = s.Index.WriteEntry(Entry{
-			Offset:   s.NextOffset,
-			Position: s.Position,
-		})
+		entry := Entry{
+			Offset:   nextOffset,
+			Position: position,
+		}
+		err = s.Index.WriteEntry(entry)
 		if err != nil {
-			return err
+			break loop
 		}
 
-		s.Position += size + msgSetHeaderLen
-		s.NextOffset++
+		position += size + msgSetHeaderLen
+		nextOffset++
 
 		_, err = s.log.Seek(size, 1)
 		if err != nil {
-			return err
+			break loop
 		}
 	}
+	if err == io.EOF {
+		s.NextOffset = nextOffset
+		s.Position = position
+		return nil
+	}
+	return err
 }
 
 func (s *Segment) IsFull() bool {
@@ -159,6 +177,36 @@ func (s *Segment) Close() error {
 		return err
 	}
 	return s.Index.Close()
+}
+
+// Cleaner creates a cleaner segment for this segment.
+func (s *Segment) Cleaner() (*Segment, error) {
+	return NewSegment(s.path, s.BaseOffset, s.maxBytes, cleanedSuffix)
+}
+
+// Replace replaces the given segment with the callee.
+func (s *Segment) Replace(old *Segment) (err error) {
+	if err = old.Close(); err != nil {
+		return err
+	}
+	if err = s.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(s.logPath(), old.logPath()); err != nil {
+		return err
+	}
+	if err = os.Rename(s.indexPath(), old.indexPath()); err != nil {
+		return err
+	}
+	s.suffix = ""
+	log, err := os.OpenFile(s.logPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return errors.Wrap(err, "open file failed")
+	}
+	s.log = log
+	s.writer = log
+	s.reader = log
+	return s.SetupIndex()
 }
 
 func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
@@ -218,4 +266,12 @@ func (s *SegmentScanner) Scan() (ms MessageSet, err error) {
 	}
 	msgSet := append(header, payload...)
 	return msgSet, nil
+}
+
+func (s *Segment) logPath() string {
+	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.BaseOffset, logSuffix+s.suffix))
+}
+
+func (s *Segment) indexPath() string {
+	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.BaseOffset, indexSuffix+s.suffix))
 }

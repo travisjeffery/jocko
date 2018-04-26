@@ -23,8 +23,7 @@ var (
 		commitlog.NewMessageSet(0, msgs...),
 		commitlog.NewMessageSet(1, msgs...),
 	}
-	maxBytes = msgSets[0].Size()
-	path     = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
+	path = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
 )
 
 func TestNewCommitLog(t *testing.T) {
