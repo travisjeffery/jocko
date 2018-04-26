@@ -1,4 +1,4 @@
-package jocko
+package client_test
 
 import (
 	"context"
@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/travisjeffery/jocko/client"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/protocol"
+	"github.com/travisjeffery/jocko/jocko"
 )
 
 const (
@@ -16,8 +18,8 @@ const (
 )
 
 type connPipe struct {
-	rconn *Conn
-	wconn *Conn
+	rconn *client.Conn
+	wconn *client.Conn
 }
 
 type timeout struct{}
@@ -37,7 +39,7 @@ func (c *connPipe) Close() error {
 
 func (c *connPipe) Read(b []byte) (int, error) {
 	time.Sleep(time.Millisecond)
-	if t := c.rconn.readDeadline(); !t.IsZero() && t.Sub(time.Now()) <= (10*time.Millisecond) {
+	if t := c.rconn.ReadDeadline(); !t.IsZero() && t.Sub(time.Now()) <= (10*time.Millisecond) {
 		return 0, &timeout{}
 	}
 	n, err := c.rconn.Read(b)
@@ -50,7 +52,7 @@ func (c *connPipe) Read(b []byte) (int, error) {
 
 func (c *connPipe) Write(b []byte) (int, error) {
 	time.Sleep(time.Millisecond)
-	if t := c.wconn.writeDeadline(); !t.IsZero() && t.Sub(time.Now()) <= (10*time.Millisecond) {
+	if t := c.wconn.WriteDeadline(); !t.IsZero() && t.Sub(time.Now()) <= (10*time.Millisecond) {
 		return 0, &timeout{}
 	}
 	return c.wconn.Write(b)
@@ -81,7 +83,7 @@ func (c *connPipe) SetWriteDeadline(t time.Time) error {
 }
 
 func TestConn(t *testing.T) {
-	s, cancel := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s, cancel := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
@@ -95,7 +97,7 @@ func TestConn(t *testing.T) {
 
 	tests := []struct {
 		name string
-		fn   func(*testing.T, *Conn)
+		fn   func(*testing.T, *client.Conn)
 	}{
 		{
 			name: "close immediately",
@@ -117,12 +119,32 @@ func TestConn(t *testing.T) {
 			name: "alter configs",
 			fn:   testConnAlterConfigs,
 		},
+		{
+			name: "metadata",
+			fn:   testConnMetadata,
+		},
+		{
+			name: "api versions",
+			fn:   testConnAPIVersions,
+		},
+		{
+			name: "api versions",
+			fn:   testConnAPIVersions,
+		},
+		{
+			name: "list groups",
+			fn:   testConnListGroups,
+		},
+		{
+			name: "describe groups",
+			fn:   testConnDescribeGroups,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			conn, err := (&Dialer{
+			conn, err := (&client.Dialer{
 				Resolver: &net.Resolver{},
 			}).DialContext(ctx, tcp, s.Addr().String())
 			if err != nil {
@@ -134,13 +156,13 @@ func TestConn(t *testing.T) {
 	}
 }
 
-func testConnClose(t *testing.T, conn *Conn) {
+func testConnClose(t *testing.T, conn *client.Conn) {
 	if err := conn.Close(); err != nil {
 		t.Error(err)
 	}
 }
 
-func testConnCreateTopic(t *testing.T, conn *Conn) {
+func testConnCreateTopic(t *testing.T, conn *client.Conn) {
 	if _, err := conn.CreateTopics(&protocol.CreateTopicRequests{
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             "test_topic",
@@ -152,7 +174,7 @@ func testConnCreateTopic(t *testing.T, conn *Conn) {
 	}
 }
 
-func testConnLeaderAndISR(t *testing.T, conn *Conn) {
+func testConnLeaderAndISR(t *testing.T, conn *client.Conn) {
 	if _, err := conn.LeaderAndISR(&protocol.LeaderAndISRRequest{
 		ControllerID: 1,
 		PartitionStates: []*protocol.PartitionState{{
@@ -167,7 +189,7 @@ func testConnLeaderAndISR(t *testing.T, conn *Conn) {
 	}
 }
 
-func testConnFetch(t *testing.T, conn *Conn) {
+func testConnFetch(t *testing.T, conn *client.Conn) {
 	if _, err := conn.Fetch(&protocol.FetchRequest{
 		ReplicaID: 1,
 		Topics: []*protocol.FetchTopic{{
@@ -182,7 +204,42 @@ func testConnFetch(t *testing.T, conn *Conn) {
 	}
 }
 
-func testConnAlterConfigs(t *testing.T, conn *Conn) {
+func testConnMetadata(t *testing.T, conn *client.Conn) {
+	if _, err := conn.Metadata(&protocol.MetadataRequest{
+		APIVersion: 1,
+		Topics: []string{},
+		AllowAutoTopicCreation: true,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnAPIVersions(t *testing.T, conn *client.Conn) {
+	if _, err := conn.APIVersions(&protocol.APIVersionsRequest{
+		APIVersion: 0,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnListGroups(t *testing.T, conn *client.Conn) {
+	if _, err := conn.ListGroups(&protocol.ListGroupsRequest{
+		APIVersion: 0,
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnDescribeGroups(t *testing.T, conn *client.Conn) {
+	if _, err := conn.DescribeGroups(&protocol.DescribeGroupsRequest{
+		APIVersion: 0,
+		GroupIDs: []string{},
+	}); err != nil {
+		t.Error(err)
+	}
+}
+
+func testConnAlterConfigs(t *testing.T, conn *client.Conn) {
 	t.Skip()
 
 	val := "max"
@@ -202,7 +259,7 @@ func testConnAlterConfigs(t *testing.T, conn *Conn) {
 	}
 }
 
-func testConnDescribeConfigs(t *testing.T, conn *Conn) {
+func testConnDescribeConfigs(t *testing.T, conn *client.Conn) {
 	t.Skip()
 
 	if _, err := conn.DescribeConfigs(&protocol.DescribeConfigsRequest{

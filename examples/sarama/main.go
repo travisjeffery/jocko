@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/travisjeffery/jocko/client"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/log"
@@ -129,7 +130,7 @@ func setup(logger log.Logger) (*jocko.Server, func()) {
 		os.Exit(1)
 	}
 
-	conn, err := jocko.Dial("tcp", c.Addr().String())
+	conn, err := client.Dial("tcp", c.Addr().String())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error connecting to broker: %v\n", err)
 		os.Exit(1)

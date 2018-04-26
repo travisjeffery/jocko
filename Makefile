@@ -11,7 +11,10 @@ vet:
 	@go list ./... | grep -v vendor | xargs go vet
 
 build: deps
-	@go build -o $(BUILD_PATH) cmd/jocko/main.go
+	@go build -o $(BUILD_PATH) cmd/jocko/*.go
+
+build-kadm: 
+	@go build -o cmd/kadm/kadm cmd/kadm/*.go
 
 release:
 	@which goreleaser 2>/dev/null || go get -u github.com/goreleaser/goreleaser

@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/travisjeffery/jocko/commitlog"
+	jockocli "github.com/travisjeffery/jocko/client"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/fsm"
 	"github.com/travisjeffery/jocko/jocko/metadata"
@@ -1030,7 +1031,7 @@ func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}
 		} else {
-			conn, err := Dial("tcp", broker.BrokerAddr)
+			conn, err := jockocli.Dial("tcp", broker.BrokerAddr)
 			if err != nil {
 				return protocol.ErrUnknown.WithErr(err)
 			}
@@ -1183,7 +1184,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if broker == nil {
 		return protocol.ErrBrokerNotAvailable
 	}
-	conn, err := NewDialer(fmt.Sprintf("jocko-replicator-%d", b.config.ID)).Dial("tcp", broker.BrokerAddr)
+	conn, err := jockocli.NewDialer(fmt.Sprintf("jocko-replicator-%d", b.config.ID)).Dial("tcp", broker.BrokerAddr)
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}

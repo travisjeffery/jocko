@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/consul/testutil/retry"
 	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
+	"github.com/travisjeffery/jocko/client"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/protocol"
@@ -376,7 +377,7 @@ func BenchmarkServer(b *testing.B) {
 }
 
 func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
-	d := &jocko.Dialer{
+	d := &client.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
 		ClientID:  t.Name(),

@@ -1,4 +1,4 @@
-package jocko
+package client
 
 import (
 	"context"
