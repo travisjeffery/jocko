@@ -212,6 +212,7 @@ func (l *CommitLog) split() error {
 	segments := append(l.segments, segment)
 	segments, err = l.cleaner.Clean(segments)
 	if err != nil {
+		l.mu.Unlock()
 		return err
 	}
 	l.segments = segments
