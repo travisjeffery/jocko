@@ -40,6 +40,7 @@ type PushDecoder interface {
 	SaveOffset(in int)
 	ReserveSize() int
 	Fill(curOffset int, buf []byte) error
+	Check(curOffset int, buf []byte) error
 }
 
 func Decode(b []byte, in VersionedDecoder, version int16) error {
@@ -299,7 +300,7 @@ func (d *ByteDecoder) Push(pd PushDecoder) error {
 func (d *ByteDecoder) Pop() error {
 	pd := d.stack[len(d.stack)-1]
 	d.stack = d.stack[:len(d.stack)-1]
-	return pd.Fill(d.off, d.b)
+	return pd.Check(d.off, d.b)
 }
 
 func (d *ByteDecoder) remaining() int {
