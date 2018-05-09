@@ -137,7 +137,7 @@ func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
 			r.Fatal("no leader")
 		}
 	})
-	var followers []*Server
+	followers := make([]*Server, 0, len(tmp.followers))
 	for f := range tmp.followers {
 		followers = append(followers, f)
 	}

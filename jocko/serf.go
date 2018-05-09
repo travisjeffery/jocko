@@ -115,7 +115,7 @@ func (b *Broker) maybeBootstrap() {
 	}
 
 	members := b.LANMembers()
-	var brokers []metadata.Broker
+	brokers := make([]metadata.Broker, 0, len(members))
 	for _, member := range members {
 		meta, ok := metadata.IsBroker(member)
 		if !ok {
@@ -138,7 +138,7 @@ func (b *Broker) maybeBootstrap() {
 	}
 
 	var configuration raft.Configuration
-	var addrs []string
+	addrs := make([]string, len(brokers), 0)
 	for _, meta := range brokers {
 		addr := meta.RaftAddr
 		addrs = append(addrs, addr)

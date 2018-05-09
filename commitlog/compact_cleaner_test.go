@@ -105,7 +105,7 @@ func TestCompactCleaner(t *testing.T) {
 }
 
 func newMessageSet(offset uint64, pmsgs ...*protocol.Message) commitlog.MessageSet {
-	var cmsgs []commitlog.Message
+	cmsgs := make([]commitlog.Message, 0, len(pmsgs))
 	for _, msg := range pmsgs {
 		b, err := protocol.Encode(msg)
 		if err != nil {
