@@ -209,6 +209,7 @@ func (s *Segment) Replace(old *Segment) (err error) {
 	return s.SetupIndex()
 }
 
+// findEntry returns the nearest entry whose offset is greater than or equal to the given offset.
 func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	s.Lock()
 	defer s.Unlock()
@@ -224,6 +225,7 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	return e, nil
 }
 
+// Delete closes the segment and then deletes its log and index files.
 func (s *Segment) Delete() error {
 	if err := s.Close(); err != nil {
 		return err
@@ -248,6 +250,8 @@ func NewSegmentScanner(segment *Segment) *SegmentScanner {
 	return &SegmentScanner{s: segment, is: NewIndexScanner(segment.Index)}
 }
 
+// Scan should be called repeatedly to iterate over the messages in the segment, it will return
+// io.EOF when there are no more messages.
 func (s *SegmentScanner) Scan() (ms MessageSet, err error) {
 	entry, err := s.is.Scan()
 	if err != nil {
