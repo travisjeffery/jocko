@@ -23,6 +23,8 @@ func (c *DeleteCleaner) Clean(segments []*Segment) ([]*Segment, error) {
 	if len(segments) == 0 || c.Retention.Bytes == -1 {
 		return segments, nil
 	}
+	// we start at the most recent segment and work our way backwards until we meet the
+	// retention size.
 	cleanedSegments := []*Segment{segments[len(segments)-1]}
 	totalBytes := cleanedSegments[0].Position
 	if len(segments) > 1 {
@@ -36,7 +38,7 @@ func (c *DeleteCleaner) Clean(segments []*Segment) ([]*Segment, error) {
 			cleanedSegments = append([]*Segment{s}, cleanedSegments...)
 		}
 		if i > -1 {
-			for ; i != 0; i-- {
+			for ; i > -1; i-- {
 				s := segments[i]
 				if err := s.Delete(); err != nil {
 					return nil, err
