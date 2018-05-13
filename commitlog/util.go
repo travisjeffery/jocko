@@ -1,6 +1,8 @@
 package commitlog
 
-import "sort"
+import (
+	"sort"
+)
 
 func findSegment(segments []*Segment, offset int64) (*Segment, int) {
 	n := len(segments)

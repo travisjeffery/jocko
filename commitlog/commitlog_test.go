@@ -145,9 +145,12 @@ func setup(t require.TestingT) *commitlog.CommitLog {
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
 	}
+	return setupWithOptions(t, opts)
+}
+
+func setupWithOptions(t require.TestingT, opts commitlog.Options) *commitlog.CommitLog {
 	l, err := commitlog.New(opts)
 	require.NoError(t, err)
-
 	return l
 }
 
