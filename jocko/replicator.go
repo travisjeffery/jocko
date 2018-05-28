@@ -18,9 +18,7 @@ type Replicator struct {
 	config              ReplicatorConfig
 	logger              log.Logger
 	replica             *Replica
-	minBytes            int32
 	fetchSize           int32
-	maxWaitTime         int32
 	highwaterMarkOffset int64
 	offset              int64
 	msgs                chan []byte
@@ -29,12 +27,16 @@ type Replicator struct {
 }
 
 type ReplicatorConfig struct {
-	MinBytes    int32
+	MinBytes int32
+	// todo: make this a time.Duration
 	MaxWaitTime int32
 }
 
 // NewReplicator returns a new replicator instance.
 func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, logger log.Logger) *Replicator {
+	if config.MinBytes == 0 {
+		config.MinBytes = 1
+	}
 	r := &Replicator{
 		config:  config,
 		logger:  logger,
@@ -60,8 +62,8 @@ func (r *Replicator) fetchMessages() {
 		default:
 			fetchRequest := &protocol.FetchRequest{
 				ReplicaID:   r.replica.BrokerID,
-				MaxWaitTime: r.maxWaitTime,
-				MinBytes:    r.minBytes,
+				MaxWaitTime: r.config.MaxWaitTime,
+				MinBytes:    r.config.MinBytes,
 				Topics: []*protocol.FetchTopic{{
 					Topic: r.replica.Partition.Topic,
 					Partitions: []*protocol.FetchPartition{{
