@@ -26,7 +26,7 @@ build-docker:
 generate:
 	@go generate
 
-test: deps
+test:
 	@go test -v ./...
 
 test-race:

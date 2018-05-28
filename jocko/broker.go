@@ -1284,6 +1284,7 @@ func (b *Broker) offsetsTopic(ctx context.Context) (topic *structs.Topic, err er
 	topic = &structs.Topic{
 		Topic:      "__consumer_offsets",
 		Partitions: make(map[int32][]int32),
+		Config:     structs.NewTopicConfig(),
 	}
 	for _, p := range partitions {
 		topic.Partitions[p.Partition] = p.AR
