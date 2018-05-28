@@ -262,7 +262,7 @@ func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.Request
 			}
 			continue
 		}
-		err := b.createTopic(ctx, req.Topic, req.NumPartitions, req.ReplicationFactor)
+		err := b.createTopic(ctx, req)
 		resp.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 			Topic:     req.Topic,
 			ErrorCode: err.Code(),
@@ -955,11 +955,15 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	b.Lock()
 	defer b.Unlock()
 
+	state := b.fsm.State()
+	_, topic, _ := state.GetTopic(replica.Partition.Topic)
+
 	if replica.Log == nil {
 		log, err := commitlog.New(commitlog.Options{
 			Path:            filepath.Join(b.config.DataDir, "data", fmt.Sprintf("%d", replica.Partition.ID)),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
+			CleanupPolicy:   commitlog.CleanupPolicy(topic.Config.GetValue("cleanup.policy").(string)),
 		})
 		if err != nil {
 			return protocol.ErrUnknown.WithErr(err)
@@ -972,15 +976,15 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 }
 
 // createTopic is used to create the topic across the cluster.
-func (b *Broker) createTopic(ctx context.Context, topic string, partitions int32, replicationFactor int16) protocol.Error {
+func (b *Broker) createTopic(ctx context.Context, topic *protocol.CreateTopicRequest) protocol.Error {
 	state := b.fsm.State()
-	_, t, _ := state.GetTopic(topic)
+	_, t, _ := state.GetTopic(topic.Topic)
 	if t != nil {
 		return protocol.ErrTopicAlreadyExists
 	}
-	ps := b.buildPartitions(topic, partitions, replicationFactor)
+	ps := b.buildPartitions(topic.Topic, topic.NumPartitions, topic.ReplicationFactor)
 	tt := structs.Topic{
-		Topic:      topic,
+		Topic:      topic.Topic,
 		Partitions: make(map[int32][]int32),
 	}
 	for _, partition := range ps {

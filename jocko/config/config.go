@@ -12,7 +12,7 @@ const (
 	DefaultLANSerfPort = 8301
 )
 
-// Config holds the configuration for a Broker.
+// Config holds the configuration for a BrokerConfig.
 type BrokerConfig struct {
 	ID                int32
 	NodeName          string
