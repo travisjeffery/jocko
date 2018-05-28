@@ -124,6 +124,8 @@ type Topic struct {
 	Topic string
 	// Partitions is a map of partition IDs to slice of replicas IDs.
 	Partitions map[int32][]int32
+	// Config
+	Config TopicConfig
 
 	RaftIndex
 }

@@ -18,7 +18,12 @@ var (
 	Encoding           = binary.BigEndian
 )
 
+type CleanupPolicy string
+
 const (
+	DeleteCleanupPolicy  = "delete"
+	CompactCleanupPolicy = "compact"
+
 	LogFileSuffix   = ".log"
 	IndexFileSuffix = ".index"
 )
@@ -38,6 +43,7 @@ type Options struct {
 	// new segment will be split off.
 	MaxSegmentBytes int64
 	MaxLogBytes     int64
+	CleanupPolicy   CleanupPolicy
 }
 
 func New(opts Options) (*CommitLog, error) {
@@ -49,11 +55,22 @@ func New(opts Options) (*CommitLog, error) {
 		// TODO default here
 	}
 
+	if opts.CleanupPolicy == "" {
+		opts.CleanupPolicy = DeleteCleanupPolicy
+	}
+
+	var cleaner Cleaner
+	if opts.CleanupPolicy == DeleteCleanupPolicy {
+		cleaner = NewDeleteCleaner(opts.MaxLogBytes)
+	} else {
+		cleaner = NewCompactCleaner()
+	}
+
 	path, _ := filepath.Abs(opts.Path)
 	l := &CommitLog{
 		Options: opts,
 		name:    filepath.Base(path),
-		cleaner: NewDeleteCleaner(opts.MaxLogBytes),
+		cleaner: cleaner,
 	}
 
 	if err := l.init(); err != nil {

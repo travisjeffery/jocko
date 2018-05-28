@@ -108,7 +108,7 @@ func TestStore_RegisterTopic(t *testing.T) {
 
 	testRegisterTopic(t, s, 0, "topic1")
 
-	if idx, topics, err := s.GetTopics(); err != nil || idx != 0 || !reflect.DeepEqual(topics, []*structs.Topic{{Topic: "topic1"}}) {
+	if idx, topics, err := s.GetTopics(); err != nil || idx != 0 || !reflect.DeepEqual(topics, []*structs.Topic{{Topic: "topic1", Config: structs.NewTopicConfig()}}) {
 		t.Fatalf("err: %s", err)
 	}
 

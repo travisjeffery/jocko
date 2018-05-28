@@ -2,11 +2,95 @@ package protocol
 
 import "time"
 
+type AbortedTransaction struct {
+	ProducerID  int64
+	FirstOffset int64
+}
+
+func (t *AbortedTransaction) Decode(d PacketDecoder, version int16) (err error) {
+	if t.ProducerID, err = d.Int64(); err != nil {
+		return err
+	}
+	if t.FirstOffset, err = d.Int64(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *AbortedTransaction) Encode(e PacketEncoder) (err error) {
+	e.PutInt64(t.ProducerID)
+	e.PutInt64(t.FirstOffset)
+	return nil
+}
+
 type FetchPartitionResponse struct {
-	Partition     int32
-	ErrorCode     int16
-	HighWatermark int64
-	RecordSet     []byte
+	Partition           int32
+	ErrorCode           int16
+	HighWatermark       int64
+	LastStableOffset    int64
+	AbortedTransactions []*AbortedTransaction
+	RecordSet           []byte
+}
+
+func (r *FetchPartitionResponse) Decode(d PacketDecoder, version int16) (err error) {
+	if r.Partition, err = d.Int32(); err != nil {
+		return err
+	}
+	if r.ErrorCode, err = d.Int16(); err != nil {
+		return err
+	}
+	if r.HighWatermark, err = d.Int64(); err != nil {
+		return err
+	}
+
+	if version >= 4 {
+		if r.LastStableOffset, err = d.Int64(); err != nil {
+			return err
+		}
+
+		transactionCount, err := d.ArrayLength()
+		if err != nil {
+			return err
+		}
+
+		r.AbortedTransactions = make([]*AbortedTransaction, transactionCount)
+		for i := 0; i < transactionCount; i++ {
+			t := &AbortedTransaction{}
+			if err = t.Decode(d, version); err != nil {
+				return err
+			}
+			r.AbortedTransactions[i] = t
+		}
+	}
+
+	if r.RecordSet, err = d.Bytes(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *FetchPartitionResponse) Encode(e PacketEncoder, version int16) (err error) {
+	e.PutInt32(r.Partition)
+	e.PutInt16(r.ErrorCode)
+	e.PutInt64(r.HighWatermark)
+
+	if version >= 4 {
+		e.PutInt64(r.LastStableOffset)
+
+		if err = e.PutArrayLength(len(r.AbortedTransactions)); err != nil {
+			return err
+		}
+		for _, t := range r.AbortedTransactions {
+			t.Encode(e)
+		}
+	}
+
+	if err = e.PutBytes(r.RecordSet); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type FetchResponse struct {
@@ -29,18 +113,15 @@ func (r *FetchResponses) Encode(e PacketEncoder) (err error) {
 	if err = e.PutArrayLength(len(r.Responses)); err != nil {
 		return err
 	}
-	for _, r := range r.Responses {
-		if err = e.PutString(r.Topic); err != nil {
+	for _, response := range r.Responses {
+		if err = e.PutString(response.Topic); err != nil {
 			return err
 		}
-		if err = e.PutArrayLength(len(r.PartitionResponses)); err != nil {
+		if err = e.PutArrayLength(len(response.PartitionResponses)); err != nil {
 			return err
 		}
-		for _, p := range r.PartitionResponses {
-			e.PutInt32(p.Partition)
-			e.PutInt16(p.ErrorCode)
-			e.PutInt64(p.HighWatermark)
-			if err = e.PutBytes(p.RecordSet); err != nil {
+		for _, p := range response.PartitionResponses {
+			if err = p.Encode(e, r.APIVersion); err != nil {
 				return err
 			}
 		}
@@ -52,11 +133,11 @@ func (r *FetchResponses) Decode(d PacketDecoder, version int16) (err error) {
 	r.APIVersion = version
 
 	if r.APIVersion >= 1 {
-		throttleTimeMs, err := d.Int32()
+		throttle, err := d.Int32()
 		if err != nil {
 			return err
 		}
-		r.ThrottleTime = time.Duration(throttleTimeMs) * time.Millisecond
+		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
 	}
 
 	responseCount, err := d.ArrayLength()
@@ -78,20 +159,7 @@ func (r *FetchResponses) Decode(d PacketDecoder, version int16) (err error) {
 		ps := make([]*FetchPartitionResponse, partitionCount)
 		for j := range ps {
 			p := &FetchPartitionResponse{}
-			p.Partition, err = d.Int32()
-			if err != nil {
-				return err
-			}
-			p.ErrorCode, err = d.Int16()
-			if err != nil {
-				return err
-			}
-			p.HighWatermark, err = d.Int64()
-			if err != nil {
-				return err
-			}
-			p.RecordSet, err = d.Bytes()
-			if err != nil {
+			if err = p.Decode(d, version); err != nil {
 				return err
 			}
 			ps[j] = p
