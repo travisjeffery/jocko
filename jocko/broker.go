@@ -811,7 +811,7 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 			fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 				Partition:     p.Partition,
 				ErrorCode:     protocol.ErrNone.Code(),
-				HighWatermark: replica.Log.NewestOffset(),
+				HighWatermark: replica.Log.NewestOffset() - 1,
 				RecordSet:     buf.Bytes(),
 			}
 		}
