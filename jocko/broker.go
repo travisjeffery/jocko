@@ -958,6 +958,10 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	state := b.fsm.State()
 	_, topic, _ := state.GetTopic(replica.Partition.Topic)
 
+	if topic == nil {
+		return protocol.ErrUnknownTopicOrPartition
+	}
+
 	if replica.Log == nil {
 		log, err := commitlog.New(commitlog.Options{
 			Path:            filepath.Join(b.config.DataDir, "data", fmt.Sprintf("%d", replica.Partition.ID)),
@@ -990,6 +994,7 @@ func (b *Broker) createTopic(ctx context.Context, topic *protocol.CreateTopicReq
 	for _, partition := range ps {
 		tt.Partitions[partition.ID] = partition.AR
 	}
+	// TODO: create/set topic config here
 	if _, err := b.raftApply(structs.RegisterTopicRequestType, structs.RegisterTopicRequest{Topic: tt}); err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
