@@ -258,6 +258,8 @@ func (b *Broker) reconcileMember(m serf.Member) error {
 		err = b.handleAliveMember(m)
 	case serf.StatusFailed:
 		err = b.handleFailedMember(m)
+	case StatusReap:
+		err = b.handleReapMember(m)
 	case serf.StatusLeft:
 		err = b.handleLeftMember(m)
 	}
@@ -420,7 +422,6 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 			},
 		},
 	}
-
 	if _, err := b.raftApply(structs.RegisterNodeRequestType, &req); err != nil {
 		return err
 	}

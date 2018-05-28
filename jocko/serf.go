@@ -10,6 +10,12 @@ import (
 	"github.com/travisjeffery/jocko/log"
 )
 
+const (
+	// StatusReap is used to update the status of a node if we
+	// are handling a EventMemberReap
+	StatusReap = serf.MemberStatus(-1)
+)
+
 func (b *Broker) setupSerf(config *serf.Config, ch chan serf.Event, path string) (*serf.Serf, error) {
 	config.Init()
 	config.NodeName = b.config.NodeName
@@ -45,6 +51,8 @@ func (b *Broker) lanEventHandler() {
 			switch e.EventType() {
 			case serf.EventMemberJoin:
 				b.lanNodeJoin(e.(serf.MemberEvent))
+				b.localMemberEvent(e.(serf.MemberEvent))
+			case serf.EventMemberReap:
 				b.localMemberEvent(e.(serf.MemberEvent))
 			case serf.EventMemberLeave, serf.EventMemberFailed:
 				b.lanNodeFailed(e.(serf.MemberEvent))
@@ -88,7 +96,12 @@ func (b *Broker) localMemberEvent(me serf.MemberEvent) {
 		return
 	}
 
+	isReap := me.EventType() == serf.EventMemberReap
+
 	for _, m := range me.Members {
+		if isReap {
+			m.Status = StatusReap
+		}
 		select {
 		case b.reconcileCh <- m:
 		default:
