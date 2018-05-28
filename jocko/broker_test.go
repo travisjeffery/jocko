@@ -256,7 +256,7 @@ func TestBroker_Run(t *testing.T) {
 								PartitionResponses: []*protocol.FetchPartitionResponse{{
 									Partition:     0,
 									ErrorCode:     protocol.ErrNone.Code(),
-									HighWatermark: 1,
+									HighWatermark: 0,
 									RecordSet:     mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}}),
 								}},
 							}}},

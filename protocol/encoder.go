@@ -1,6 +1,8 @@
 package protocol
 
-import "math"
+import (
+	"math"
+)
 
 type PacketEncoder interface {
 	PutBool(in bool)
@@ -87,11 +89,7 @@ func (e *LenEncoder) PutBytes(in []byte) error {
 	if in == nil {
 		return nil
 	}
-	if len(in) > math.MaxInt32 {
-		return ErrInvalidByteSliceLength
-	}
-	e.Length += len(in)
-	return nil
+	return e.PutRawBytes(in)
 }
 
 func (e *LenEncoder) PutRawBytes(in []byte) error {
@@ -216,9 +214,7 @@ func (e *ByteEncoder) PutBytes(in []byte) error {
 		return nil
 	}
 	e.PutInt32(int32(len(in)))
-	copy(e.b[e.off:], in)
-	e.off += len(in)
-	return nil
+	return e.PutRawBytes(in)
 }
 
 func (e *ByteEncoder) PutString(in string) error {
