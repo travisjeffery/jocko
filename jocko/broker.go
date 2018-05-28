@@ -1136,7 +1136,7 @@ func (b *Broker) Shutdown() error {
 		return nil
 	}
 	b.shutdown = true
-	defer close(b.shutdownCh)
+	close(b.shutdownCh)
 
 	if b.serf != nil {
 		b.serf.Shutdown()
