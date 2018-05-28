@@ -22,7 +22,7 @@ const (
 )
 
 // setupRaft is used to setup and initialize Raft.
-func (b *Broker) setupRaft() error {
+func (b *Broker) setupRaft() (err error) {
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		if b.raft == nil && b.raftStore != nil {
@@ -32,7 +32,6 @@ func (b *Broker) setupRaft() error {
 		}
 	}()
 
-	var err error
 	b.fsm, err = fsm.New(b.logger, b.tracer, fsm.NodeID(b.config.ID))
 	if err != nil {
 		return err
