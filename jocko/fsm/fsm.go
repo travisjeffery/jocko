@@ -384,6 +384,11 @@ func (s *Store) EnsureTopic(idx uint64, topic *structs.Topic) error {
 	sp := s.tracer.StartSpan("store: ensure topic")
 	s.vlog(sp, "topic", topic)
 	sp.SetTag("node id", s.nodeID)
+
+	if topic.Config == nil {
+		topic.Config = structs.NewTopicConfig()
+	}
+
 	defer sp.Finish()
 
 	tx := s.db.Txn(true)

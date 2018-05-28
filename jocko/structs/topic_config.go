@@ -210,7 +210,10 @@ func (c TopicConfig) GetValue(name string) interface{} {
 	if !ok {
 		return nil
 	}
-	return e.Value
+	if e.Value != nil {
+		return e.Value
+	}
+	return e.Default
 }
 
 func (c TopicConfig) SetValue(name string, value interface{}) TopicConfig {
