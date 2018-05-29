@@ -60,7 +60,7 @@ func init() {
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
-	config *config.BrokerConfig
+	config *config.Config
 
 	// readyForConsistentReads is used to track when the leader server is
 	// ready to serve consistent reads, after it has applied its initial
@@ -90,7 +90,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func NewBroker(config *config.BrokerConfig, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
+func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:        config,
 		logger:        logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
