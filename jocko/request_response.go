@@ -3,22 +3,43 @@ package jocko
 import (
 	"context"
 	"io"
+	"sync"
+	"time"
 
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// Request represents an API request.
-type Request struct {
-	Ctx     context.Context
-	Conn    io.ReadWriter
-	Header  *protocol.RequestHeader
-	Request interface{}
-}
-
-// Request represents an API request.
-type Response struct {
-	Ctx      context.Context
+type Context struct {
+	sync.Mutex
 	Conn     io.ReadWriter
 	Header   *protocol.RequestHeader
+	Request  interface{}
 	Response interface{}
+	Parent   context.Context
+	values   map[interface{}]interface{}
+}
+
+func (ctx *Context) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+func (ctx *Context) Done() <-chan struct{} {
+	return nil
+}
+
+func (ctx *Context) Err() error {
+	return nil
+}
+
+func (ctx *Context) Value(key interface{}) interface{} {
+	ctx.Lock()
+	if ctx.values == nil {
+		ctx.values = make(map[interface{}]interface{})
+	}
+	val := ctx.values[key]
+	if val == nil {
+		val = ctx.Parent.Value(key)
+	}
+	ctx.Unlock()
+	return val
 }
