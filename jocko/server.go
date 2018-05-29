@@ -35,7 +35,7 @@ func init() {
 
 // Broker is the interface that wraps the Broker's methods.
 type broker interface {
-	Run(context.Context, <-chan Request, chan<- Response)
+	Run(context.Context, <-chan *Context, chan<- *Context)
 	Shutdown() error
 }
 
@@ -50,8 +50,8 @@ type Server struct {
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
 	metrics      *Metrics
-	requestCh    chan Request
-	responseCh   chan Response
+	requestCh    chan *Context
+	responseCh   chan *Context
 	tracer       opentracing.Tracer
 	close        func() error
 }
@@ -63,8 +63,8 @@ func NewServer(config *config.ServerConfig, broker *Broker, metrics *Metrics, tr
 		logger:     logger.With(log.Int32("node id", broker.config.ID), log.String("addr", broker.config.Addr)),
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
-		requestCh:  make(chan Request, 32),
-		responseCh: make(chan Response, 32),
+		requestCh:  make(chan *Context, 32),
+		responseCh: make(chan *Context, 32),
 		tracer:     tracer,
 		close:      close,
 	}
@@ -108,11 +108,11 @@ func (s *Server) Start(ctx context.Context) error {
 				break
 			case <-s.shutdownCh:
 				break
-			case resp := <-s.responseCh:
-				if queueSpan, ok := resp.Ctx.Value(responseQueueSpanKey).(opentracing.Span); ok {
+			case respCtx := <-s.responseCh:
+				if queueSpan, ok := respCtx.Value(responseQueueSpanKey).(opentracing.Span); ok {
 					queueSpan.Finish()
 				}
-				if err := s.handleResponse(resp); err != nil {
+				if err := s.handleResponse(respCtx); err != nil {
 					s.logger.Error("failed to write response", log.Error("error", err))
 				}
 			}
@@ -253,8 +253,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
 
-		s.requestCh <- Request{
-			Ctx:     ctx,
+		s.requestCh <- &Context{
+			Parent:  ctx,
 			Header:  header,
 			Request: req,
 			Conn:    conn,
@@ -262,17 +262,17 @@ func (s *Server) handleRequest(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleResponse(resp Response) error {
-	psp := opentracing.SpanFromContext(resp.Ctx)
+func (s *Server) handleResponse(respCtx *Context) error {
+	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
-	s.vlog(sp, "response", resp.Response)
+	s.vlog(sp, "response", respCtx)
 	defer psp.Finish()
 	defer sp.Finish()
-	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
+	b, err := protocol.Encode(respCtx.Response.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
-	_, err = resp.Conn.Write(b)
+	_, err = respCtx.Conn.Write(b)
 	return err
 }
 
