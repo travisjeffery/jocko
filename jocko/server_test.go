@@ -28,7 +28,7 @@ func init() {
 }
 
 func TestProduceConsume(t *testing.T) {
-	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true
 	}, nil)
@@ -40,7 +40,7 @@ func TestProduceConsume(t *testing.T) {
 	// TODO: mv close into teardown
 	defer s1.Shutdown()
 
-	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx2, cancel2 := context.WithCancel((context.Background()))
@@ -50,7 +50,7 @@ func TestProduceConsume(t *testing.T) {
 	defer teardown2()
 	defer s2.Shutdown()
 
-	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx3, cancel3 := context.WithCancel((context.Background()))
@@ -170,7 +170,7 @@ func TestProduceConsume(t *testing.T) {
 func TestConsumerGroup(t *testing.T) {
 	t.Skip()
 
-	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true
 	}, nil)
@@ -182,7 +182,7 @@ func TestConsumerGroup(t *testing.T) {
 	// TODO: mv close into teardown
 	defer s1.Shutdown()
 
-	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx2, cancel2 := context.WithCancel((context.Background()))
@@ -192,7 +192,7 @@ func TestConsumerGroup(t *testing.T) {
 	defer teardown2()
 	defer s2.Shutdown()
 
-	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx3, cancel3 := context.WithCancel((context.Background()))
@@ -316,7 +316,7 @@ func TestConsumerGroup(t *testing.T) {
 func BenchmarkServer(b *testing.B) {
 	ctx, cancel := context.WithCancel((context.Background()))
 	defer cancel()
-	srv, teardown := jocko.NewTestServer(b, func(cfg *config.BrokerConfig) {
+	srv, teardown := jocko.NewTestServer(b, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true

@@ -119,7 +119,7 @@ func main() {
 }
 
 func setup(logger log.Logger) (*jocko.Server, func()) {
-	c, cancel := jocko.NewTestServer(&testing.T{}, func(cfg *config.BrokerConfig) {
+	c, cancel := jocko.NewTestServer(&testing.T{}, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true

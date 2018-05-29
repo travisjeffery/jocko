@@ -394,14 +394,14 @@ func TestBroker_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.Config) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
 			}, nil)
-			b := s.broker
+			b := s.broker()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			span := b.tracer.StartSpan("TestBroker_Run")
@@ -486,14 +486,14 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.Config) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 			}, nil)
 			defer teardown()
-			b := s.broker
+			b := s.broker()
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -517,11 +517,11 @@ func newFields() fields {
 
 func TestBroker_JoinLAN(t *testing.T) {
 	s1, t1 := NewTestServer(t, nil, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 	s2, t2 := NewTestServer(t, nil, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
@@ -534,19 +534,19 @@ func TestBroker_JoinLAN(t *testing.T) {
 }
 
 func TestBroker_RegisterMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
@@ -576,7 +576,7 @@ func TestBroker_RegisterMember(t *testing.T) {
 }
 
 func TestBroker_FailedMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
@@ -584,7 +584,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	defer t1()
 	defer s1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
@@ -595,11 +595,11 @@ func TestBroker_FailedMember(t *testing.T) {
 	// Fail the member
 	s2.Shutdown()
 
-	state := s1.broker.fsm.State()
+	state := s1.broker().fsm.State()
 
 	// Should be registered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -612,14 +612,14 @@ func TestBroker_FailedMember(t *testing.T) {
 }
 
 func TestBroker_LeftMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
 	defer t1()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
@@ -627,11 +627,11 @@ func TestBroker_LeftMember(t *testing.T) {
 
 	TestJoin(t, s2, s1)
 
-	state := s1.broker.fsm.State()
+	state := s1.broker().fsm.State()
 
 	// should be registered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -640,11 +640,11 @@ func TestBroker_LeftMember(t *testing.T) {
 		}
 	})
 
-	s2.broker.Leave()
+	s2.broker().Leave()
 
 	// Should be deregistered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -655,27 +655,27 @@ func TestBroker_LeftMember(t *testing.T) {
 }
 
 func TestBroker_LeaveLeader(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
-	s3, t3 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s3, t3 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b3 := s3.broker
+	b3 := s3.broker()
 	defer t3()
 	defer b3.Shutdown()
 
@@ -789,4 +789,8 @@ func handleProduceResponse(t *testing.T, res *protocol.ProduceResponses) {
 			pr.LogAppendTime = time.Time{}
 		}
 	}
+}
+
+func (s *Server) broker() *Broker {
+	return s.handler.(*Broker)
 }
