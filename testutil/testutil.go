@@ -13,9 +13,9 @@ import (
 	"github.com/travisjeffery/jocko/jocko/config"
 )
 
-func TestConfig(t *testing.T) (string, *config.BrokerConfig) {
+func TestConfig(t *testing.T) (string, *config.Config) {
 	dir := tempDir(t, "jocko")
-	config := config.DefaultBrokerConfig()
+	config := config.DefaultConfig()
 	ports := dynaport.Get(3)
 	config.NodeName = uniqueNodeName(t.Name())
 	config.Bootstrap = true
