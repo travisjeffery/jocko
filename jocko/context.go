@@ -12,10 +12,11 @@ import (
 type Context struct {
 	sync.Mutex
 	Conn     io.ReadWriter
+	Error    error
 	Header   *protocol.RequestHeader
+	Parent   context.Context
 	Request  interface{}
 	Response interface{}
-	Parent   context.Context
 	values   map[interface{}]interface{}
 }
 
@@ -28,7 +29,7 @@ func (ctx *Context) Done() <-chan struct{} {
 }
 
 func (ctx *Context) Err() error {
-	return nil
+	return ctx.Error
 }
 
 func (ctx *Context) Value(key interface{}) interface{} {
