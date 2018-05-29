@@ -129,18 +129,13 @@ func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logg
 // Broker API.
 
 // Run starts a loop to handle requests send back responses.
-func (b *Broker) Run(ctx context.Context, requestc <-chan *Context, responsec chan<- *Context) {
-	var conn io.ReadWriter
-	var header *protocol.RequestHeader
-	var resp protocol.ResponseBody
+func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses chan<- *Context) {
 	var reqCtx *Context
+	var response protocol.ResponseBody
 
 	for {
 		select {
-		case reqCtx = <-requestc:
-			conn = reqCtx.Conn
-			header = reqCtx.Header
-
+		case reqCtx = <-requests:
 			queueSpan, ok := reqCtx.Value(requestQueueSpanKey).(opentracing.Span)
 			if ok {
 				queueSpan.Finish()
@@ -148,47 +143,47 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan *Context, responsec ch
 
 			switch req := reqCtx.Request.(type) {
 			case *protocol.ProduceRequest:
-				resp = b.handleProduce(reqCtx, header, req)
+				response = b.handleProduce(reqCtx, req)
 			case *protocol.FetchRequest:
-				resp = b.handleFetch(reqCtx, header, req)
+				response = b.handleFetch(reqCtx, req)
 			case *protocol.OffsetsRequest:
-				resp = b.handleOffsets(reqCtx, header, req)
+				response = b.handleOffsets(reqCtx, req)
 			case *protocol.MetadataRequest:
-				resp = b.handleMetadata(reqCtx, header, req)
+				response = b.handleMetadata(reqCtx, req)
 			case *protocol.LeaderAndISRRequest:
-				resp = b.handleLeaderAndISR(reqCtx, header, req)
+				response = b.handleLeaderAndISR(reqCtx, req)
 			case *protocol.StopReplicaRequest:
-				resp = b.handleStopReplica(reqCtx, header, req)
+				response = b.handleStopReplica(reqCtx, req)
 			case *protocol.UpdateMetadataRequest:
-				resp = b.handleUpdateMetadata(reqCtx, header, req)
+				response = b.handleUpdateMetadata(reqCtx, req)
 			case *protocol.ControlledShutdownRequest:
-				resp = b.handleControlledShutdown(reqCtx, header, req)
+				response = b.handleControlledShutdown(reqCtx, req)
 			case *protocol.OffsetCommitRequest:
-				resp = b.handleOffsetCommit(reqCtx, header, req)
+				response = b.handleOffsetCommit(reqCtx, req)
 			case *protocol.OffsetFetchRequest:
-				resp = b.handleOffsetFetch(reqCtx, header, req)
+				response = b.handleOffsetFetch(reqCtx, req)
 			case *protocol.FindCoordinatorRequest:
-				resp = b.handleFindCoordinator(reqCtx, header, req)
+				response = b.handleFindCoordinator(reqCtx, req)
 			case *protocol.JoinGroupRequest:
-				resp = b.handleJoinGroup(reqCtx, header, req)
+				response = b.handleJoinGroup(reqCtx, req)
 			case *protocol.HeartbeatRequest:
-				resp = b.handleHeartbeat(reqCtx, header, req)
+				response = b.handleHeartbeat(reqCtx, req)
 			case *protocol.LeaveGroupRequest:
-				resp = b.handleLeaveGroup(reqCtx, header, req)
+				response = b.handleLeaveGroup(reqCtx, req)
 			case *protocol.SyncGroupRequest:
-				resp = b.handleSyncGroup(reqCtx, header, req)
+				response = b.handleSyncGroup(reqCtx, req)
 			case *protocol.DescribeGroupsRequest:
-				resp = b.handleDescribeGroups(reqCtx, header, req)
+				response = b.handleDescribeGroups(reqCtx, req)
 			case *protocol.ListGroupsRequest:
-				resp = b.handleListGroups(reqCtx, header, req)
+				response = b.handleListGroups(reqCtx, req)
 			case *protocol.SaslHandshakeRequest:
-				resp = b.handleSaslHandshake(reqCtx, header, req)
+				response = b.handleSaslHandshake(reqCtx, req)
 			case *protocol.APIVersionsRequest:
-				resp = b.handleAPIVersions(reqCtx, header, req)
+				response = b.handleAPIVersions(reqCtx, req)
 			case *protocol.CreateTopicRequests:
-				resp = b.handleCreateTopic(reqCtx, header, req)
+				response = b.handleCreateTopic(reqCtx, req)
 			case *protocol.DeleteTopicsRequest:
-				resp = b.handleDeleteTopics(reqCtx, header, req)
+				response = b.handleDeleteTopics(reqCtx, req)
 			}
 
 		case <-ctx.Done():
@@ -199,10 +194,15 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan *Context, responsec ch
 		queueSpan := b.tracer.StartSpan("broker: queue response", opentracing.ChildOf(parentSpan.Context()))
 		responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
 
-		responsec <- &Context{Parent: responseCtx, Conn: conn, Header: header, Response: &protocol.Response{
-			CorrelationID: header.CorrelationID,
-			Body:          resp,
-		}}
+		responses <- &Context{
+			Parent: responseCtx,
+			Conn:   reqCtx.Conn,
+			Header: reqCtx.Header,
+			Response: &protocol.Response{
+				CorrelationID: reqCtx.Header.CorrelationID,
+				Body:          response,
+			},
+		}
 	}
 }
 
@@ -232,13 +232,13 @@ func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing
 
 var apiVersions = &protocol.APIVersionsResponse{APIVersions: protocol.APIVersions}
 
-func (b *Broker) handleAPIVersions(ctx context.Context, header *protocol.RequestHeader, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
+func (b *Broker) handleAPIVersions(ctx *Context, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
 	sp := span(ctx, b.tracer, "api versions")
 	defer sp.Finish()
 	return apiVersions
 }
 
-func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.RequestHeader, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
+func (b *Broker) handleCreateTopic(ctx *Context, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
 	sp := span(ctx, b.tracer, "create topic")
 	defer sp.Finish()
 	resp := new(protocol.CreateTopicsResponse)
@@ -270,7 +270,7 @@ func (b *Broker) handleCreateTopic(ctx context.Context, header *protocol.Request
 	return resp
 }
 
-func (b *Broker) handleDeleteTopics(ctx context.Context, header *protocol.RequestHeader, reqs *protocol.DeleteTopicsRequest) *protocol.DeleteTopicsResponse {
+func (b *Broker) handleDeleteTopics(ctx *Context, reqs *protocol.DeleteTopicsRequest) *protocol.DeleteTopicsResponse {
 	sp := span(ctx, b.tracer, "delete topics")
 	defer sp.Finish()
 	resp := new(protocol.DeleteTopicsResponse)
@@ -306,7 +306,7 @@ func (b *Broker) handleDeleteTopics(ctx context.Context, header *protocol.Reques
 	return resp
 }
 
-func (b *Broker) handleLeaderAndISR(ctx context.Context, header *protocol.RequestHeader, req *protocol.LeaderAndISRRequest) *protocol.LeaderAndISRResponse {
+func (b *Broker) handleLeaderAndISR(ctx *Context, req *protocol.LeaderAndISRRequest) *protocol.LeaderAndISRResponse {
 	sp := span(ctx, b.tracer, "leader and isr")
 	defer sp.Finish()
 	resp := &protocol.LeaderAndISRResponse{
@@ -363,7 +363,7 @@ func (b *Broker) handleLeaderAndISR(ctx context.Context, header *protocol.Reques
 	return resp
 }
 
-func (b *Broker) handleOffsets(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetsRequest) *protocol.OffsetsResponse {
+func (b *Broker) handleOffsets(ctx *Context, req *protocol.OffsetsRequest) *protocol.OffsetsResponse {
 	sp := span(ctx, b.tracer, "offsets")
 	defer sp.Finish()
 	oResp := new(protocol.OffsetsResponse)
@@ -396,7 +396,7 @@ func (b *Broker) handleOffsets(ctx context.Context, header *protocol.RequestHead
 	return oResp
 }
 
-func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHeader, req *protocol.ProduceRequest) *protocol.ProduceResponses {
+func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *protocol.ProduceResponses {
 	sp := span(ctx, b.tracer, "produce")
 	defer sp.Finish()
 	resp := new(protocol.ProduceResponses)
@@ -446,7 +446,7 @@ func (b *Broker) handleProduce(ctx context.Context, header *protocol.RequestHead
 	return resp
 }
 
-func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHeader, req *protocol.MetadataRequest) *protocol.MetadataResponse {
+func (b *Broker) handleMetadata(ctx *Context, req *protocol.MetadataRequest) *protocol.MetadataResponse {
 	sp := span(ctx, b.tracer, "metadata")
 	defer sp.Finish()
 	state := b.fsm.State()
@@ -549,7 +549,7 @@ func (b *Broker) handleMetadata(ctx context.Context, header *protocol.RequestHea
 	return resp
 }
 
-func (b *Broker) handleFindCoordinator(ctx context.Context, header *protocol.RequestHeader, req *protocol.FindCoordinatorRequest) *protocol.FindCoordinatorResponse {
+func (b *Broker) handleFindCoordinator(ctx *Context, req *protocol.FindCoordinatorRequest) *protocol.FindCoordinatorResponse {
 	sp := span(ctx, b.tracer, "find coordinator")
 	defer sp.Finish()
 
@@ -588,7 +588,7 @@ ERROR:
 	return resp
 }
 
-func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.JoinGroupRequest) *protocol.JoinGroupResponse {
+func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *protocol.JoinGroupResponse {
 	sp := span(ctx, b.tracer, "join group")
 	defer sp.Finish()
 
@@ -638,7 +638,7 @@ func (b *Broker) handleJoinGroup(ctx context.Context, header *protocol.RequestHe
 	return resp
 }
 
-func (b *Broker) handleLeaveGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.LeaveGroupRequest) *protocol.LeaveGroupResponse {
+func (b *Broker) handleLeaveGroup(ctx *Context, r *protocol.LeaveGroupRequest) *protocol.LeaveGroupResponse {
 	sp := span(ctx, b.tracer, "leave group")
 	defer sp.Finish()
 
@@ -675,7 +675,7 @@ func (b *Broker) handleLeaveGroup(ctx context.Context, header *protocol.RequestH
 	return resp
 }
 
-func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHeader, r *protocol.SyncGroupRequest) *protocol.SyncGroupResponse {
+func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *protocol.SyncGroupResponse {
 	sp := span(ctx, b.tracer, "sync group")
 	defer sp.Finish()
 
@@ -719,7 +719,7 @@ func (b *Broker) handleSyncGroup(ctx context.Context, header *protocol.RequestHe
 	return resp
 }
 
-func (b *Broker) handleHeartbeat(ctx context.Context, header *protocol.RequestHeader, r *protocol.HeartbeatRequest) *protocol.HeartbeatResponse {
+func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *protocol.HeartbeatResponse {
 	sp := span(ctx, b.tracer, "heartbeat")
 	defer sp.Finish()
 
@@ -743,7 +743,7 @@ func (b *Broker) handleHeartbeat(ctx context.Context, header *protocol.RequestHe
 	return resp
 }
 
-func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader, r *protocol.FetchRequest) *protocol.FetchResponses {
+func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.FetchResponses {
 	sp := span(ctx, b.tracer, "fetch")
 	defer sp.Finish()
 	fresp := &protocol.FetchResponses{
@@ -819,12 +819,12 @@ func (b *Broker) handleFetch(ctx context.Context, header *protocol.RequestHeader
 	return fresp
 }
 
-func (b *Broker) handleSaslHandshake(ctx context.Context, header *protocol.RequestHeader, req *protocol.SaslHandshakeRequest) *protocol.SaslHandshakeResponse {
+func (b *Broker) handleSaslHandshake(ctx *Context, req *protocol.SaslHandshakeRequest) *protocol.SaslHandshakeResponse {
 	panic("not implemented: sasl handshake")
 	return nil
 }
 
-func (b *Broker) handleListGroups(ctx context.Context, header *protocol.RequestHeader, req *protocol.ListGroupsRequest) *protocol.ListGroupsResponse {
+func (b *Broker) handleListGroups(ctx *Context, req *protocol.ListGroupsRequest) *protocol.ListGroupsResponse {
 	sp := span(ctx, b.tracer, "create topic")
 	defer sp.Finish()
 	resp := new(protocol.ListGroupsResponse)
@@ -850,7 +850,7 @@ func (b *Broker) handleListGroups(ctx context.Context, header *protocol.RequestH
 	return resp
 }
 
-func (b *Broker) handleDescribeGroups(ctx context.Context, header *protocol.RequestHeader, req *protocol.DescribeGroupsRequest) *protocol.DescribeGroupsResponse {
+func (b *Broker) handleDescribeGroups(ctx *Context, req *protocol.DescribeGroupsRequest) *protocol.DescribeGroupsResponse {
 	sp := span(ctx, b.tracer, "create topic")
 	defer sp.Finish()
 	resp := new(protocol.DescribeGroupsResponse)
@@ -890,27 +890,27 @@ func (b *Broker) handleDescribeGroups(ctx context.Context, header *protocol.Requ
 	return resp
 }
 
-func (b *Broker) handleStopReplica(ctx context.Context, header *protocol.RequestHeader, req *protocol.StopReplicaRequest) *protocol.StopReplicaResponse {
+func (b *Broker) handleStopReplica(ctx *Context, req *protocol.StopReplicaRequest) *protocol.StopReplicaResponse {
 	panic("not implemented: stop replica")
 	return nil
 }
 
-func (b *Broker) handleUpdateMetadata(ctx context.Context, header *protocol.RequestHeader, req *protocol.UpdateMetadataRequest) *protocol.UpdateMetadataResponse {
+func (b *Broker) handleUpdateMetadata(ctx *Context, req *protocol.UpdateMetadataRequest) *protocol.UpdateMetadataResponse {
 	panic("not implemented: update metadata")
 	return nil
 }
 
-func (b *Broker) handleControlledShutdown(ctx context.Context, header *protocol.RequestHeader, req *protocol.ControlledShutdownRequest) *protocol.ControlledShutdownResponse {
+func (b *Broker) handleControlledShutdown(ctx *Context, req *protocol.ControlledShutdownRequest) *protocol.ControlledShutdownResponse {
 	panic("not implemented: controlled shutdown")
 	return nil
 }
 
-func (b *Broker) handleOffsetCommit(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetCommitRequest) *protocol.OffsetCommitResponse {
+func (b *Broker) handleOffsetCommit(ctx *Context, req *protocol.OffsetCommitRequest) *protocol.OffsetCommitResponse {
 	panic("not implemented: offset commit")
 	return nil
 }
 
-func (b *Broker) handleOffsetFetch(ctx context.Context, header *protocol.RequestHeader, req *protocol.OffsetFetchRequest) *protocol.OffsetFetchResponse {
+func (b *Broker) handleOffsetFetch(ctx *Context, req *protocol.OffsetFetchRequest) *protocol.OffsetFetchResponse {
 	sp := span(ctx, b.tracer, "create topic")
 	defer sp.Finish()
 
@@ -979,7 +979,7 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 }
 
 // createTopic is used to create the topic across the cluster.
-func (b *Broker) createTopic(ctx context.Context, topic *protocol.CreateTopicRequest) protocol.Error {
+func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) protocol.Error {
 	state := b.fsm.State()
 	_, t, _ := state.GetTopic(topic.Topic)
 	if t != nil {
@@ -1021,7 +1021,7 @@ func (b *Broker) createTopic(ctx context.Context, topic *protocol.CreateTopicReq
 	// TODO: can optimize this
 	for _, broker := range b.brokerLookup.Brokers() {
 		if broker.ID.Int32() == b.config.ID {
-			errCode := b.handleLeaderAndISR(ctx, nil, req).ErrorCode
+			errCode := b.handleLeaderAndISR(ctx, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
 				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
 			}
@@ -1270,7 +1270,7 @@ type Replica struct {
 	sync.Mutex
 }
 
-func (b *Broker) offsetsTopic(ctx context.Context) (topic *structs.Topic, err error) {
+func (b *Broker) offsetsTopic(ctx *Context) (topic *structs.Topic, err error) {
 	state := b.fsm.State()
 	name := "__consumer_offsets"
 
