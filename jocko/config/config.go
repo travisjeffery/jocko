@@ -12,8 +12,8 @@ const (
 	DefaultLANSerfPort = 8301
 )
 
-// Config holds the configuration for a BrokerConfig.
-type BrokerConfig struct {
+// Config holds the configuration for a Config.
+type Config struct {
 	ID                int32
 	NodeName          string
 	DataDir           string
@@ -33,13 +33,13 @@ type BrokerConfig struct {
 }
 
 // DefaultConfig creates/returns a default configuration.
-func DefaultBrokerConfig() *BrokerConfig {
+func DefaultConfig() *Config {
 	hostname, err := os.Hostname()
 	if err != nil {
 		panic(err)
 	}
 
-	conf := &BrokerConfig{
+	conf := &Config{
 		DevMode:           false,
 		NodeName:          hostname,
 		SerfLANConfig:     serfDefaultConfig(),
@@ -58,8 +58,4 @@ func serfDefaultConfig() *serf.Config {
 	base := serf.DefaultConfig()
 	base.QueueDepthWarning = 1000000
 	return base
-}
-
-type ServerConfig struct {
-	BrokerAddr string
 }

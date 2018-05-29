@@ -34,27 +34,27 @@ func TestBroker_Run(t *testing.T) {
 		topics map[*structs.Topic][]*structs.Partition
 	}
 	type args struct {
-		requestCh  chan Request
-		responseCh chan Response
-		requests   []Request
-		responses  []Response
+		requestCh  chan *Context
+		responseCh chan *Context
+		requests   []*Context
+		responses  []*Context
 	}
 	tests := []struct {
 		fields fields
 		name   string
 		args   args
-		handle func(*testing.T, *Broker, Request, Response)
+		handle func(*testing.T, *Broker, *Context)
 	}{
 		{
 			name: "api versions",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
 					Header:  &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.APIVersionsRequest{},
 				}},
-				responses: []Response{{
+				responses: []*Context{{
 					Header:   &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: apiVersions},
 				}},
@@ -63,9 +63,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "create topic ok",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -73,7 +73,7 @@ func TestBroker_Run(t *testing.T) {
 						ReplicationFactor: 1,
 					}}}},
 				},
-				responses: []Response{{
+				responses: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
@@ -84,9 +84,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "create topic invalid replication factor error",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -94,7 +94,7 @@ func TestBroker_Run(t *testing.T) {
 						ReplicationFactor: 2,
 					}}}},
 				},
-				responses: []Response{{
+				responses: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
@@ -105,9 +105,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "delete topic",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
 						Topic:             "the-topic",
@@ -117,7 +117,7 @@ func TestBroker_Run(t *testing.T) {
 					Header:  &protocol.RequestHeader{CorrelationID: 2},
 					Request: &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
 				},
-				responses: []Response{{
+				responses: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 1},
 					Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
 						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
@@ -132,9 +132,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "offsets",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -159,7 +159,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
 					},
 				},
-				responses: []Response{
+				responses: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -195,8 +195,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
-				switch res := res.Response.(*protocol.Response).Body.(type) {
+			handle: func(t *testing.T, _ *Broker, ctx *Context) {
+				switch res := ctx.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
@@ -207,9 +207,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "fetch",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -230,7 +230,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
 					},
 				},
-				responses: []Response{
+				responses: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -264,8 +264,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
-				switch res := res.Response.(*protocol.Response).Body.(type) {
+			handle: func(t *testing.T, _ *Broker, ctx *Context) {
+				switch res := ctx.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
@@ -276,9 +276,9 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "metadata",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Request: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
@@ -299,7 +299,7 @@ func TestBroker_Run(t *testing.T) {
 						Request: &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
 					},
 				},
-				responses: []Response{
+				responses: []*Context{
 					{
 						Header: &protocol.RequestHeader{CorrelationID: 1},
 						Response: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -329,8 +329,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 				},
 			},
-			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
-				switch res := res.Response.(*protocol.Response).Body.(type) {
+			handle: func(t *testing.T, _ *Broker, ctx *Context) {
+				switch res := ctx.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
@@ -341,16 +341,16 @@ func TestBroker_Run(t *testing.T) {
 		{
 			name: "produce topic/partition doesn't exist error",
 			args: args{
-				requestCh:  make(chan Request, 2),
-				responseCh: make(chan Response, 2),
-				requests: []Request{{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 2},
 					Request: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
 						Topic: "another-topic",
 						Data: []*protocol.Data{{
 							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
 				},
-				responses: []Response{{
+				responses: []*Context{{
 					Header: &protocol.RequestHeader{CorrelationID: 2},
 					Response: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
 						Responses: []*protocol.ProduceResponse{{
@@ -359,8 +359,8 @@ func TestBroker_Run(t *testing.T) {
 						}},
 					}}}},
 			},
-			handle: func(t *testing.T, _ *Broker, req Request, res Response) {
-				switch res := res.Response.(*protocol.Response).Body.(type) {
+			handle: func(t *testing.T, _ *Broker, ctx *Context) {
+				switch res := ctx.Response.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
 				case *protocol.ProduceResponses:
@@ -371,15 +371,15 @@ func TestBroker_Run(t *testing.T) {
 		// {
 		// 	name: "find coordinator",
 		// 	args: args{
-		// 		requestCh:  make(chan Request, 2),
-		// 		responseCh: make(chan Response, 2),
-		// 		requests: []Request{{
+		// 		requestCh:  make(chan *Context, 2),
+		// 		responseCh: make(chan *Context, 2),
+		// 		requests: []*Context{{
 		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
 		// 			Request: &protocol.FindCoordinatorRequest{
 		// 				CoordinatorKey: "test-group",
 		// 			},
 		// 		}},
-		// 		responses: []Response{{
+		// 		responses: []*Context{{
 		// 			Header: &protocol.RequestHeader{CorrelationID: 3},
 		// 			Response: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
 		// 				Coordinator: protocol.Coordinator{
@@ -394,14 +394,14 @@ func TestBroker_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.Config) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
 			}, nil)
-			b := s.broker
+			b := s.broker()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			span := b.tracer.StartSpan("TestBroker_Run")
@@ -443,19 +443,21 @@ func TestBroker_Run(t *testing.T) {
 			go b.Run(ctx, tt.args.requestCh, tt.args.responseCh)
 
 			for i := 0; i < len(tt.args.requests); i++ {
-				req := tt.args.requests[i]
+				request := tt.args.requests[i]
 				reqSpan := b.tracer.StartSpan("request", opentracing.ChildOf(span.Context()))
-				req.Ctx = opentracing.ContextWithSpan(runCtx, reqSpan)
-				tt.args.requestCh <- req
 
-				response := <-tt.args.responseCh
+				ctx := &Context{Header: request.Header, Request: request.Request, Parent: opentracing.ContextWithSpan(runCtx, reqSpan)}
+
+				tt.args.requestCh <- ctx
+
+				ctx = <-tt.args.responseCh
 
 				if tt.handle != nil {
-					tt.handle(t, b, tt.args.requests[i], response)
+					tt.handle(t, b, ctx)
 				}
 
-				if !reflect.DeepEqual(response.Response, tt.args.responses[i].Response) {
-					t.Errorf("got %s, want: %s", spewstr(response.Response), spewstr(tt.args.responses[i].Response))
+				if !reflect.DeepEqual(ctx.Response, tt.args.responses[i].Response) {
+					t.Errorf("got %s, want: %s", spewstr(ctx.Response), spewstr(tt.args.responses[i].Response))
 				}
 
 			}
@@ -484,14 +486,14 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.BrokerConfig) {
+			s, teardown := NewTestServer(t, func(cfg *config.Config) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 			}, nil)
 			defer teardown()
-			b := s.broker
+			b := s.broker()
 			if err := b.Shutdown(); (err != nil) != tt.wantErr {
 				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -515,11 +517,11 @@ func newFields() fields {
 
 func TestBroker_JoinLAN(t *testing.T) {
 	s1, t1 := NewTestServer(t, nil, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 	s2, t2 := NewTestServer(t, nil, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
@@ -532,19 +534,19 @@ func TestBroker_JoinLAN(t *testing.T) {
 }
 
 func TestBroker_RegisterMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
@@ -574,7 +576,7 @@ func TestBroker_RegisterMember(t *testing.T) {
 }
 
 func TestBroker_FailedMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
@@ -582,7 +584,7 @@ func TestBroker_FailedMember(t *testing.T) {
 	defer t1()
 	defer s1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
@@ -593,11 +595,11 @@ func TestBroker_FailedMember(t *testing.T) {
 	// Fail the member
 	s2.Shutdown()
 
-	state := s1.broker.fsm.State()
+	state := s1.broker().fsm.State()
 
 	// Should be registered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -610,14 +612,14 @@ func TestBroker_FailedMember(t *testing.T) {
 }
 
 func TestBroker_LeftMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
 	defer t1()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
@@ -625,11 +627,11 @@ func TestBroker_LeftMember(t *testing.T) {
 
 	TestJoin(t, s2, s1)
 
-	state := s1.broker.fsm.State()
+	state := s1.broker().fsm.State()
 
 	// should be registered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -638,11 +640,11 @@ func TestBroker_LeftMember(t *testing.T) {
 		}
 	})
 
-	s2.broker.Leave()
+	s2.broker().Leave()
 
 	// Should be deregistered
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(s2.broker.config.ID)
+		_, node, err := state.GetNode(s2.broker().config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -653,27 +655,27 @@ func TestBroker_LeftMember(t *testing.T) {
 }
 
 func TestBroker_LeaveLeader(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker
+	b1 := s1.broker()
 	defer t1()
 	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker
+	b2 := s2.broker()
 	defer t2()
 	defer b2.Shutdown()
 
-	s3, t3 := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s3, t3 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b3 := s3.broker
+	b3 := s3.broker()
 	defer t3()
 	defer b3.Shutdown()
 
@@ -787,4 +789,8 @@ func handleProduceResponse(t *testing.T, res *protocol.ProduceResponses) {
 			pr.LogAppendTime = time.Time{}
 		}
 	}
+}
+
+func (s *Server) broker() *Broker {
+	return s.handler.(*Broker)
 }

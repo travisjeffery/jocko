@@ -81,7 +81,7 @@ func (c *connPipe) SetWriteDeadline(t time.Time) error {
 }
 
 func TestConn(t *testing.T) {
-	s, cancel := NewTestServer(t, func(cfg *config.BrokerConfig) {
+	s, cancel := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true

@@ -34,37 +34,37 @@ func init() {
 }
 
 // Broker is the interface that wraps the Broker's methods.
-type broker interface {
-	Run(context.Context, <-chan Request, chan<- Response)
+type Handler interface {
+	Run(context.Context, <-chan *Context, chan<- *Context)
 	Shutdown() error
 }
 
 // Server is used to handle the TCP connections, decode requests,
 // defer to the broker, and encode the responses.
 type Server struct {
-	config       *config.ServerConfig
+	config       *config.Config
 	protocolLn   *net.TCPListener
 	logger       log.Logger
-	broker       *Broker
+	handler      Handler
 	shutdown     bool
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
 	metrics      *Metrics
-	requestCh    chan Request
-	responseCh   chan Response
+	requestCh    chan *Context
+	responseCh   chan *Context
 	tracer       opentracing.Tracer
 	close        func() error
 }
 
-func NewServer(config *config.ServerConfig, broker *Broker, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
+func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
 	s := &Server{
 		config:     config,
-		broker:     broker,
-		logger:     logger.With(log.Int32("node id", broker.config.ID), log.String("addr", broker.config.Addr)),
+		handler:    handler,
+		logger:     logger.With(log.Int32("server id", config.ID), log.String("addr", config.Addr)),
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
-		requestCh:  make(chan Request, 32),
-		responseCh: make(chan Response, 32),
+		requestCh:  make(chan *Context, 32),
+		responseCh: make(chan *Context, 32),
 		tracer:     tracer,
 		close:      close,
 	}
@@ -74,7 +74,7 @@ func NewServer(config *config.ServerConfig, broker *Broker, metrics *Metrics, tr
 
 // Start starts the service.
 func (s *Server) Start(ctx context.Context) error {
-	protocolAddr, err := net.ResolveTCPAddr("tcp", s.config.BrokerAddr)
+	protocolAddr, err := net.ResolveTCPAddr("tcp", s.config.Addr)
 	if err != nil {
 		return err
 	}
@@ -108,18 +108,18 @@ func (s *Server) Start(ctx context.Context) error {
 				break
 			case <-s.shutdownCh:
 				break
-			case resp := <-s.responseCh:
-				if queueSpan, ok := resp.Ctx.Value(responseQueueSpanKey).(opentracing.Span); ok {
+			case respCtx := <-s.responseCh:
+				if queueSpan, ok := respCtx.Value(responseQueueSpanKey).(opentracing.Span); ok {
 					queueSpan.Finish()
 				}
-				if err := s.handleResponse(resp); err != nil {
+				if err := s.handleResponse(respCtx); err != nil {
 					s.logger.Error("failed to write response", log.Error("error", err))
 				}
 			}
 		}
 	}()
 
-	go s.broker.Run(ctx, s.requestCh, s.responseCh)
+	go s.handler.Run(ctx, s.requestCh, s.responseCh)
 
 	return nil
 }
@@ -136,7 +136,7 @@ func (s *Server) Shutdown() {
 	s.shutdown = true
 	close(s.shutdownCh)
 
-	s.broker.Shutdown()
+	s.handler.Shutdown()
 	s.protocolLn.Close()
 
 	s.close()
@@ -187,8 +187,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 		span.SetTag("correlation_id", header.CorrelationID)
 		span.SetTag("client_id", header.ClientID)
 		span.SetTag("size", size)
-		span.SetTag("node_id", s.broker.config.ID) // can I set this globally for the tracer?
-		span.SetTag("addr", s.broker.config.Addr)
+		span.SetTag("node_id", s.config.ID) // can I set this globally for the tracer?
+		span.SetTag("addr", s.config.Addr)
 
 		var req protocol.VersionedDecoder
 
@@ -253,8 +253,8 @@ func (s *Server) handleRequest(conn net.Conn) {
 		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
 
-		s.requestCh <- Request{
-			Ctx:     ctx,
+		s.requestCh <- &Context{
+			Parent:  ctx,
 			Header:  header,
 			Request: req,
 			Conn:    conn,
@@ -262,17 +262,17 @@ func (s *Server) handleRequest(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleResponse(resp Response) error {
-	psp := opentracing.SpanFromContext(resp.Ctx)
+func (s *Server) handleResponse(respCtx *Context) error {
+	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
-	s.vlog(sp, "response", resp.Response)
+	s.vlog(sp, "response", respCtx)
 	defer psp.Finish()
 	defer sp.Finish()
-	b, err := protocol.Encode(resp.Response.(protocol.Encoder))
+	b, err := protocol.Encode(respCtx.Response.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
-	_, err = resp.Conn.Write(b)
+	_, err = respCtx.Conn.Write(b)
 	return err
 }
 
@@ -282,7 +282,7 @@ func (s *Server) Addr() net.Addr {
 }
 
 func (s *Server) ID() int32 {
-	return s.broker.config.ID
+	return s.config.ID
 }
 
 func (s *Server) vlog(span opentracing.Span, k string, i interface{}) {

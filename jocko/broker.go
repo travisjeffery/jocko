@@ -60,7 +60,7 @@ func init() {
 type Broker struct {
 	sync.RWMutex
 	logger log.Logger
-	config *config.BrokerConfig
+	config *config.Config
 
 	// readyForConsistentReads is used to track when the leader server is
 	// ready to serve consistent reads, after it has applied its initial
@@ -90,7 +90,7 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func NewBroker(config *config.BrokerConfig, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
+func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:        config,
 		logger:        logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
@@ -129,25 +129,24 @@ func NewBroker(config *config.BrokerConfig, tracer opentracing.Tracer, logger lo
 // Broker API.
 
 // Run starts a loop to handle requests send back responses.
-func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec chan<- Response) {
+func (b *Broker) Run(ctx context.Context, requestc <-chan *Context, responsec chan<- *Context) {
 	var conn io.ReadWriter
 	var header *protocol.RequestHeader
 	var resp protocol.ResponseBody
-	var reqCtx context.Context
+	var reqCtx *Context
 
 	for {
 		select {
-		case request := <-requestc:
-			conn = request.Conn
-			header = request.Header
-			reqCtx = request.Ctx
+		case reqCtx = <-requestc:
+			conn = reqCtx.Conn
+			header = reqCtx.Header
 
 			queueSpan, ok := reqCtx.Value(requestQueueSpanKey).(opentracing.Span)
 			if ok {
 				queueSpan.Finish()
 			}
 
-			switch req := request.Request.(type) {
+			switch req := reqCtx.Request.(type) {
 			case *protocol.ProduceRequest:
 				resp = b.handleProduce(reqCtx, header, req)
 			case *protocol.FetchRequest:
@@ -200,7 +199,7 @@ func (b *Broker) Run(ctx context.Context, requestc <-chan Request, responsec cha
 		queueSpan := b.tracer.StartSpan("broker: queue response", opentracing.ChildOf(parentSpan.Context()))
 		responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
 
-		responsec <- Response{Ctx: responseCtx, Conn: conn, Header: header, Response: &protocol.Response{
+		responsec <- &Context{Parent: responseCtx, Conn: conn, Header: header, Response: &protocol.Response{
 			CorrelationID: header.CorrelationID,
 			Body:          resp,
 		}}
