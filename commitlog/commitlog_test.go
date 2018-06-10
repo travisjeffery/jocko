@@ -23,13 +23,12 @@ var (
 		commitlog.NewMessageSet(0, msgs...),
 		commitlog.NewMessageSet(1, msgs...),
 	}
-	path = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
 )
 
 func TestNewCommitLog(t *testing.T) {
 	var err error
 	l := setup(t)
-	defer cleanup(t)
+	defer cleanup(t, l)
 
 	for _, exp := range msgSets {
 		_, err = l.Append(exp)
@@ -60,7 +59,7 @@ func TestNewCommitLog(t *testing.T) {
 func BenchmarkCommitLog(b *testing.B) {
 	var err error
 	l := setup(b)
-	defer cleanup(b)
+	defer cleanup(b, l)
 
 	msgSet := msgSets[0]
 
@@ -73,7 +72,7 @@ func BenchmarkCommitLog(b *testing.B) {
 func TestTruncate(t *testing.T) {
 	var err error
 	l := setup(t)
-	defer cleanup(t)
+	defer cleanup(t, l)
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
@@ -114,7 +113,7 @@ func TestTruncate(t *testing.T) {
 func TestCleaner(t *testing.T) {
 	var err error
 	l := setup(t)
-	defer cleanup(t)
+	defer cleanup(t, l)
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)
@@ -141,7 +140,6 @@ func check(t require.TestingT, got, want []byte) {
 
 func setup(t require.TestingT) *commitlog.CommitLog {
 	opts := commitlog.Options{
-		Path:            path,
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
 	}
@@ -149,12 +147,15 @@ func setup(t require.TestingT) *commitlog.CommitLog {
 }
 
 func setupWithOptions(t require.TestingT, opts commitlog.Options) *commitlog.CommitLog {
+	if opts.Path == "" {
+		opts.Path = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
+	}
 	l, err := commitlog.New(opts)
 	require.NoError(t, err)
 	return l
 }
 
-func cleanup(t require.TestingT) {
-	os.RemoveAll(path)
-	os.MkdirAll(path, 0755)
+func cleanup(t require.TestingT, l *commitlog.CommitLog) {
+	os.RemoveAll(l.Path)
+	os.MkdirAll(l.Path, 0755)
 }
