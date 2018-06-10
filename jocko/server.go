@@ -254,10 +254,10 @@ func (s *Server) handleRequest(conn net.Conn) {
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
 
 		s.requestCh <- &Context{
-			Parent:  ctx,
-			Header:  header,
-			Request: req,
-			Conn:    conn,
+			parent: ctx,
+			header: header,
+			req:    req,
+			conn:   conn,
 		}
 	}
 }
@@ -268,11 +268,11 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	s.vlog(sp, "response", respCtx)
 	defer psp.Finish()
 	defer sp.Finish()
-	b, err := protocol.Encode(respCtx.Response.(protocol.Encoder))
+	b, err := protocol.Encode(respCtx.res.(protocol.Encoder))
 	if err != nil {
 		return err
 	}
-	_, err = respCtx.Conn.Write(b)
+	_, err = respCtx.conn.Write(b)
 	return err
 }
 

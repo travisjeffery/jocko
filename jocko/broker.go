@@ -141,7 +141,7 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 				queueSpan.Finish()
 			}
 
-			switch req := reqCtx.Request.(type) {
+			switch req := reqCtx.req.(type) {
 			case *protocol.ProduceRequest:
 				response = b.handleProduce(reqCtx, req)
 			case *protocol.FetchRequest:
@@ -195,11 +195,11 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 		responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
 
 		responses <- &Context{
-			Parent: responseCtx,
-			Conn:   reqCtx.Conn,
-			Header: reqCtx.Header,
-			Response: &protocol.Response{
-				CorrelationID: reqCtx.Header.CorrelationID,
+			parent: responseCtx,
+			conn:   reqCtx.conn,
+			header: reqCtx.header,
+			res: &protocol.Response{
+				CorrelationID: reqCtx.header.CorrelationID,
 				Body:          response,
 			},
 		}
@@ -215,7 +215,7 @@ func (b *Broker) JoinLAN(addrs ...string) protocol.Error {
 	return protocol.ErrNone
 }
 
-// Request handling.
+// req handling.
 
 func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing.Span {
 	if ctx == nil {
