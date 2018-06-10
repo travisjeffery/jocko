@@ -10,15 +10,11 @@ import (
 func TestSegmentScanner(t *testing.T) {
 	var err error
 
-	opts := commitlog.Options{
-		Path:            path,
+	l := setupWithOptions(t, commitlog.Options{
 		MaxSegmentBytes: 1000,
 		MaxLogBytes:     1000,
-	}
-	l, err := commitlog.New(opts)
-	require.NoError(t, err)
-
-	defer cleanup(t)
+	})
+	defer cleanup(t, l)
 
 	for _, msgSet := range msgSets {
 		_, err = l.Append(msgSet)

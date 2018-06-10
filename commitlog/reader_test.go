@@ -23,11 +23,10 @@ func TestReader(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var err error
 			l := setupWithOptions(t, commitlog.Options{
-				Path:            path,
 				MaxSegmentBytes: test.segmentSize,
 				MaxLogBytes:     -1,
 			})
-			defer cleanup(t)
+			defer cleanup(t, l)
 
 			numMsgs := 10
 			msgs := make([]commitlog.MessageSet, numMsgs)
