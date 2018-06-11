@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type Data struct {
@@ -106,4 +110,43 @@ func (r *ProduceRequest) Key() int16 {
 
 func (r *ProduceRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *ProduceRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	if r.TransactionalID != nil {
+		e.AddString("transactional id", *r.TransactionalID)
+	}
+	e.AddInt16("acks", r.Acks)
+	e.AddDuration("timeout", r.Timeout)
+	e.AddArray("topic data", TopicDatas(r.TopicData))
+	return nil
+}
+
+type TopicDatas []*TopicData
+
+func (r TopicDatas) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range r {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (r *TopicData) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddString("topic", r.Topic)
+	e.AddArray("data", Datas(r.Data))
+	return nil
+}
+
+type Datas []*Data
+
+func (r Datas) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range r {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (r *Data) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddInt32("partition", r.Partition)
+	return nil
 }

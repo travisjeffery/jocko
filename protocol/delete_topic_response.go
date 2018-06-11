@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type DeleteTopicsResponse struct {
@@ -54,4 +58,8 @@ func (c *DeleteTopicsResponse) Decode(d PacketDecoder, version int16) error {
 
 func (r *DeleteTopicsResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *DeleteTopicsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

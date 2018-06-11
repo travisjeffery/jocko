@@ -51,12 +51,12 @@ func TestBroker_Run(t *testing.T) {
 				requestCh:  make(chan *Context, 2),
 				responseCh: make(chan *Context, 2),
 				requests: []*Context{{
-					header:  &protocol.RequestHeader{CorrelationID: 1},
-					req: &protocol.APIVersionsRequest{},
+					header: &protocol.RequestHeader{CorrelationID: 1},
+					req:    &protocol.APIVersionsRequest{},
 				}},
 				responses: []*Context{{
-					header:   &protocol.RequestHeader{CorrelationID: 1},
-					res: &protocol.Response{CorrelationID: 1, Body: apiVersions},
+					header: &protocol.RequestHeader{CorrelationID: 1},
+					res:    &protocol.Response{CorrelationID: 1, Body: apiVersions},
 				}},
 			},
 		},
@@ -114,8 +114,8 @@ func TestBroker_Run(t *testing.T) {
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 					}}}}, {
-					header:  &protocol.RequestHeader{CorrelationID: 2},
-					req: &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
+					header: &protocol.RequestHeader{CorrelationID: 2},
+					req:    &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
 				},
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
@@ -151,12 +151,12 @@ func TestBroker_Run(t *testing.T) {
 								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
-						header:  &protocol.RequestHeader{CorrelationID: 3},
-						req: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -1}}}}},
+						header: &protocol.RequestHeader{CorrelationID: 3},
+						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -1}}}}},
 					},
 					{
-						header:  &protocol.RequestHeader{CorrelationID: 4},
-						req: &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
+						header: &protocol.RequestHeader{CorrelationID: 4},
+						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
 					},
 				},
 				responses: []*Context{
@@ -168,8 +168,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
-							Responses: []*protocol.ProduceResponse{{
+						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
+							Responses: []*protocol.ProduceTopicResponse{{
 								Topic:              "the-topic",
 								PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
 							}},
@@ -199,7 +199,7 @@ func TestBroker_Run(t *testing.T) {
 				switch res := ctx.res.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
-				case *protocol.ProduceResponses:
+				case *protocol.ProduceResponse:
 					handleProduceResponse(t, res)
 				}
 			},
@@ -226,8 +226,8 @@ func TestBroker_Run(t *testing.T) {
 								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
-						header:  &protocol.RequestHeader{CorrelationID: 3},
-						req: &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
+						header: &protocol.RequestHeader{CorrelationID: 3},
+						req:    &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
 					},
 				},
 				responses: []*Context{
@@ -239,8 +239,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
-							Responses: []*protocol.ProduceResponse{
+						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
+							Responses: []*protocol.ProduceTopicResponse{
 								{
 									Topic:              "the-topic",
 									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
@@ -250,8 +250,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
-						res: &protocol.Response{CorrelationID: 3, Body: &protocol.FetchResponses{
-							Responses: []*protocol.FetchResponse{{
+						res: &protocol.Response{CorrelationID: 3, Body: &protocol.FetchResponse{
+							Responses: protocol.FetchTopicResponses{{
 								Topic: "the-topic",
 								PartitionResponses: []*protocol.FetchPartitionResponse{{
 									Partition:     0,
@@ -268,7 +268,7 @@ func TestBroker_Run(t *testing.T) {
 				switch res := ctx.res.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
-				case *protocol.ProduceResponses:
+				case *protocol.ProduceResponse:
 					handleProduceResponse(t, res)
 				}
 			},
@@ -295,8 +295,8 @@ func TestBroker_Run(t *testing.T) {
 								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
-						header:  &protocol.RequestHeader{CorrelationID: 3},
-						req: &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
+						header: &protocol.RequestHeader{CorrelationID: 3},
+						req:    &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
 					},
 				},
 				responses: []*Context{
@@ -308,8 +308,8 @@ func TestBroker_Run(t *testing.T) {
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
-							Responses: []*protocol.ProduceResponse{
+						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
+							Responses: []*protocol.ProduceTopicResponse{
 								{
 									Topic:              "the-topic",
 									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
@@ -322,7 +322,7 @@ func TestBroker_Run(t *testing.T) {
 						res: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
 							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
 							TopicMetadata: []*protocol.TopicMetadata{
-								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), ParititionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
+								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), PartitionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
 								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
 							},
 						}},
@@ -333,7 +333,7 @@ func TestBroker_Run(t *testing.T) {
 				switch res := ctx.res.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
-				case *protocol.ProduceResponses:
+				case *protocol.ProduceResponse:
 					handleProduceResponse(t, res)
 				}
 			},
@@ -352,8 +352,8 @@ func TestBroker_Run(t *testing.T) {
 				},
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 2},
-					res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponses{
-						Responses: []*protocol.ProduceResponse{{
+					res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
+						Responses: []*protocol.ProduceTopicResponse{{
 							Topic:              "another-topic",
 							PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, ErrorCode: protocol.ErrUnknownTopicOrPartition.Code()}},
 						}},
@@ -363,7 +363,7 @@ func TestBroker_Run(t *testing.T) {
 				switch res := ctx.res.(*protocol.Response).Body.(type) {
 				// handle timestamp explicitly since we don't know what
 				// it'll be set to
-				case *protocol.ProduceResponses:
+				case *protocol.ProduceResponse:
 					handleProduceResponse(t, res)
 				}
 			},
@@ -777,7 +777,7 @@ func wantPeers(s *Broker, peers int) error {
 	return nil
 }
 
-func handleProduceResponse(t *testing.T, res *protocol.ProduceResponses) {
+func handleProduceResponse(t *testing.T, res *protocol.ProduceResponse) {
 	for _, response := range res.Responses {
 		for _, pr := range response.PartitionResponses {
 			if pr.ErrorCode != protocol.ErrNone.Code() {

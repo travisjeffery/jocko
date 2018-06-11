@@ -321,9 +321,6 @@ func (b *Broker) handleLeaderAndISR(ctx *Context, req *protocol.LeaderAndISRRequ
 		}
 	}
 	for i, p := range req.PartitionStates {
-		_, err := b.replicaLookup.Replica(p.Topic, p.Partition)
-		isNew := err != nil
-
 		// TODO: need to replace the replica regardless
 		replica := &Replica{
 			BrokerID: b.config.ID,
@@ -341,18 +338,25 @@ func (b *Broker) handleLeaderAndISR(ctx *Context, req *protocol.LeaderAndISRRequ
 		}
 		b.replicaLookup.AddReplica(replica)
 
-		if err := b.startReplica(replica); err != protocol.ErrNone {
-			setErr(i, p, err)
-			continue
-		}
-		if p.Leader == b.config.ID && (replica.Partition.Leader != b.config.ID || isNew) {
+		if p.Leader == b.config.ID && (replica.Partition.Leader == b.config.ID) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
+
+			if err := b.startReplica(replica); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
+			}
+
 			if err := b.becomeLeader(replica, p); err != protocol.ErrNone {
 				setErr(i, p, err)
 				continue
 			}
-		} else if contains(p.Replicas, b.config.ID) && (!contains(replica.Partition.AR, p.Leader) || isNew) {
+		} else if contains(p.Replicas, b.config.ID) && (p.Leader != b.config.ID) {
 			// is command asking this broker to follow leader who it isn't a leader of already
+			if err := b.startReplica(replica); err != protocol.ErrNone {
+				setErr(i, p, err)
+				continue
+			}
+
 			if err := b.becomeFollower(replica, p); err != protocol.ErrNone {
 				setErr(i, p, err)
 				continue
@@ -396,12 +400,12 @@ func (b *Broker) handleOffsets(ctx *Context, req *protocol.OffsetsRequest) *prot
 	return oResp
 }
 
-func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *protocol.ProduceResponses {
+func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *protocol.ProduceResponse {
 	sp := span(ctx, b.tracer, "produce")
 	defer sp.Finish()
-	resp := new(protocol.ProduceResponses)
+	resp := new(protocol.ProduceResponse)
 	resp.APIVersion = req.Version()
-	resp.Responses = make([]*protocol.ProduceResponse, len(req.TopicData))
+	resp.Responses = make([]*protocol.ProduceTopicResponse, len(req.TopicData))
 	for i, td := range req.TopicData {
 		presps := make([]*protocol.ProducePartitionResponse, len(td.Data))
 		for j, p := range td.Data {
@@ -438,7 +442,7 @@ func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *prot
 			presp.LogAppendTime = time.Now()
 			presps[j] = presp
 		}
-		resp.Responses[i] = &protocol.ProduceResponse{
+		resp.Responses[i] = &protocol.ProduceTopicResponse{
 			Topic:              td.Topic,
 			PartitionResponses: presps,
 		}
@@ -494,20 +498,20 @@ func (b *Broker) handleMetadata(ctx *Context, req *protocol.MetadataRequest) *pr
 			_, p, err := state.GetPartition(topic.Topic, id)
 			if err != nil {
 				partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
-					ParititionID:       id,
+					PartitionID:        id,
 					PartitionErrorCode: protocol.ErrUnknown.Code(),
 				})
 				continue
 			}
 			if p == nil {
 				partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
-					ParititionID:       id,
+					PartitionID:        id,
 					PartitionErrorCode: protocol.ErrUnknownTopicOrPartition.Code(),
 				})
 				continue
 			}
 			partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
-				ParititionID:       p.ID,
+				PartitionID:        p.ID,
 				PartitionErrorCode: protocol.ErrNone.Code(),
 				Leader:             p.Leader,
 				Replicas:           p.AR,
@@ -743,16 +747,16 @@ func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *pr
 	return resp
 }
 
-func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.FetchResponses {
+func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.FetchResponse {
 	sp := span(ctx, b.tracer, "fetch")
 	defer sp.Finish()
-	fresp := &protocol.FetchResponses{
-		Responses: make([]*protocol.FetchResponse, len(r.Topics)),
+	fresp := &protocol.FetchResponse{
+		Responses: make(protocol.FetchTopicResponses, len(r.Topics)),
 	}
 	fresp.APIVersion = r.Version()
 	received := time.Now()
 	for i, topic := range r.Topics {
-		fr := &protocol.FetchResponse{
+		fr := &protocol.FetchTopicResponse{
 			Topic:              topic.Topic,
 			PartitionResponses: make([]*protocol.FetchPartitionResponse, len(topic.Partitions)),
 		}
@@ -956,6 +960,8 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 
 	state := b.fsm.State()
 	_, topic, _ := state.GetTopic(replica.Partition.Topic)
+
+	// TODO: think i need to just ensure/add the topic if it's not here yet
 
 	if topic == nil {
 		return protocol.ErrUnknownTopicOrPartition
@@ -1183,7 +1189,8 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
-	r := NewReplicator(ReplicatorConfig{}, replica, conn, b.logger)
+	logger := b.logger.With(log.Int32("leader", replica.Partition.Leader))
+	r := NewReplicator(ReplicatorConfig{}, replica, conn, logger)
 	replica.Replicator = r
 	if !b.config.DevMode {
 		r.Replicate()
@@ -1268,6 +1275,10 @@ type Replica struct {
 	Leo        int64
 	Replicator *Replicator
 	sync.Mutex
+}
+
+func (r Replica) String() string {
+	return fmt.Sprintf("replica: %d {broker: %d, leader: %d, hw: %d, leo: %d}", r.Partition.ID, r.BrokerID, r.Partition.Leader, r.Hw, r.Leo)
 }
 
 func (b *Broker) offsetsTopic(ctx *Context) (topic *structs.Topic, err error) {

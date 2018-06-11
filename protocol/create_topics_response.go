@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type TopicErrorCode struct {
@@ -77,4 +81,8 @@ func (c *CreateTopicsResponse) Decode(d PacketDecoder, version int16) error {
 
 func (r *CreateTopicsResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *CreateTopicsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

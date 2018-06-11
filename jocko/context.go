@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/travisjeffery/jocko/protocol"
+	"go.uber.org/zap/zapcore"
 )
 
 type Context struct {
-	sync.Mutex
+	mu     sync.Mutex
 	conn   io.ReadWriter
 	err    error
 	header *protocol.RequestHeader
@@ -45,7 +46,7 @@ func (ctx *Context) Err() error {
 }
 
 func (ctx *Context) Value(key interface{}) interface{} {
-	ctx.Lock()
+	ctx.mu.Lock()
 	if ctx.vals == nil {
 		ctx.vals = make(map[interface{}]interface{})
 	}
@@ -53,6 +54,19 @@ func (ctx *Context) Value(key interface{}) interface{} {
 	if val == nil {
 		val = ctx.parent.Value(key)
 	}
-	ctx.Unlock()
+	ctx.mu.Unlock()
 	return val
+}
+
+func (ctx *Context) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	if ctx.header != nil {
+		e.AddObject("header", ctx.header)
+	}
+	if ctx.req != nil {
+		e.AddObject("request", ctx.req.(zapcore.ObjectMarshaler))
+	}
+	if ctx.res != nil {
+		e.AddObject("response", ctx.res.(zapcore.ObjectMarshaler))
+	}
+	return nil
 }

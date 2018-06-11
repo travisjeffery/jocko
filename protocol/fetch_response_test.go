@@ -9,10 +9,10 @@ import (
 
 func TestFetchResponse(t *testing.T) {
 	req := require.New(t)
-	exp := &FetchResponses{
+	exp := &FetchResponse{
 		APIVersion:   2,
 		ThrottleTime: time.Millisecond,
-		Responses: []*FetchResponse{{
+		Responses: []*FetchTopicResponse{{
 			Topic: "test_topic",
 			PartitionResponses: []*FetchPartitionResponse{{
 				Partition:     1,
@@ -24,7 +24,7 @@ func TestFetchResponse(t *testing.T) {
 	}
 	b, err := Encode(exp)
 	req.NoError(err)
-	var act FetchResponses
+	var act FetchResponse
 	err = Decode(b, &act, exp.Version())
 	req.NoError(err)
 	req.Equal(exp, &act)

@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type OffsetsPartition struct {
 	Partition     int32
 	Timestamp     int64 // -1 to receive latest offset, -2 to receive earliest offset
@@ -107,4 +111,8 @@ func (r *OffsetsRequest) Key() int16 {
 
 func (r *OffsetsRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *OffsetsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

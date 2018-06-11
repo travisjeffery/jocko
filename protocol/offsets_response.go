@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type PartitionResponse struct {
@@ -116,4 +120,8 @@ func (r *OffsetsResponse) Decode(d PacketDecoder, version int16) (err error) {
 
 func (r *OffsetsResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *OffsetsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

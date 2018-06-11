@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type IsolationLevel int8
 
 const (
@@ -134,4 +138,43 @@ func (r *FetchRequest) Key() int16 {
 
 func (r *FetchRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *FetchRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddInt32("replica id", r.ReplicaID)
+	e.AddInt32("min bytes", r.MinBytes)
+	e.AddInt32("max bytes", r.MaxBytes)
+	e.AddArray("topic", FetchTopics(r.Topics))
+	return nil
+}
+
+func (f *FetchPartition) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddInt32("partition", f.Partition)
+	e.AddInt64("fetch offset", f.FetchOffset)
+	e.AddInt32("max bytes", f.MaxBytes)
+	return nil
+}
+
+type FetchPartitions []*FetchPartition
+
+func (f FetchPartitions) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range f {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (f *FetchTopic) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddString("topic", f.Topic)
+	e.AddArray("partitions", FetchPartitions(f.Partitions))
+	return nil
+}
+
+type FetchTopics []*FetchTopic
+
+func (f FetchTopics) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range f {
+		e.AppendObject(t)
+	}
+	return nil
 }

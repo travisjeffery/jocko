@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 // https://kafka.apache.org/protocol#The_Messages_DescribeConfigs
 
 type DescribeConfigsRequest struct {
@@ -68,4 +72,8 @@ func (r *DescribeConfigsRequest) Key() int16 {
 
 func (r *DescribeConfigsRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *DescribeConfigsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

@@ -1,14 +1,14 @@
 package util
 
 import (
-	"strings"
+	"fmt"
 
 	"github.com/cespare/xxhash"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func Dump(i interface{}) string {
-	return strings.Replace(spew.Sdump(i), "\n", "", -1)
+	return fmt.Sprintf("%s", i)
+	// return strings.Replace(spew.Sdump(i), "\n", "", -1)
 }
 
 func Hash(s string) uint64 {

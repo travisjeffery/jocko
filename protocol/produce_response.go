@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type ProducePartitionResponse struct {
@@ -10,19 +14,19 @@ type ProducePartitionResponse struct {
 	LogStartOffset int64
 }
 
-type ProduceResponse struct {
+type ProduceTopicResponse struct {
 	Topic              string
 	PartitionResponses []*ProducePartitionResponse
 }
 
-type ProduceResponses struct {
+type ProduceResponse struct {
 	APIVersion int16
 
-	Responses    []*ProduceResponse
+	Responses    []*ProduceTopicResponse
 	ThrottleTime time.Duration
 }
 
-func (r *ProduceResponses) Encode(e PacketEncoder) (err error) {
+func (r *ProduceResponse) Encode(e PacketEncoder) (err error) {
 	if err = e.PutArrayLength(len(r.Responses)); err != nil {
 		return err
 	}
@@ -51,15 +55,15 @@ func (r *ProduceResponses) Encode(e PacketEncoder) (err error) {
 	return nil
 }
 
-func (r *ProduceResponses) Decode(d PacketDecoder, version int16) (err error) {
+func (r *ProduceResponse) Decode(d PacketDecoder, version int16) (err error) {
 	r.APIVersion = version
 	l, err := d.ArrayLength()
 	if err != nil {
 		return err
 	}
-	r.Responses = make([]*ProduceResponse, l)
+	r.Responses = make([]*ProduceTopicResponse, l)
 	for i := range r.Responses {
-		resp := new(ProduceResponse)
+		resp := new(ProduceTopicResponse)
 		r.Responses[i] = resp
 		resp.Topic, err = d.String()
 		if err != nil {
@@ -111,4 +115,40 @@ func (r *ProduceResponses) Decode(d PacketDecoder, version int16) (err error) {
 	}
 	return nil
 
+}
+
+func (r *ProduceResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddArray("topics", ProduceTopicResponses(r.Responses))
+	return nil
+}
+
+type ProduceTopicResponses []*ProduceTopicResponse
+
+func (r ProduceTopicResponses) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range r {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (r *ProduceTopicResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddString("topic", r.Topic)
+	e.AddArray("partitions", ProducePartitionResponses(r.PartitionResponses))
+	return nil
+}
+
+type ProducePartitionResponses []*ProducePartitionResponse
+
+func (r ProducePartitionResponses) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range r {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (r *ProducePartitionResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddInt32("partition", r.Partition)
+	e.AddInt16("error code", r.ErrorCode)
+	e.AddInt64("base offset", r.BaseOffset)
+	return nil
 }

@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type HeartbeatResponse struct {
@@ -34,4 +38,8 @@ func (r *HeartbeatResponse) Key() int16 {
 
 func (r *HeartbeatResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *HeartbeatResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

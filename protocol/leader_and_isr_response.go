@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type LeaderAndISRPartition struct {
 	Topic     string
 	Partition int32
@@ -62,4 +66,26 @@ func (r *LeaderAndISRResponse) Key() int16 {
 
 func (r *LeaderAndISRResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *LeaderAndISRResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddInt16("error code", r.ErrorCode)
+	e.AddArray("partitions", LeaderAndISRPartitions(r.Partitions))
+	return nil
+}
+
+type LeaderAndISRPartitions []*LeaderAndISRPartition
+
+func (r LeaderAndISRPartitions) MarshalLogArray(e zapcore.ArrayEncoder) error {
+	for _, t := range r {
+		e.AppendObject(t)
+	}
+	return nil
+}
+
+func (r *LeaderAndISRPartition) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddString("topic", r.Topic)
+	e.AddInt32("partition", r.Partition)
+	e.AddInt16("error code", r.ErrorCode)
+	return nil
 }

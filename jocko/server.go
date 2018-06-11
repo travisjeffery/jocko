@@ -246,26 +246,27 @@ func (s *Server) handleRequest(conn net.Conn) {
 
 		decodeSpan.Finish()
 
-		s.vlog(span, "request", req)
-
 		ctx := opentracing.ContextWithSpan(context.Background(), span)
-
 		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
 
-		s.requestCh <- &Context{
+		reqCtx := &Context{
 			parent: ctx,
 			header: header,
 			req:    req,
 			conn:   conn,
 		}
+
+		s.vlog(span, "handling request", "request", reqCtx)
+
+		s.requestCh <- reqCtx
 	}
 }
 
 func (s *Server) handleResponse(respCtx *Context) error {
 	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
-	s.vlog(sp, "response", respCtx)
+	s.vlog(sp, "handling response", "response", respCtx)
 	defer psp.Finish()
 	defer sp.Finish()
 	b, err := protocol.Encode(respCtx.res.(protocol.Encoder))
@@ -285,8 +286,9 @@ func (s *Server) ID() int32 {
 	return s.config.ID
 }
 
-func (s *Server) vlog(span opentracing.Span, k string, i interface{}) {
+func (s *Server) vlog(span opentracing.Span, msg, k string, i interface{}) {
 	if serverVerboseLogs {
 		span.LogKV(k, util.Dump(i))
+		s.logger.Info(msg, log.Object(k, i))
 	}
 }

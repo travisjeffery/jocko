@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type StopReplicaPartition struct {
 	Topic     string
 	Partition int32
@@ -68,4 +72,8 @@ func (r *StopReplicaRequest) Key() int16 {
 
 func (r *StopReplicaRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *StopReplicaRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type Coordinator struct {
@@ -68,4 +72,8 @@ func (r *FindCoordinatorResponse) Decode(d PacketDecoder, version int16) (err er
 
 func (r *FindCoordinatorResponse) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *FindCoordinatorResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }
