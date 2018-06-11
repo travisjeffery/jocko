@@ -7,7 +7,7 @@ import (
 
 // Client is used to request other brokers.
 type client interface {
-	Fetch(fetchRequest *protocol.FetchRequest) (*protocol.FetchResponses, error)
+	Fetch(fetchRequest *protocol.FetchRequest) (*protocol.FetchResponse, error)
 	CreateTopics(createRequest *protocol.CreateTopicRequests) (*protocol.CreateTopicsResponse, error)
 	LeaderAndISR(request *protocol.LeaderAndISRRequest) (*protocol.LeaderAndISRResponse, error)
 	// others

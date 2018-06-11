@@ -108,8 +108,8 @@ func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.Create
 }
 
 // Fetch sends a fetch request and returns the response.
-func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponses, error) {
-	var resp protocol.FetchResponses
+func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponse, error) {
+	var resp protocol.FetchResponse
 	err := c.readOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {

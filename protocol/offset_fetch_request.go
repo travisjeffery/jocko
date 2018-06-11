@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 // https://kafka.apache.org/protocol#The_Messages_OffsetFetch
 
 type OffsetFetchRequest struct {
@@ -62,4 +66,8 @@ func (r *OffsetFetchRequest) Key() int16 {
 
 func (r *OffsetFetchRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *OffsetFetchRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

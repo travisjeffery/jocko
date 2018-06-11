@@ -1,5 +1,7 @@
 package protocol
 
+import "go.uber.org/zap/zapcore"
+
 type CreateTopicRequest struct {
 	Topic             string
 	NumPartitions     int32
@@ -138,4 +140,8 @@ func (c *CreateTopicRequests) Key() int16 {
 
 func (r *CreateTopicRequests) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *CreateTopicRequests) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

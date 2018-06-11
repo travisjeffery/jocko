@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type SyncGroupResponse struct {
@@ -36,4 +40,8 @@ func (r *SyncGroupResponse) Decode(d PacketDecoder, version int16) (err error) {
 
 func (r *SyncGroupResponse) Key() int16 {
 	return 14
+}
+
+func (r *SyncGroupResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

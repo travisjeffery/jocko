@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type StopReplicaResponsePartition struct {
 	Topic     string
 	Partition int32
@@ -47,4 +51,8 @@ func (r *StopReplicaResponse) Decode(d PacketDecoder, version int16) (err error)
 		}
 	}
 	return err
+}
+
+func (r *StopReplicaResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }

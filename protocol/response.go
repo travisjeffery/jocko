@@ -1,5 +1,7 @@
 package protocol
 
+import "go.uber.org/zap/zapcore"
+
 type ResponseBody interface {
 	Encoder
 	VersionedDecoder
@@ -36,5 +38,10 @@ func (r *Response) Decode(pd PacketDecoder, version int16) (err error) {
 	if r.Body != nil {
 		return r.Body.Decode(pd, version)
 	}
+	return nil
+}
+
+func (r *Response) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	e.AddObject("body", r.Body.(zapcore.ObjectMarshaler))
 	return nil
 }

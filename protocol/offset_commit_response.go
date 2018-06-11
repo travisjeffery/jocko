@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 import "time"
 
 type OffsetCommitResponse struct {
@@ -78,5 +82,9 @@ func (r *OffsetCommitResponse) Decode(d PacketDecoder, version int16) (err error
 		}
 
 	}
+	return nil
+}
+
+func (r *OffsetCommitResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	return nil
 }

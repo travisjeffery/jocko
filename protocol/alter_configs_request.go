@@ -1,5 +1,9 @@
 package protocol
 
+import (
+	"go.uber.org/zap/zapcore"
+)
+
 type AlterConfigsRequest struct {
 	APIVersion int16
 
@@ -88,4 +92,8 @@ func (r *AlterConfigsRequest) Key() int16 {
 
 func (r *AlterConfigsRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *AlterConfigsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
+	return nil
 }
