@@ -69,8 +69,11 @@ Kafka/distributed commit log service in Go.
 
     ```
     $ cd $GOPATH/src/github.com/travisjeffery/jocko
-    $ make
+    $ make build
     ```
+
+    (If you see an error about `dep` not being found, ensure that
+    `$GOPATH/bin` is in your `PATH`)
 
 ### Docker
 
