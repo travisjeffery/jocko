@@ -70,7 +70,7 @@ func (v *memberlistConfigValue) String() string {
 }
 
 func init() {
-	brokerCmd := &cobra.Command{Use: "broker", Short: "Run a Jocko broker", Run: run}
+	brokerCmd := &cobra.Command{Use: "broker", Short: "Run a Jocko broker", Run: run, Args: cobra.NoArgs}
 	brokerCmd.Flags().StringVar(&brokerCfg.RaftAddr, "raft-addr", "127.0.0.1:9093", "Address for Raft to bind and advertise on")
 	brokerCmd.Flags().StringVar(&brokerCfg.DataDir, "data-dir", "/tmp/jocko", "A comma separated list of directories under which to store log files")
 	brokerCmd.Flags().StringVar(&brokerCfg.Addr, "broker-addr", "0.0.0.0:9092", "Address for broker to bind on")
@@ -82,9 +82,10 @@ func init() {
 	brokerCmd.Flags().Int32Var(&brokerCfg.ID, "id", 0, "Broker ID")
 
 	topicCmd := &cobra.Command{Use: "topic", Short: "Manage topics"}
-	createTopicCmd := &cobra.Command{Use: "create", Short: "Create a topic", Run: createTopic}
+	createTopicCmd := &cobra.Command{Use: "create", Short: "Create a topic", Run: createTopic, Args: cobra.NoArgs}
 	createTopicCmd.Flags().StringVar(&topicCfg.BrokerAddr, "broker-addr", "0.0.0.0:9092", "Address for Broker to bind on")
-	createTopicCmd.Flags().StringVar(&topicCfg.Topic, "topic", "", "Name of topic to create")
+	createTopicCmd.Flags().StringVar(&topicCfg.Topic, "topic", "", "Name of topic to create (required)")
+	createTopicCmd.MarkFlagRequired("topic")
 	createTopicCmd.Flags().Int32Var(&topicCfg.Partitions, "partitions", 1, "Number of partitions")
 	createTopicCmd.Flags().IntVar(&topicCfg.ReplicationFactor, "replication-factor", 1, "Replication factor")
 
