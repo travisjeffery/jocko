@@ -5,16 +5,16 @@ services:
     build:
       context: .
     image: travisjeffery/jocko:latest
-    command: jocko broker --id 0 --raft-addr=jocko_a:9093
+    command: jocko broker --id 0 --raft-addr=jocko_a:9093 --bootstrap --bootstrap-expect=3
 
   jocko_b:
     build:
       context: .
     image: travisjeffery/jocko:latest
-    command: jocko broker --serf-members=jocko_a:9094 --id 1 --raft-addr=jocko_b:9093
+    command: jocko broker --join=jocko_a:9094 --id 1 --raft-addr=jocko_b:9093 --bootstrap-expect=3
 
   jocko_c:
     build:
       context: .
     image: travisjeffery/jocko:latest
-    command: jocko broker --serf-members=jocko_a:9094 --id 2 --raft-addr=jocko_c:9093
+    command: jocko broker --join=jocko_a:9094 --id 2 --raft-addr=jocko_c:9093 --bootstrap-expect=3

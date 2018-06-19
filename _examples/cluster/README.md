@@ -14,32 +14,30 @@ $ go build
 
 ```bash
 $ ./jocko broker \
-          --debug \
-          --log-dir="/tmp/jocko0" \
+          --data-dir="/tmp/jocko0" \
           --broker-addr=127.0.0.1:9001 \
           --raft-addr=127.0.0.1:9002 \
           --serf-addr=127.0.0.1:9003 \
-          --prometheus-addr=127.0.0.1:9004 \
+          --bootstrap \
+          --bootstrap-expect=3 \
           --id=1
 
 $ ./jocko broker \
-          --debug \
-          --log-dir="/tmp/jocko1" \
+          --data-dir="/tmp/jocko1" \
           --broker-addr=127.0.0.1:9101 \
           --raft-addr=127.0.0.1:9102 \
           --serf-addr=127.0.0.1:9103 \
-          --prometheus-addr=127.0.0.1:9104 \
-          --serf-members=127.0.0.1:9003 \
+          --join=127.0.0.1:9003 \
+          --bootstrap-expect=3 \
           --id=2
 
 $ ./jocko broker \
-          --debug \
-          --log-dir="/tmp/jocko2" \
+          --data-dir="/tmp/jocko2" \
           --broker-addr=127.0.0.1:9201 \
           --raft-addr=127.0.0.1:9202 \
           --serf-addr=127.0.0.1:9203 \
-          --prometheus-addr=127.0.0.1:9204 \
-          --serf-members=127.0.0.1:9003 \
+          --join=127.0.0.1:9003 \
+          --bootstrap-expect=3 \
           --id=3
 ```
 
