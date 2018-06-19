@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,6 +16,7 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/uber/jaeger-lib/metrics"
 
+	"github.com/hashicorp/memberlist"
 	"github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"
@@ -37,12 +40,41 @@ var (
 	}{}
 )
 
+type memberlistConfigValue memberlist.Config
+
+func newMemberlistConfigValue(p *memberlist.Config, val string) (m *memberlistConfigValue) {
+	m = (*memberlistConfigValue)(p)
+	m.Set(val)
+	return
+}
+
+func (v *memberlistConfigValue) Set(s string) error {
+	bindIP, bindPort, err := net.SplitHostPort(s)
+	if err != nil {
+		return err
+	}
+	v.BindAddr = bindIP
+	v.BindPort, err = strconv.Atoi(bindPort)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *memberlistConfigValue) Type() string {
+	return "string"
+}
+
+func (v *memberlistConfigValue) String() string {
+	return fmt.Sprintf("%s:%d", v.BindAddr, v.BindPort)
+}
+
 func init() {
 	brokerCmd := &cobra.Command{Use: "broker", Short: "Run a Jocko broker", Run: run}
 	brokerCmd.Flags().StringVar(&brokerCfg.RaftAddr, "raft-addr", "127.0.0.1:9093", "Address for Raft to bind and advertise on")
 	brokerCmd.Flags().StringVar(&brokerCfg.DataDir, "data-dir", "/tmp/jocko", "A comma separated list of directories under which to store log files")
 	brokerCmd.Flags().StringVar(&brokerCfg.Addr, "broker-addr", "0.0.0.0:9092", "Address for broker to bind on")
-	brokerCmd.Flags().StringVar(&brokerCfg.SerfLANConfig.MemberlistConfig.BindAddr, "serf-addr", "0.0.0.0:9094", "Address for Serf to bind on") // TODO: can set addr alone or need to set bind port separately?
+	brokerCmd.Flags().Var(newMemberlistConfigValue(brokerCfg.SerfLANConfig.MemberlistConfig, "0.0.0.0:9094"), "serf-addr", "Address for Serf to bind on")
 	brokerCmd.Flags().StringSliceVar(&brokerCfg.StartJoinAddrsLAN, "join", nil, "Address of an broker serf to join at start time. Can be specified multiple times.")
 	brokerCmd.Flags().StringSliceVar(&brokerCfg.StartJoinAddrsWAN, "join-wan", nil, "Address of an broker serf to join -wan at start time. Can be specified multiple times.")
 	brokerCmd.Flags().Int32Var(&brokerCfg.ID, "id", 0, "Broker ID")
@@ -64,7 +96,9 @@ func run(cmd *cobra.Command, args []string) {
 	logger := log.New().With(
 		log.Int32("id", brokerCfg.ID),
 		log.String("broker addr", brokerCfg.Addr),
-		log.String("serf addr", brokerCfg.SerfLANConfig.MemberlistConfig.BindAddr),
+		log.String("serf addr", fmt.Sprintf("%s:%d",
+			brokerCfg.SerfLANConfig.MemberlistConfig.BindAddr,
+			brokerCfg.SerfLANConfig.MemberlistConfig.BindPort)),
 		log.String("raft addr", brokerCfg.RaftAddr),
 	)
 
