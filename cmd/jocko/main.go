@@ -40,35 +40,6 @@ var (
 	}{}
 )
 
-type memberlistConfigValue memberlist.Config
-
-func newMemberlistConfigValue(p *memberlist.Config, val string) (m *memberlistConfigValue) {
-	m = (*memberlistConfigValue)(p)
-	m.Set(val)
-	return
-}
-
-func (v *memberlistConfigValue) Set(s string) error {
-	bindIP, bindPort, err := net.SplitHostPort(s)
-	if err != nil {
-		return err
-	}
-	v.BindAddr = bindIP
-	v.BindPort, err = strconv.Atoi(bindPort)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (v *memberlistConfigValue) Type() string {
-	return "string"
-}
-
-func (v *memberlistConfigValue) String() string {
-	return fmt.Sprintf("%s:%d", v.BindAddr, v.BindPort)
-}
-
 func init() {
 	brokerCmd := &cobra.Command{Use: "broker", Short: "Run a Jocko broker", Run: run, Args: cobra.NoArgs}
 	brokerCmd.Flags().StringVar(&brokerCfg.RaftAddr, "raft-addr", "127.0.0.1:9093", "Address for Raft to bind and advertise on")
@@ -182,4 +153,33 @@ func createTopic(cmd *cobra.Command, args []string) {
 
 func main() {
 	cli.Execute()
+}
+
+type memberlistConfigValue memberlist.Config
+
+func newMemberlistConfigValue(p *memberlist.Config, val string) (m *memberlistConfigValue) {
+	m = (*memberlistConfigValue)(p)
+	m.Set(val)
+	return
+}
+
+func (v *memberlistConfigValue) Set(s string) error {
+	bindIP, bindPort, err := net.SplitHostPort(s)
+	if err != nil {
+		return err
+	}
+	v.BindAddr = bindIP
+	v.BindPort, err = strconv.Atoi(bindPort)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *memberlistConfigValue) Type() string {
+	return "string"
+}
+
+func (v *memberlistConfigValue) String() string {
+	return fmt.Sprintf("%s:%d", v.BindAddr, v.BindPort)
 }
