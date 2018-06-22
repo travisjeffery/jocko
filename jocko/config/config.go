@@ -34,9 +34,13 @@ type Config struct {
 
 // DefaultConfig creates/returns a default configuration.
 func DefaultConfig() *Config {
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
+	hostname := os.Getenv("JOCKONODENAME")
+	if hostname == "" {
+		var err error
+		hostname, err = os.Hostname()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	conf := &Config{
