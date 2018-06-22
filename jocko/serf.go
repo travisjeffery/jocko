@@ -151,7 +151,7 @@ func (b *Broker) maybeBootstrap() {
 	}
 
 	var configuration raft.Configuration
-	addrs := make([]string, len(brokers), 0)
+	addrs := make([]string, 0, len(brokers))
 	for _, meta := range brokers {
 		addr := meta.RaftAddr
 		addrs = append(addrs, addr)
