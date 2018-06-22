@@ -13,7 +13,7 @@ $ go build
 ## Start the nodes
 
 ```bash
-$ ./jocko broker \
+$ JOCKONODENAME=jocko0 ./jocko broker \
           --data-dir="/tmp/jocko0" \
           --broker-addr=127.0.0.1:9001 \
           --raft-addr=127.0.0.1:9002 \
@@ -22,22 +22,20 @@ $ ./jocko broker \
           --bootstrap-expect=3 \
           --id=1
 
-$ ./jocko broker \
+$ JOCKONODENAME=jocko1 ./jocko broker \
           --data-dir="/tmp/jocko1" \
           --broker-addr=127.0.0.1:9101 \
           --raft-addr=127.0.0.1:9102 \
           --serf-addr=127.0.0.1:9103 \
           --join=127.0.0.1:9003 \
-          --bootstrap-expect=3 \
           --id=2
 
-$ ./jocko broker \
+$ JOCKONODENAME=jocko2 ./jocko broker \
           --data-dir="/tmp/jocko2" \
           --broker-addr=127.0.0.1:9201 \
           --raft-addr=127.0.0.1:9202 \
           --serf-addr=127.0.0.1:9203 \
           --join=127.0.0.1:9003 \
-          --bootstrap-expect=3 \
           --id=3
 ```
 

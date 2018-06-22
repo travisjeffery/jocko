@@ -11,10 +11,10 @@ services:
     build:
       context: .
     image: travisjeffery/jocko:latest
-    command: jocko broker --join=jocko_a:9094 --id 1 --raft-addr=jocko_b:9093 --bootstrap-expect=3
+    command: jocko broker --join=jocko_a:9094 --id 1 --raft-addr=jocko_b:9093
 
   jocko_c:
     build:
       context: .
     image: travisjeffery/jocko:latest
-    command: jocko broker --join=jocko_a:9094 --id 2 --raft-addr=jocko_c:9093 --bootstrap-expect=3
+    command: jocko broker --join=jocko_a:9094 --id 2 --raft-addr=jocko_c:9093
