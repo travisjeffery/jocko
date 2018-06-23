@@ -104,6 +104,13 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	if len(brokerCfg.StartJoinAddrsLAN) > 0 {
+		if err := broker.JoinLAN(brokerCfg.StartJoinAddrsLAN...); err != protocol.ErrNone {
+			fmt.Fprintf(os.Stderr, "error joining LAN: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	srv := jocko.NewServer(brokerCfg, broker, nil, tracer, closer.Close, logger)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
