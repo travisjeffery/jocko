@@ -1,6 +1,9 @@
 package jocko
 
 import (
+	"time"
+
+	"github.com/cenkalti/backoff"
 	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
@@ -24,6 +27,7 @@ type Replicator struct {
 	msgs                chan []byte
 	done                chan struct{}
 	leader              client
+	backoff             *backoff.ExponentialBackOff
 }
 
 type ReplicatorConfig struct {
@@ -37,6 +41,7 @@ func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, log
 	if config.MinBytes == 0 {
 		config.MinBytes = 1
 	}
+	bo := backoff.NewExponentialBackOff()
 	r := &Replicator{
 		config:  config,
 		logger:  logger,
@@ -44,6 +49,7 @@ func NewReplicator(config ReplicatorConfig, replica *Replica, leader client, log
 		leader:  leader,
 		done:    make(chan struct{}, 2),
 		msgs:    make(chan []byte, 2),
+		backoff: bo,
 	}
 	return r
 }
@@ -55,12 +61,15 @@ func (r *Replicator) Replicate() {
 }
 
 func (r *Replicator) fetchMessages() {
+	var fetchRequest *protocol.FetchRequest
+	var fetchResponse *protocol.FetchResponse
+	var err error
 	for {
 		select {
 		case <-r.done:
 			return
 		default:
-			fetchRequest := &protocol.FetchRequest{
+			fetchRequest = &protocol.FetchRequest{
 				ReplicaID:   r.replica.BrokerID,
 				MaxWaitTime: r.config.MaxWaitTime,
 				MinBytes:    r.config.MinBytes,
@@ -72,21 +81,21 @@ func (r *Replicator) fetchMessages() {
 					}},
 				}},
 			}
-			fetchResponse, err := r.leader.Fetch(fetchRequest)
+			fetchResponse, err = r.leader.Fetch(fetchRequest)
 			// TODO: probably shouldn't panic. just let this replica fall out of ISR.
 			if err != nil {
 				r.logger.Error("failed to fetch messages", log.Error("error", err))
-				continue
+				goto BACKOFF
 			}
 			for _, resp := range fetchResponse.Responses {
 				for _, p := range resp.PartitionResponses {
 					if p.ErrorCode != protocol.ErrNone.Code() {
 						r.logger.Error("partition response error", log.Int16("error code", p.ErrorCode), log.Any("response", p))
-						continue
+						goto BACKOFF
 					}
 					if p.RecordSet == nil {
 						// r.logger.Debug("replicator: fetch messages: record set is nil")
-						continue
+						goto BACKOFF
 					}
 					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8]))
 					if offset > r.offset {
@@ -96,6 +105,12 @@ func (r *Replicator) fetchMessages() {
 					}
 				}
 			}
+
+			r.backoff.Reset()
+			continue
+
+		BACKOFF:
+			time.Sleep(r.backoff.NextBackOff())
 		}
 	}
 }
