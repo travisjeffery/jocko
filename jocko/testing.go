@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -22,16 +21,7 @@ import (
 
 var (
 	nodeNumber int32
-	tempDir    string
 )
-
-func init() {
-	var err error
-	tempDir, err = ioutil.TempDir("", "jocko-test-cluster")
-	if err != nil {
-		panic(err)
-	}
-}
 
 func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func(cfg *config.Config)) (*Server, func()) {
 	ports := dynaport.Get(4)
@@ -59,10 +49,15 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 		panic(err)
 	}
 
+	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("jocko-test-server-%d", nodeID))
+	if err != nil {
+		panic(err)
+	}
+
 	config := config.DefaultConfig()
 	config.ID = nodeID
 	config.NodeName = fmt.Sprintf("%s-node-%d", t.Name(), nodeID)
-	config.DataDir = filepath.Join(tempDir, fmt.Sprintf("node%d", nodeID))
+	config.DataDir = tmpDir
 	config.Addr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[0])
 	config.RaftAddr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[1])
 	config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
@@ -98,6 +93,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 
 	return NewServer(config, b, nil, tracer, closer.Close), func() {
 		os.RemoveAll(config.DataDir)
+		os.RemoveAll(tmpDir)
 	}
 }
 

@@ -574,7 +574,7 @@ func (b *Broker) handleFindCoordinator(ctx *Context, req *protocol.FindCoordinat
 		resp.ErrorCode = protocol.ErrUnknownTopicOrPartition.Code()
 		goto ERROR
 	}
-	broker = b.brokerLookup.BrokerByID(raft.ServerID(p.Leader))
+	broker = b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", p.Leader)))
 
 	resp.Coordinator.NodeID = broker.ID.Int32()
 	resp.Coordinator.Host = broker.Host()
@@ -1096,7 +1096,7 @@ func (b *Broker) Leave() error {
 
 	isLeader := b.isLeader()
 	if isLeader && numPeers > 1 {
-		future := b.raft.RemoveServer(raft.ServerID(b.config.ID), 0, 0)
+		future := b.raft.RemoveServer(raft.ServerID(fmt.Sprintf("%d", b.config.ID)), 0, 0)
 		if err := future.Error(); err != nil {
 			log.Error.Printf("broker: remove ourself as raft peer error: %s", err)
 		}
@@ -1183,7 +1183,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if err := replica.Log.Truncate(hw); err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
-	broker := b.brokerLookup.BrokerByID(raft.ServerID(cmd.Leader))
+	broker := b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", cmd.Leader)))
 	if broker == nil {
 		return protocol.ErrBrokerNotAvailable
 	}

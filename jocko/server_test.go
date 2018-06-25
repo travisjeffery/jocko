@@ -22,12 +22,13 @@ const (
 )
 
 func init() {
-	log.SetPrefix("server_test: ")
 	log.SetLevel("debug")
-	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 }
 
 func TestProduceConsume(t *testing.T) {
+	log.SetPrefix("server_test: ")
+	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
+
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true

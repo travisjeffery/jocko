@@ -44,7 +44,7 @@ func (b *Broker) setupRaft() (err error) {
 	}
 	b.raftTransport = trans
 
-	b.config.RaftConfig.LocalID = raft.ServerID(b.config.ID)
+	b.config.RaftConfig.LocalID = raft.ServerID(fmt.Sprintf("%d", b.config.ID))
 	b.config.RaftConfig.StartAsLeader = b.config.StartAsLeader
 
 	// build an in-memory setup for dev mode, disk-based otherwise.
@@ -380,6 +380,9 @@ func (b *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 		return err
 	}
 
+	// Processing ourselves could result in trying to remove ourselves to
+	// fix up our address, which would make us step down. This is only
+	// safe to attempt if there are multiple servers available.
 	if m.Name == b.config.NodeName {
 		if l := len(configFuture.Configuration().Servers); l < 3 {
 			log.Debug.Printf("leader: skipping self join since cluster is too small: member: %s", m.Name)
@@ -388,8 +391,8 @@ func (b *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 	}
 
 	for _, server := range configFuture.Configuration().Servers {
-		if server.Address == raft.ServerAddress(parts.RaftAddr) || server.ID == raft.ServerID(parts.ID) {
-			if server.Address == raft.ServerAddress(parts.RaftAddr) && server.ID == raft.ServerID(parts.ID) {
+		if server.Address == raft.ServerAddress(parts.RaftAddr) || server.ID == raft.ServerID(parts.ID.String()) {
+			if server.Address == raft.ServerAddress(parts.RaftAddr) && server.ID == raft.ServerID(parts.ID.String()) {
 				// no-op if this is being called on an existing server
 				return nil
 			}
@@ -409,14 +412,14 @@ func (b *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 	}
 
 	if parts.NonVoter {
-		addFuture := b.raft.AddNonvoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		addFuture := b.raft.AddNonvoter(raft.ServerID(parts.ID.String()), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			log.Error.Printf("leader: add raft peer error: %s", err)
 			return err
 		}
 	} else {
 		log.Debug.Printf("leader: join cluster: add voter: %s", parts.ID)
-		addFuture := b.raft.AddVoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
+		addFuture := b.raft.AddVoter(raft.ServerID(parts.ID.String()), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			log.Error.Printf("leader: add raft peer error: %s", err)
 			return err
@@ -545,7 +548,7 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 
 	// TODO: optimize this to send requests to only nodes affected
 	for _, n := range passing {
-		broker := b.brokerLookup.BrokerByID(raft.ServerID(n.Node))
+		broker := b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", n.Node)))
 		if broker == nil {
 			// TODO: this probably shouldn't happen -- likely a root issue to fix
 			log.Error.Printf("trying to assign partitions to unknown broker: %s", n)
@@ -571,11 +574,11 @@ func (b *Broker) removeServer(m serf.Member, meta *metadata.Broker) error {
 		return err
 	}
 	for _, server := range configFuture.Configuration().Servers {
-		if server.ID != raft.ServerID(meta.ID) {
+		if server.ID != raft.ServerID(meta.ID.String()) {
 			continue
 		}
 		log.Info.Printf("leader: removing server by id: %s", server.ID)
-		future := b.raft.RemoveServer(raft.ServerID(meta.ID), 0, 0)
+		future := b.raft.RemoveServer(raft.ServerID(meta.ID.String()), 0, 0)
 		if err := future.Error(); err != nil {
 			log.Error.Printf("leader: remove server error: %s", err)
 			return err

@@ -26,7 +26,7 @@ func (b *brokerLookup) AddBroker(broker *metadata.Broker) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 	b.addressToBroker[raft.ServerAddress(broker.RaftAddr)] = broker
-	b.idToBroker[raft.ServerID(broker.ID.Int32())] = broker
+	b.idToBroker[raft.ServerID(broker.ID.String())] = broker
 }
 
 func (b *brokerLookup) BrokerByAddr(addr raft.ServerAddress) *metadata.Broker {
@@ -57,7 +57,7 @@ func (b *brokerLookup) RemoveBroker(broker *metadata.Broker) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 	delete(b.addressToBroker, raft.ServerAddress(broker.RaftAddr))
-	delete(b.idToBroker, raft.ServerID(broker.ID.Int32()))
+	delete(b.idToBroker, raft.ServerID(broker.ID.String()))
 }
 
 func (b *brokerLookup) Brokers() []*metadata.Broker {
