@@ -168,7 +168,7 @@ func TestProduceConsume(t *testing.T) {
 }
 
 func TestConsumerGroup(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.BootstrapExpect = 3

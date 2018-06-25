@@ -3,9 +3,12 @@ package jocko
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	golog "log"
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
@@ -37,7 +40,9 @@ func (b *Broker) setupRaft() (err error) {
 		return err
 	}
 
-	trans, err := raft.NewTCPTransport(b.config.RaftAddr, nil, 3, 10*time.Second, nil)
+	logger := golog.New(os.Stderr, fmt.Sprintf("[Node %d] ", b.config.ID), golog.LstdFlags)
+
+	trans, err := raft.NewTCPTransportWithLogger(b.config.RaftAddr, nil, 3, 10*time.Second, logger)
 	if err != nil {
 		return err
 	}
@@ -108,6 +113,7 @@ func (b *Broker) setupRaft() (err error) {
 	raftNotifyCh := make(chan bool, 1)
 	b.config.RaftConfig.NotifyCh = raftNotifyCh
 	b.raftNotifyCh = raftNotifyCh
+	b.config.RaftConfig.Logger = logger
 
 	// setup raft store
 	b.raft, err = raft.NewRaft(b.config.RaftConfig, b.fsm, logStore, stable, snap, trans)
@@ -386,6 +392,27 @@ func (b *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 		}
 	}
 
+	for _, server := range configFuture.Configuration().Servers {
+		if server.Address == raft.ServerAddress(parts.RaftAddr) || server.ID == raft.ServerID(parts.ID) {
+			if server.Address == raft.ServerAddress(parts.RaftAddr) && server.ID == raft.ServerID(parts.ID) {
+				// no-op if this is being called on an existing server
+				return nil
+			}
+			future := b.raft.RemoveServer(server.ID, 0, 0)
+			if server.Address == raft.ServerAddress(parts.RaftAddr) {
+				if err := future.Error(); err != nil {
+					return fmt.Errorf("error removing server with duplicate address %q: %s", server.Address, err)
+				}
+				b.logger.Info("removed server with duplicated address", log.String("address", string(server.Address)))
+			} else {
+				if err := future.Error(); err != nil {
+					return fmt.Errorf("removing server with duplicate ID %q: %s", server.ID, err)
+				}
+				b.logger.Info("removed server with duplicate ID", log.String("id", string(server.ID)))
+			}
+		}
+	}
+
 	if parts.NonVoter {
 		addFuture := b.raft.AddNonvoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
@@ -393,7 +420,7 @@ func (b *Broker) joinCluster(m serf.Member, parts *metadata.Broker) error {
 			return err
 		}
 	} else {
-		b.logger.Debug("leader: join cluster: add voter", log.Any("member", parts))
+		b.logger.Debug("leader: join cluster: add voter", log.Int32("voter id", parts.ID.Int32()))
 		addFuture := b.raft.AddVoter(raft.ServerID(parts.ID), raft.ServerAddress(parts.RaftAddr), 0, 0)
 		if err := addFuture.Error(); err != nil {
 			b.logger.Error("leader: failed to add raft peer", log.Error("error", err))

@@ -21,7 +21,6 @@ type Replicator struct {
 	config              ReplicatorConfig
 	logger              log.Logger
 	replica             *Replica
-	fetchSize           int32
 	highwaterMarkOffset int64
 	offset              int64
 	msgs                chan []byte

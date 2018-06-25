@@ -93,7 +93,7 @@ type Broker struct {
 func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
 	b := &Broker{
 		config:        config,
-		logger:        logger.With(log.Int32("id", config.ID), log.String("raft addr", config.RaftAddr)),
+		logger:        logger.With(log.Int32("node id", config.ID)),
 		shutdownCh:    make(chan struct{}),
 		eventChLAN:    make(chan serf.Event, 256),
 		brokerLookup:  NewBrokerLookup(),
@@ -576,6 +576,10 @@ func (b *Broker) handleFindCoordinator(ctx *Context, req *protocol.FindCoordinat
 	if err != nil {
 		goto ERROR
 	}
+	if p == nil {
+		resp.ErrorCode = protocol.ErrUnknownTopicOrPartition.Code()
+		goto ERROR
+	}
 	broker = b.brokerLookup.BrokerByID(raft.ServerID(p.Leader))
 
 	resp.Coordinator.NodeID = broker.ID.Int32()
@@ -586,7 +590,9 @@ func (b *Broker) handleFindCoordinator(ctx *Context, req *protocol.FindCoordinat
 
 ERROR:
 	// todo: which err code to use?
-	resp.ErrorCode = protocol.ErrUnknown.Code()
+	if resp.ErrorCode == 0 {
+		resp.ErrorCode = protocol.ErrUnknown.Code()
+	}
 	b.logger.Error("find coordinator failed", log.Error("error", err), log.Any("coordinator key", req.CoordinatorKey), log.Any("broker", broker))
 
 	return resp
@@ -785,6 +791,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 			}
 			rdr, rdrErr := replica.Log.NewReader(p.FetchOffset, p.MaxBytes)
 			if rdrErr != nil {
+				b.logger.Error("replica log read failed", log.Error("error", rdrErr))
 				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 					Partition: p.Partition,
 					ErrorCode: protocol.ErrUnknown.Code(),
@@ -800,6 +807,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 				// TODO: copy these bytes to outer bytes
 				nn, err := io.Copy(buf, rdr)
 				if err != nil && err != io.EOF {
+					b.logger.Error("reader copy failed", log.Error("error", err))
 					fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 						Partition: p.Partition,
 						ErrorCode: protocol.ErrUnknown.Code(),
@@ -1307,4 +1315,9 @@ func (b *Broker) offsetsTopic(ctx *Context) (topic *structs.Topic, err error) {
 		Topic: *topic,
 	})
 	return
+}
+
+// debugSnapshot takes a snapshot of this broker's state. Used to debug errors.
+func (b *Broker) debugSnapshot() {
+
 }
