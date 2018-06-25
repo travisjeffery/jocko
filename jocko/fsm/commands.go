@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"upspin.io/log"
+	"github.com/travisjeffery/jocko/log"
 )
 
 func init() {

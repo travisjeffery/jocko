@@ -11,8 +11,8 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/config"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 type contextKey string

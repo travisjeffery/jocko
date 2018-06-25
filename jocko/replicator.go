@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 // Client is used to request other brokers.

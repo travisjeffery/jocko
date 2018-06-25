@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 	"github.com/travisjeffery/jocko/jocko/metadata"
-	"upspin.io/log"
+	"github.com/travisjeffery/jocko/log"
 )
 
 const (
@@ -72,7 +72,7 @@ func (b *Broker) lanNodeJoin(me serf.MemberEvent) {
 		if !ok {
 			continue
 		}
-		log.Info.Printf("adding LAN server: %s", meta.ID)
+		log.Info.Printf("broker: adding LAN server: %s", meta.ID)
 		// update server lookup
 		b.brokerLookup.AddBroker(meta)
 		if b.config.BootstrapExpect != 0 {
@@ -87,7 +87,7 @@ func (b *Broker) lanNodeFailed(me serf.MemberEvent) {
 		if !ok {
 			continue
 		}
-		log.Info.Printf("removing LAN server: %s", m.Name)
+		log.Info.Printf("broker: removing LAN server: %s", m.Name)
 		b.brokerLookup.RemoveBroker(meta)
 	}
 }

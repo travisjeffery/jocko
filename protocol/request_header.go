@@ -50,7 +50,7 @@ func (r *RequestHeader) Decode(d PacketDecoder) error {
 
 func (r *RequestHeader) String() string {
 	return fmt.Sprintf(
-		"request header: correlation id: %d, api key: %d, client: %s, size: %d",
+		"correlation id: %d, api key: %d, client: %s, size: %d",
 		r.CorrelationID,
 		r.APIKey,
 		r.ClientID,

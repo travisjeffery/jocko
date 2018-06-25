@@ -17,7 +17,6 @@ import (
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 func TestBroker_Run(t *testing.T) {
@@ -503,7 +502,6 @@ func TestBroker_Shutdown(t *testing.T) {
 
 type fields struct {
 	id     int32
-	logger log.Logger
 	logDir string
 }
 

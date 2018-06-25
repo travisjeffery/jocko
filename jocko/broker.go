@@ -27,8 +27,8 @@ import (
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 var (
@@ -1098,13 +1098,13 @@ func (b *Broker) Leave() error {
 	if isLeader && numPeers > 1 {
 		future := b.raft.RemoveServer(raft.ServerID(b.config.ID), 0, 0)
 		if err := future.Error(); err != nil {
-			log.Error.Printf("remove ourself as raft peer error: %s", err)
+			log.Error.Printf("broker: remove ourself as raft peer error: %s", err)
 		}
 	}
 
 	if b.serf != nil {
 		if err := b.serf.Leave(); err != nil {
-			log.Error.Printf("leave LAN serf cluster error: %s", err)
+			log.Error.Printf("broker: leave LAN serf cluster error: %s", err)
 		}
 	}
 
@@ -1120,7 +1120,7 @@ func (b *Broker) Leave() error {
 			// Get the latest configuration.
 			future := b.raft.GetConfiguration()
 			if err := future.Error(); err != nil {
-				log.Error.Printf("get raft configuration error: %s", err)
+				log.Error.Printf("broker: get raft configuration error: %s", err)
 				break
 			}
 
@@ -1140,7 +1140,7 @@ func (b *Broker) Leave() error {
 
 // Shutdown is used to shutdown the broker, its serf, its raft, and so on.
 func (b *Broker) Shutdown() error {
-	log.Info.Printf("shutting down broker")
+	log.Info.Printf("broker: shutting down broker")
 	b.shutdownLock.Lock()
 	defer b.shutdownLock.Unlock()
 
@@ -1158,7 +1158,7 @@ func (b *Broker) Shutdown() error {
 		b.raftTransport.Close()
 		future := b.raft.Shutdown()
 		if err := future.Error(); err != nil {
-			log.Error.Printf("shutdown error: %s", err)
+			log.Error.Printf("broker: shutdown error: %s", err)
 		}
 		if b.raftStore != nil {
 			b.raftStore.Close()

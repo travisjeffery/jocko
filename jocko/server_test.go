@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 const (
@@ -22,8 +22,9 @@ const (
 )
 
 func init() {
+	log.SetPrefix("server_test: ")
 	log.SetLevel("debug")
-	sarama.Logger = log.NewStdLogger(log.Debug)
+	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 }
 
 func TestProduceConsume(t *testing.T) {
@@ -167,7 +168,7 @@ func TestProduceConsume(t *testing.T) {
 }
 
 func TestConsumerGroup(t *testing.T) {
-	// t.Skip()
+	t.Skip()
 
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.BootstrapExpect = 3
