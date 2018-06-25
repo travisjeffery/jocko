@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type APIVersionsRequest struct {
 	APIVersion int16
 }
@@ -23,8 +19,4 @@ func (c *APIVersionsRequest) Key() int16 {
 
 func (r *APIVersionsRequest) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *APIVersionsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

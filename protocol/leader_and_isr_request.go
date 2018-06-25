@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type PartitionState struct {
 	Topic           string
 	Partition       int32
@@ -141,54 +137,8 @@ func (r *LeaderAndISRRequest) Version() int16 {
 	return r.APIVersion
 }
 
-func (r *LeaderAndISRRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("controller id", r.ControllerID)
-	e.AddInt32("controller epoch", r.ControllerEpoch)
-	e.AddArray("partition states", PartitionStates(r.PartitionStates))
-	e.AddArray("live leaders", LiveLeaders(r.LiveLeaders))
-	return nil
-}
-
 type LiveLeaders []*LiveLeader
-
-func (r LiveLeaders) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
 
 type PartitionStates []*PartitionState
 
-func (r PartitionStates) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *LiveLeader) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("id", r.ID)
-	e.AddString("host", r.Host)
-	e.AddInt32("port", r.Port)
-	return nil
-}
-
-func (r *PartitionState) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("topic", r.Topic)
-	e.AddInt32("partition", r.Partition)
-	e.AddInt32("controller epoch", r.ControllerEpoch)
-	e.AddInt32("leader", r.Leader)
-	e.AddArray("replicas", Int32s(r.Replicas))
-	e.AddArray("isr", Int32s(r.ISR))
-	return nil
-}
-
 type Int32s []int32
-
-func (ii Int32s) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, i := range ii {
-		e.AppendInt32(i)
-	}
-	return nil
-}

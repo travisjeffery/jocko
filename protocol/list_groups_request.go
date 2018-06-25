@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type ListGroupsRequest struct {
 	APIVersion int16
 }
@@ -23,8 +19,4 @@ func (r *ListGroupsRequest) Key() int16 {
 
 func (r *ListGroupsRequest) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *ListGroupsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

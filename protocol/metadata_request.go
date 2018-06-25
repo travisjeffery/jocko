@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type MetadataRequest struct {
 	APIVersion int16
 
@@ -42,16 +38,4 @@ func (r *MetadataRequest) Version() int16 {
 	return r.APIVersion
 }
 
-func (r *MetadataRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddArray("topics", Strings(r.Topics))
-	return nil
-}
-
 type Strings []string
-
-func (r Strings) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, s := range r {
-		e.AppendString(s)
-	}
-	return nil
-}

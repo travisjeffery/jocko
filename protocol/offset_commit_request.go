@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type OffsetCommitRequest struct {
 	APIVersion int16
 
@@ -101,8 +97,4 @@ func (r *OffsetCommitRequest) Decode(d PacketDecoder, version int16) (err error)
 func (r *OffsetCommitRequest) Version() int16 {
 	return r.APIVersion
 
-}
-
-func (r *OffsetCommitRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

@@ -1,7 +1,5 @@
 package protocol
 
-import "go.uber.org/zap/zapcore"
-
 type Body interface {
 	Encoder
 	Key() int16
@@ -26,10 +24,5 @@ func (r *Request) Encode(pe PacketEncoder) (err error) {
 		return err
 	}
 	pe.Pop()
-	return nil
-}
-
-func (r *Request) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddObject("body", r.Body.(zapcore.ObjectMarshaler))
 	return nil
 }

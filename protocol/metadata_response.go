@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type Broker struct {
 	NodeID int32
 	Host   string
@@ -157,59 +153,8 @@ func (r *MetadataResponse) Version() int16 {
 	return r.APIVersion
 }
 
-func (r *MetadataResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("controller id", r.ControllerID)
-	e.AddArray("brokers", Brokers(r.Brokers))
-	e.AddArray("topic metadata", TopicMetadatas(r.TopicMetadata))
-	return nil
-}
-
 type Brokers []*Broker
-
-func (r Brokers) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *Broker) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("node id", r.NodeID)
-	e.AddString("node id", r.Host)
-	e.AddInt32("node id", r.Port)
-	return nil
-}
 
 type TopicMetadatas []*TopicMetadata
 
-func (r TopicMetadatas) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *TopicMetadata) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt16("error code", r.TopicErrorCode)
-	e.AddString("topic", r.Topic)
-	e.AddArray("partitions", PartitionMetadatas(r.PartitionMetadata))
-	return nil
-}
-
 type PartitionMetadatas []*PartitionMetadata
-
-func (r PartitionMetadatas) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *PartitionMetadata) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt16("error code", r.PartitionErrorCode)
-	e.AddInt32("partition", r.PartitionID)
-	e.AddInt32("leader", r.Leader)
-	e.AddArray("replicas", Int32s(r.Replicas))
-	e.AddArray("isr", Int32s(r.ISR))
-	return nil
-}

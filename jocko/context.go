@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/travisjeffery/jocko/protocol"
-	"go.uber.org/zap/zapcore"
 )
 
 type Context struct {
@@ -61,17 +60,4 @@ func (ctx *Context) Value(key interface{}) interface{} {
 	}
 	ctx.mu.Unlock()
 	return val
-}
-
-func (ctx *Context) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	if ctx.header != nil {
-		e.AddObject("header", ctx.header)
-	}
-	if ctx.req != nil {
-		e.AddObject("request", ctx.req.(zapcore.ObjectMarshaler))
-	}
-	if ctx.res != nil {
-		e.AddObject("response", ctx.res.(zapcore.ObjectMarshaler))
-	}
-	return nil
 }
