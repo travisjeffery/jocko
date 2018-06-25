@@ -3,11 +3,8 @@ package jocko_test
 import (
 	"bytes"
 	"context"
-	"os"
 	"testing"
 	"time"
-
-	stdlog "log"
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
@@ -17,6 +14,7 @@ import (
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/protocol"
+	"upspin.io/log"
 )
 
 const (
@@ -24,7 +22,8 @@ const (
 )
 
 func init() {
-	sarama.Logger = stdlog.New(os.Stdout, "[Sarama] ", stdlog.LstdFlags)
+	log.SetLevel("debug")
+	sarama.Logger = log.NewStdLogger(log.Debug)
 }
 
 func TestProduceConsume(t *testing.T) {

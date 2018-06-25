@@ -13,7 +13,6 @@ import (
 	"github.com/mitchellh/go-testing-interface"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
-	"github.com/travisjeffery/jocko/log"
 
 	"github.com/uber/jaeger-lib/metrics"
 
@@ -24,7 +23,6 @@ import (
 var (
 	nodeNumber int32
 	tempDir    string
-	logger     = log.New()
 )
 
 func init() {
@@ -89,7 +87,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 		cbBroker(config)
 	}
 
-	b, err := NewBroker(config, tracer, logger)
+	b, err := NewBroker(config, tracer)
 	if err != nil {
 		t.Fatalf("err != nil: %s", err)
 	}
@@ -98,7 +96,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 		cbServer(config)
 	}
 
-	return NewServer(config, b, nil, tracer, closer.Close, logger), func() {
+	return NewServer(config, b, nil, tracer, closer.Close), func() {
 		os.RemoveAll(config.DataDir)
 	}
 }

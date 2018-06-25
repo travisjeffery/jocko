@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	gracefully "github.com/tj/go-gracefully"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 	"github.com/uber/jaeger-lib/metrics"
 
@@ -23,8 +23,6 @@ import (
 )
 
 var (
-	logger = log.New()
-
 	cli = &cobra.Command{
 		Use:   "jocko",
 		Short: "Kafka in Go and more",
@@ -67,9 +65,8 @@ func init() {
 
 func run(cmd *cobra.Command, args []string) {
 	var err error
-	logger := log.New().With(
-		log.Int32("node id", brokerCfg.ID),
-	)
+
+	log.SetPrefix(fmt.Sprintf("jocko: node id: %d: ", brokerCfg.ID))
 
 	cfg := jaegercfg.Configuration{
 		Sampler: &jaegercfg.SamplerConfig{
@@ -93,7 +90,7 @@ func run(cmd *cobra.Command, args []string) {
 		panic(err)
 	}
 
-	broker, err := jocko.NewBroker(brokerCfg, tracer, logger)
+	broker, err := jocko.NewBroker(brokerCfg, tracer)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error starting broker: %v\n", err)
 		os.Exit(1)

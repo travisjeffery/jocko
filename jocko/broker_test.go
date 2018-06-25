@@ -16,8 +16,8 @@ import (
 
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
+	"upspin.io/log"
 )
 
 func TestBroker_Run(t *testing.T) {
@@ -509,7 +509,6 @@ type fields struct {
 
 func newFields() fields {
 	return fields{
-		logger: log.New(),
 		logDir: "/tmp/jocko/logs",
 		id:     1,
 	}

@@ -27,8 +27,8 @@ import (
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
+	"upspin.io/log"
 )
 
 var (
@@ -59,7 +59,6 @@ func init() {
 // Broker represents a broker in a Jocko cluster, like a broker in a Kafka cluster.
 type Broker struct {
 	sync.RWMutex
-	logger log.Logger
 	config *config.Config
 
 	// readyForConsistentReads is used to track when the leader server is
@@ -90,10 +89,9 @@ type Broker struct {
 }
 
 // New is used to instantiate a new broker.
-func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logger) (*Broker, error) {
+func NewBroker(config *config.Config, tracer opentracing.Tracer) (*Broker, error) {
 	b := &Broker{
 		config:        config,
-		logger:        logger.With(log.Int32("node id", config.ID)),
 		shutdownCh:    make(chan struct{}),
 		eventChLAN:    make(chan serf.Event, 256),
 		brokerLookup:  NewBrokerLookup(),
@@ -102,15 +100,9 @@ func NewBroker(config *config.Config, tracer opentracing.Tracer, logger log.Logg
 		tracer:        tracer,
 	}
 
-	if b.logger == nil {
-		return nil, ErrInvalidArgument
-	}
-
-	b.logger.Info("hello")
-
 	if err := b.setupRaft(); err != nil {
 		b.Shutdown()
-		return nil, fmt.Errorf("failed to start raft: %v", err)
+		return nil, fmt.Errorf("start raft: %v", err)
 	}
 
 	var err error
@@ -424,15 +416,17 @@ func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *prot
 			}
 			replica, err := b.replicaLookup.Replica(td.Topic, p.Partition)
 			if err != nil || replica == nil || replica.Log == nil {
-				b.logger.Error("produce to partition failed", log.Error("error", err))
+				log.Error.Printf("broker: produce to partition error: %s", err)
+
 				presp.Partition = p.Partition
 				presp.ErrorCode = protocol.ErrReplicaNotAvailable.Code()
 				presps[j] = presp
+
 				continue
 			}
 			offset, appendErr := replica.Log.Append(p.RecordSet)
 			if appendErr != nil {
-				b.logger.Error("commitlog/append failed", log.Error("error", err))
+				log.Error.Printf("broker: log append error: %s", err)
 				presp.ErrorCode = protocol.ErrUnknown.Code()
 				presps[j] = presp
 				continue
@@ -593,7 +587,7 @@ ERROR:
 	if resp.ErrorCode == 0 {
 		resp.ErrorCode = protocol.ErrUnknown.Code()
 	}
-	b.logger.Error("find coordinator failed", log.Error("error", err), log.Any("coordinator key", req.CoordinatorKey), log.Any("broker", broker))
+	log.Error.Printf("broker: %s: coordinator error: %s", broker, err)
 
 	return resp
 }
@@ -610,7 +604,7 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 
 	_, group, err := state.GetGroup(r.GroupID)
 	if err != nil {
-		b.logger.Error("failed getting group", log.Error("error", err))
+		log.Error.Printf("broker: get group error: %s", err)
 		resp.ErrorCode = protocol.ErrUnknown.Code()
 		return resp
 	}
@@ -633,7 +627,7 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 		Group: *group,
 	})
 	if err != nil {
-		b.logger.Error("failed to register group", log.Error("error", err))
+		log.Error.Printf("broker: register group error: %s", err)
 		resp.ErrorCode = protocol.ErrUnknown.Code()
 		return resp
 	}
@@ -791,7 +785,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 			}
 			rdr, rdrErr := replica.Log.NewReader(p.FetchOffset, p.MaxBytes)
 			if rdrErr != nil {
-				b.logger.Error("replica log read failed", log.Error("error", rdrErr))
+				log.Error.Printf("broker: replica log read error: %s", rdrErr)
 				fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 					Partition: p.Partition,
 					ErrorCode: protocol.ErrUnknown.Code(),
@@ -807,7 +801,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 				// TODO: copy these bytes to outer bytes
 				nn, err := io.Copy(buf, rdr)
 				if err != nil && err != io.EOF {
-					b.logger.Error("reader copy failed", log.Error("error", err))
+					log.Error.Printf("broker: reader copy error", err)
 					fr.PartitionResponses[j] = &protocol.FetchPartitionResponse{
 						Partition: p.Partition,
 						ErrorCode: protocol.ErrUnknown.Code(),
@@ -1037,7 +1031,7 @@ func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) p
 		if broker.ID.Int32() == b.config.ID {
 			errCode := b.handleLeaderAndISR(ctx, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
-				panic(fmt.Sprintf("failed handling leader and isr: %d", errCode))
+				panic(fmt.Sprintf("broker: handling leader and isr error: %d", errCode))
 			}
 		} else {
 			conn, err := Dial("tcp", broker.BrokerAddr)
@@ -1092,11 +1086,11 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 
 // Leave is used to prepare for a graceful shutdown.
 func (b *Broker) Leave() error {
-	b.logger.Info("broker: starting leave")
+	log.Info.Printf("broker: starting leave")
 
 	numPeers, err := b.numPeers()
 	if err != nil {
-		b.logger.Error("jocko: failed to check raft peers", log.Error("error", err))
+		log.Error.Printf("broker: check raft peers error: %s", err)
 		return err
 	}
 
@@ -1104,13 +1098,13 @@ func (b *Broker) Leave() error {
 	if isLeader && numPeers > 1 {
 		future := b.raft.RemoveServer(raft.ServerID(b.config.ID), 0, 0)
 		if err := future.Error(); err != nil {
-			b.logger.Error("failed to remove ourself as raft peer", log.Error("error", err))
+			log.Error.Printf("remove ourself as raft peer error: %s", err)
 		}
 	}
 
 	if b.serf != nil {
 		if err := b.serf.Leave(); err != nil {
-			b.logger.Error("failed to leave LAN serf cluster", log.Error("error", err))
+			log.Error.Printf("leave LAN serf cluster error: %s", err)
 		}
 	}
 
@@ -1126,7 +1120,7 @@ func (b *Broker) Leave() error {
 			// Get the latest configuration.
 			future := b.raft.GetConfiguration()
 			if err := future.Error(); err != nil {
-				b.logger.Error("failed to get raft configuration", log.Error("error", err))
+				log.Error.Printf("get raft configuration error: %s", err)
 				break
 			}
 
@@ -1146,7 +1140,7 @@ func (b *Broker) Leave() error {
 
 // Shutdown is used to shutdown the broker, its serf, its raft, and so on.
 func (b *Broker) Shutdown() error {
-	b.logger.Info("shutting down broker")
+	log.Info.Printf("shutting down broker")
 	b.shutdownLock.Lock()
 	defer b.shutdownLock.Unlock()
 
@@ -1164,7 +1158,7 @@ func (b *Broker) Shutdown() error {
 		b.raftTransport.Close()
 		future := b.raft.Shutdown()
 		if err := future.Error(); err != nil {
-			b.logger.Error("failed to shutdown", log.Error("error", err))
+			log.Error.Printf("shutdown error: %s", err)
 		}
 		if b.raftStore != nil {
 			b.raftStore.Close()
@@ -1197,8 +1191,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
-	logger := b.logger.With(log.Int32("leader", replica.Partition.Leader))
-	r := NewReplicator(ReplicatorConfig{}, replica, conn, logger)
+	r := NewReplicator(ReplicatorConfig{}, replica, conn)
 	replica.Replicator = r
 	if !b.config.DevMode {
 		r.Replicate()

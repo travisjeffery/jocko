@@ -12,8 +12,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/ugorji/go/codec"
+	"upspin.io/log"
 )
 
 var (
@@ -44,7 +44,6 @@ type Tracer opentracing.Tracer
 
 // FSM implements a finite state machine used with Raft to provide strong consistency.
 type FSM struct {
-	logger    log.Logger
 	apply     map[structs.MessageType]command
 	stateLock sync.RWMutex
 	state     *Store
@@ -53,7 +52,7 @@ type FSM struct {
 }
 
 // New returns a new FSM instance.
-func New(logger log.Logger, args ...interface{}) (*FSM, error) {
+func New(args ...interface{}) (*FSM, error) {
 	var nodeID NodeID
 	var tracer Tracer
 	for _, arg := range args {
@@ -64,13 +63,12 @@ func New(logger log.Logger, args ...interface{}) (*FSM, error) {
 			tracer = a
 		}
 	}
-	store, err := NewStore(logger, tracer, nodeID)
+	store, err := NewStore(tracer, nodeID)
 	if err != nil {
 		return nil, err
 	}
 	fsm := &FSM{
 		apply:  make(map[structs.MessageType]command),
-		logger: logger,
 		state:  store,
 		tracer: tracer,
 		nodeID: nodeID,
@@ -103,7 +101,7 @@ func (c *FSM) Apply(l *raft.Log) interface{} {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	newState, err := NewStore(c.logger, c.tracer)
+	newState, err := NewStore(c.tracer)
 	if err != nil {
 		return err
 	}
@@ -165,7 +163,6 @@ func registerSchema(fn schemaFn) {
 }
 
 type Store struct {
-	logger log.Logger
 	schema *memdb.DBSchema
 	db     *memdb.MemDB
 	// abandonCh is used to signal watchers this store has been abandoned
@@ -175,7 +172,7 @@ type Store struct {
 	nodeID    NodeID
 }
 
-func NewStore(logger log.Logger, args ...interface{}) (*Store, error) {
+func NewStore(args ...interface{}) (*Store, error) {
 	dbSchema := &memdb.DBSchema{
 		Tables: make(map[string]*memdb.TableSchema),
 	}
@@ -194,7 +191,6 @@ func NewStore(logger log.Logger, args ...interface{}) (*Store, error) {
 		schema:    dbSchema,
 		db:        db,
 		abandonCh: make(chan struct{}),
-		logger:    logger,
 	}
 	for _, arg := range args {
 		switch a := arg.(type) {
@@ -299,7 +295,7 @@ func (s *Store) DeleteNode(idx uint64, id int32) error {
 func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id int32) error {
 	node, err := tx.First("nodes", "id", id)
 	if err != nil {
-		s.logger.Error("failed node lookup", log.Error("error", err))
+		log.Error.Printf("fsm: node lookup error: %s", err)
 		return err
 	}
 	if node == nil {
@@ -307,12 +303,12 @@ func (s *Store) deleteNodeTxn(tx *memdb.Txn, idx uint64, id int32) error {
 	}
 	// todo: delete anything attached to the node
 	if err := tx.Delete("nodes", node); err != nil {
-		s.logger.Error("failed deleting node", log.Error("error", err))
+		log.Error.Printf("fsm: deleting node error: %s", err)
 		return err
 	}
 	// update the index
 	if err := tx.Insert("index", &IndexEntry{"nodes", idx}); err != nil {
-		s.logger.Error("failed updating index", log.Error("error", err))
+		log.Error.Printf("fsm: updating index error: %s", err)
 		return err
 	}
 	return nil
@@ -338,7 +334,7 @@ func (s *Store) EnsureRegistration(idx uint64, req *structs.RegisterNodeRequest)
 func (s *Store) ensureRegistration(tx *memdb.Txn, idx uint64, req *structs.RegisterNodeRequest) error {
 	existing, err := tx.First("nodes", "id", req.Node.Node)
 	if err != nil {
-		s.logger.Error("node lookup failed", log.Error("error", err))
+		log.Error.Printf("fsm: node lookup error: %s", err)
 		return err
 	}
 
@@ -487,18 +483,18 @@ func (s *Store) DeleteTopic(idx uint64, id string) error {
 func (s *Store) deleteTopicTxn(tx *memdb.Txn, idx uint64, id string) error {
 	topic, err := tx.First("topics", "id", id)
 	if err != nil {
-		s.logger.Error("failed topic lookup", log.Error("error", err))
+		log.Error.Printf("fsm: topic lookup error: %s", err)
 		return err
 	}
 	if topic == nil {
 		return nil
 	}
 	if err := tx.Delete("topics", topic); err != nil {
-		s.logger.Error("failed deleting topic", log.Error("error", err))
+		log.Error.Printf("fsm: deleting topic error: %s", err)
 		return err
 	}
 	if err := tx.Insert("index", &IndexEntry{"topics", idx}); err != nil {
-		s.logger.Error("failed updating index", log.Error("error", err))
+		log.Error.Printf("fsm: updating index error: %s", err)
 		return err
 	}
 	return nil
@@ -635,18 +631,18 @@ func (s *Store) DeleteGroup(idx uint64, group string) error {
 func (s *Store) deleteGroupTxn(tx *memdb.Txn, idx uint64, id string) error {
 	group, err := tx.First("groups", "id", id)
 	if err != nil {
-		s.logger.Error("failed group lookup", log.Error("error", err))
+		log.Error.Printf("fsm: group lookup error: %s", err)
 		return err
 	}
 	if group == nil {
 		return nil
 	}
 	if err := tx.Delete("groups", group); err != nil {
-		s.logger.Error("failed deleting group", log.Error("error", err))
+		log.Error.Printf("fsm: deleting group error: %s", err)
 		return err
 	}
 	if err := tx.Insert("index", &IndexEntry{"groups", idx}); err != nil {
-		s.logger.Error("failed updating index", log.Error("error", err))
+		log.Error.Printf("fsm: updating index error: %s", err)
 		return err
 	}
 	return nil
@@ -778,18 +774,18 @@ func (s *Store) DeletePartition(idx uint64, topic string, partition int32) error
 func (s *Store) deletePartitionTxn(tx *memdb.Txn, idx uint64, topic string, id int32) error {
 	partition, err := tx.First("partitions", "id", topic, id)
 	if err != nil {
-		s.logger.Error("failed partition lookup", log.Error("error", err))
+		log.Error.Printf("fsm: partition lookup error: %s", err)
 		return err
 	}
 	if partition == nil {
 		return nil
 	}
 	if err := tx.Delete("partitions", partition); err != nil {
-		s.logger.Error("failed deleting partition", log.Error("error", err))
+		log.Error.Printf("fsm: deleting partition error: %s", err)
 		return err
 	}
 	if err := tx.Insert("index", &IndexEntry{"partitions", idx}); err != nil {
-		s.logger.Error("failed updating index", log.Error("error", err))
+		log.Error.Printf("fsm: updating index error: %s", err)
 		return err
 	}
 	return nil

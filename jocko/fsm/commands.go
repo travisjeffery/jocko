@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"github.com/travisjeffery/jocko/log"
+	"upspin.io/log"
 )
 
 func init() {
@@ -24,7 +24,7 @@ func (c *FSM) applyRegisterGroup(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.EnsureGroup(index, &req.Group); err != nil {
-		c.logger.Error("EnsureNode failed", log.Error("error", err))
+		log.Error.Printf("EnsureNode error: %s", err)
 		return err
 	}
 
@@ -38,7 +38,7 @@ func (c *FSM) applyRegisterNode(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.EnsureNode(index, &req.Node); err != nil {
-		c.logger.Error("EnsureNode failed", log.Error("error", err))
+		log.Error.Printf("EnsureNode error: %s", err)
 		return err
 	}
 
@@ -52,7 +52,7 @@ func (c *FSM) applyDeregisterNode(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.DeleteNode(index, req.Node.Node); err != nil {
-		c.logger.Error("DeleteNode failed", log.Error("error", err))
+		log.Error.Printf("DeleteNode error: %s", err)
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (c *FSM) applyRegisterTopic(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.EnsureTopic(index, &req.Topic); err != nil {
-		c.logger.Error("EnsureTopic failed", log.Error("error", err))
+		log.Error.Printf("EnsureTopic error: %s", err)
 		return err
 	}
 
@@ -80,7 +80,7 @@ func (c *FSM) applyDeregisterTopic(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.DeleteTopic(index, req.Topic.Topic); err != nil {
-		c.logger.Error("DeleteTopic failed", log.Error("error", err))
+		log.Error.Printf("DeleteTopic error: %s", err)
 		return err
 	}
 
@@ -94,7 +94,7 @@ func (c *FSM) applyRegisterPartition(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.EnsurePartition(index, &req.Partition); err != nil {
-		c.logger.Error("EnsurePartition failed", log.Error("error", err))
+		log.Error.Printf("EnsurePartition error: %s", err)
 		return err
 	}
 
@@ -108,7 +108,7 @@ func (c *FSM) applyDeregisterPartition(buf []byte, index uint64) interface{} {
 	}
 
 	if err := c.state.DeletePartition(index, req.Partition.Topic, req.Partition.Partition); err != nil {
-		c.logger.Error("DeletePartition failed", log.Error("error", err))
+		log.Error.Printf("DeletePartition error: %s", err)
 		return err
 	}
 

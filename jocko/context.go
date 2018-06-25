@@ -2,6 +2,7 @@ package jocko
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -43,6 +44,10 @@ func (ctx *Context) Done() <-chan struct{} {
 
 func (ctx *Context) Err() error {
 	return ctx.err
+}
+
+func (ctx *Context) String() string {
+	return fmt.Sprintf("ctx: %s", header)
 }
 
 func (ctx *Context) Value(key interface{}) interface{} {
