@@ -68,12 +68,7 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	var err error
 	logger := log.New().With(
-		log.Int32("id", brokerCfg.ID),
-		log.String("broker addr", brokerCfg.Addr),
-		log.String("serf addr", fmt.Sprintf("%s:%d",
-			brokerCfg.SerfLANConfig.MemberlistConfig.BindAddr,
-			brokerCfg.SerfLANConfig.MemberlistConfig.BindPort)),
-		log.String("raft addr", brokerCfg.RaftAddr),
+		log.Int32("node id", brokerCfg.ID),
 	)
 
 	cfg := jaegercfg.Configuration{

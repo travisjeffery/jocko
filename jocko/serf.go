@@ -2,7 +2,10 @@ package jocko
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+
+	golog "log"
 
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
@@ -21,6 +24,8 @@ func (b *Broker) setupSerf(config *serf.Config, ch chan serf.Event, path string)
 	config.NodeName = b.config.NodeName
 	config.Tags["role"] = "jocko"
 	config.Tags["id"] = fmt.Sprintf("%d", b.config.ID)
+	logger := golog.New(os.Stderr, fmt.Sprintf("[Node %d] ", b.config.ID), golog.LstdFlags)
+	config.Logger = logger
 	if b.config.Bootstrap {
 		config.Tags["bootstrap"] = "1"
 	}
