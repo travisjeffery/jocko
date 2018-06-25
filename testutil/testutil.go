@@ -3,17 +3,23 @@ package testutil
 import (
 	"fmt"
 	"io/ioutil"
+	stdlog "log"
 	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"upspin.io/log"
+
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
 )
 
 func TestConfig(t *testing.T) (string, *config.Config) {
+	stdlog.SetPrefix("jockotest")
+	log.SetLevel("debug")
+
 	dir := tempDir(t, "jocko")
 	config := config.DefaultConfig()
 	ports := dynaport.Get(3)

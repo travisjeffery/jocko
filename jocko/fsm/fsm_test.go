@@ -6,7 +6,7 @@ import (
 
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"github.com/travisjeffery/jocko/log"
+	"upspin.io/log"
 )
 
 func testStore(t *testing.T) *Store {

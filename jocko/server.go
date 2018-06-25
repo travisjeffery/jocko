@@ -11,9 +11,8 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/config"
-	"github.com/travisjeffery/jocko/jocko/util"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
+	"upspin.io/log"
 )
 
 type contextKey string
@@ -44,7 +43,6 @@ type Handler interface {
 type Server struct {
 	config       *config.Config
 	protocolLn   *net.TCPListener
-	logger       log.Logger
 	handler      Handler
 	shutdown     bool
 	shutdownCh   chan struct{}
@@ -56,11 +54,10 @@ type Server struct {
 	close        func() error
 }
 
-func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer opentracing.Tracer, close func() error, logger log.Logger) *Server {
+func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer opentracing.Tracer, close func() error) *Server {
 	s := &Server{
 		config:     config,
 		handler:    handler,
-		logger:     logger.With(log.Int32("server id", config.ID), log.String("addr", config.Addr)),
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
 		requestCh:  make(chan *Context, 32),
@@ -68,7 +65,6 @@ func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer 
 		tracer:     tracer,
 		close:      close,
 	}
-	s.logger.Info("hello")
 	return s
 }
 
@@ -92,7 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 			default:
 				conn, err := s.protocolLn.Accept()
 				if err != nil {
-					s.logger.Error("listener accept failed", log.Error("error", err))
+					log.Error.Printf("server: listener accept error: %s", err)
 					continue
 				}
 
@@ -113,7 +109,7 @@ func (s *Server) Start(ctx context.Context) error {
 					queueSpan.Finish()
 				}
 				if err := s.handleResponse(respCtx); err != nil {
-					s.logger.Error("failed to write response", log.Error("error", err))
+					log.Error.Printf("server: handle response error: %s", err)
 				}
 			}
 		}
@@ -152,7 +148,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			break
 		}
 		if err != nil {
-			s.logger.Error("conn read failed", log.Error("error", err))
+			log.Error.Printf("conn read error: %s", err)
 			break
 		}
 
@@ -238,7 +234,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		if err := req.Decode(d, header.APIVersion); err != nil {
-			s.logger.Error("failed to decode request", log.Error("err", err), log.Any("header", header))
+			log.Error.Printf("server: %s: decode request failed: %s", header, err)
 			span.LogKV("msg", "failed to decode request", "err", err)
 			span.Finish()
 			panic(err)
@@ -257,7 +253,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			conn:   conn,
 		}
 
-		s.vlog(span, "handling request", "request", reqCtx)
+		log.Debug.Printf("server: handle request: %s", reqCtx)
 
 		s.requestCh <- reqCtx
 	}
@@ -266,9 +262,12 @@ func (s *Server) handleRequest(conn net.Conn) {
 func (s *Server) handleResponse(respCtx *Context) error {
 	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
-	s.vlog(sp, "handling response", "response", respCtx)
+
+	log.Debug.Printf("server: handle response: %s", respCtx)
+
 	defer psp.Finish()
 	defer sp.Finish()
+
 	b, err := protocol.Encode(respCtx.res.(protocol.Encoder))
 	if err != nil {
 		return err
@@ -284,11 +283,4 @@ func (s *Server) Addr() net.Addr {
 
 func (s *Server) ID() int32 {
 	return s.config.ID
-}
-
-func (s *Server) vlog(span opentracing.Span, msg, k string, i interface{}) {
-	if serverVerboseLogs {
-		span.LogKV(k, util.Dump(i))
-		s.logger.Info(msg, log.Object(k, i))
-	}
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/mock"
 	"github.com/travisjeffery/jocko/testutil"
 )
@@ -31,12 +30,10 @@ func TestBroker_Replicate(t *testing.T) {
 		Log:      c,
 	}
 
-	logger := log.New()
-
 	replicator := jocko.NewReplicator(jocko.ReplicatorConfig{
 		MinBytes:    5,
 		MaxWaitTime: int32(250 * time.Millisecond),
-	}, replica, l, logger)
+	}, replica, l)
 	replicator.Replicate()
 
 	testutil.WaitForResult(func() (bool, error) {

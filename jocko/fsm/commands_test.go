@@ -6,11 +6,10 @@ import (
 	"github.com/hashicorp/raft"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"github.com/travisjeffery/jocko/log"
 )
 
 func TestRegisterNode(t *testing.T) {
-	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
+	fsm, err := New(stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -40,7 +39,7 @@ func TestRegisterNode(t *testing.T) {
 }
 
 func TestRegisterTopic(t *testing.T) {
-	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
+	fsm, err := New(stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -71,7 +70,7 @@ func TestRegisterTopic(t *testing.T) {
 }
 
 func TestRegisterPartition(t *testing.T) {
-	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
+	fsm, err := New(stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -102,7 +101,7 @@ func TestRegisterPartition(t *testing.T) {
 }
 
 func TestRegisterGroup(t *testing.T) {
-	fsm, err := New(log.New(), stdopentracing.GlobalTracer())
+	fsm, err := New(stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
