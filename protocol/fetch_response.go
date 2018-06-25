@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 import "time"
 
 type AbortedTransaction struct {
@@ -180,37 +176,4 @@ func (r *FetchResponse) Decode(d PacketDecoder, version int16) (err error) {
 
 func (r *FetchResponse) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *FetchResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddArray("topics", r.Responses)
-	return nil
-}
-
-func (r FetchTopicResponses) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *FetchTopicResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddString("topic", r.Topic)
-	e.AddArray("partitions", r.PartitionResponses)
-	return nil
-}
-
-func (r FetchPartitionResponses) MarshalLogArray(e zapcore.ArrayEncoder) error {
-	for _, t := range r {
-		e.AppendObject(t)
-	}
-	return nil
-}
-
-func (r *FetchPartitionResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("partition", r.Partition)
-	e.AddInt16("error code", r.ErrorCode)
-	e.AddInt64("high watermark", r.HighWatermark)
-	e.AddInt64("last stable offset", r.LastStableOffset)
-	return nil
 }

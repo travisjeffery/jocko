@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 import "time"
 
 type AlterConfigsResponse struct {
@@ -69,8 +65,4 @@ func (r *AlterConfigsResponse) Decode(d PacketDecoder, version int16) (err error
 
 func (r *AlterConfigsResponse) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *AlterConfigsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

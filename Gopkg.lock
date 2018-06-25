@@ -38,6 +38,12 @@
   version = "v2.1.10"
 
 [[projects]]
+  name = "github.com/cenkalti/backoff"
+  packages = ["."]
+  revision = "2ea60e5f094469f9e65adb9cd103795b73ae743e"
+  version = "v2.0.0"
+
+[[projects]]
   name = "github.com/cespare/xxhash"
   packages = ["."]
   revision = "5c37fe3735342a2e0d01c87a907579987c8936cc"
@@ -348,31 +354,6 @@
   version = "v1.1"
 
 [[projects]]
-  name = "go.uber.org/atomic"
-  packages = ["."]
-  revision = "8474b86a5a6f79c443ce4b2992817ff32cf208b8"
-  version = "v1.3.1"
-
-[[projects]]
-  name = "go.uber.org/multierr"
-  packages = ["."]
-  revision = "3c4937480c32f4c13a875a1829af76c98ca3d40a"
-  version = "v1.1.0"
-
-[[projects]]
-  name = "go.uber.org/zap"
-  packages = [
-    ".",
-    "buffer",
-    "internal/bufferpool",
-    "internal/color",
-    "internal/exit",
-    "zapcore"
-  ]
-  revision = "35aad584952c3e7020db7b839f6b102de6271f89"
-  version = "v1.7.1"
-
-[[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context"]
@@ -384,9 +365,15 @@
   packages = ["unix"]
   revision = "ebfc5b4631820b793c9010c87fd8fef0f39eb082"
 
+[[projects]]
+  branch = "master"
+  name = "upspin.io"
+  packages = ["log"]
+  revision = "63f1073c7a3a0fe6162849630916771c15ed80e9"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4bc2b9b1d05a6cfcbb3d7dd74e863fc6d6f7ffa6b37f4f84cb9aabbf03de97b8"
+  inputs-digest = "43239ec812464a19b77149436a116aed1a9ae438c8c982c84056077915f6f36e"
   solver-name = "gps-cdcl"
   solver-version = 1

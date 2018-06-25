@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 import "time"
 
 type LeaveGroupResponse struct {
@@ -40,8 +36,4 @@ func (r *LeaveGroupResponse) Key() int16 {
 
 func (r *LeaveGroupResponse) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *LeaveGroupResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 import "time"
 
 type APIVersionsResponse struct {
@@ -78,8 +74,4 @@ func (c *APIVersionsResponse) Decode(d PacketDecoder, version int16) error {
 
 func (r *APIVersionsResponse) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *APIVersionsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 import "time"
 
 type DescribeGroupsResponse struct {
@@ -166,9 +162,5 @@ func (r *GroupMember) Decode(d PacketDecoder, version int16) (err error) {
 	if r.GroupMemberAssignment, err = d.Bytes(); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (r *DescribeGroupsResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	return nil
 }

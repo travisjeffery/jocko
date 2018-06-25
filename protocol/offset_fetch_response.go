@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type OffsetFetchTopicResponse struct {
 	Topic      string
 	Partitions []OffsetFetchPartition
@@ -82,8 +78,4 @@ func (r *OffsetFetchResponse) Decode(d PacketDecoder, version int16) (err error)
 
 func (r *OffsetFetchResponse) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *OffsetFetchResponse) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

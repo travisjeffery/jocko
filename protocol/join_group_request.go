@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type GroupProtocol struct {
 	ProtocolName     string
 	ProtocolMetadata []byte
@@ -88,8 +84,4 @@ func (r *JoinGroupRequest) Key() int16 {
 
 func (r *JoinGroupRequest) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *JoinGroupRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

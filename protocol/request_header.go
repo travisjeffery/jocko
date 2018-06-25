@@ -1,6 +1,6 @@
 package protocol
 
-import "go.uber.org/zap/zapcore"
+import "fmt"
 
 type RequestHeader struct {
 	// Size of the request
@@ -48,11 +48,12 @@ func (r *RequestHeader) Decode(d PacketDecoder) error {
 	return err
 }
 
-func (r *RequestHeader) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	e.AddInt32("correlation id", r.CorrelationID)
-	e.AddInt16("api key", r.APIKey)
-	e.AddString("client id", r.ClientID)
-	e.AddInt16("api version", r.APIVersion)
-	e.AddInt32("size", r.Size)
-	return nil
+func (r *RequestHeader) String() string {
+	return fmt.Sprintf(
+		"request header: correlation id: %d, api key: %d, client: %s, size: %d",
+		r.CorrelationID,
+		r.APIKey,
+		r.ClientID,
+		r.Size,
+	)
 }

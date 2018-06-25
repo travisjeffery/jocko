@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type GroupAssignment struct {
 	MemberID         string
 	MemberAssignment []byte
@@ -76,8 +72,4 @@ func (r *SyncGroupRequest) Key() int16 {
 
 func (r *SyncGroupRequest) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *SyncGroupRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }

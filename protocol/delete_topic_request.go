@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"go.uber.org/zap/zapcore"
-)
-
 type DeleteTopicsRequest struct {
 	APIVersion int16
 
@@ -35,8 +31,4 @@ func (c *DeleteTopicsRequest) Key() int16 {
 
 func (r *DeleteTopicsRequest) Version() int16 {
 	return r.APIVersion
-}
-
-func (r *DeleteTopicsRequest) MarshalLogObject(e zapcore.ObjectEncoder) error {
-	return nil
 }
