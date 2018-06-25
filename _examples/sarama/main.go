@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
-	"github.com/apex/log"
 	"github.com/travisjeffery/jocko/jocko"
 	"github.com/travisjeffery/jocko/jocko/config"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 

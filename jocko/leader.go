@@ -13,8 +13,8 @@ import (
 	"github.com/travisjeffery/jocko/jocko/fsm"
 	"github.com/travisjeffery/jocko/jocko/metadata"
 	"github.com/travisjeffery/jocko/jocko/structs"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
-	"upspin.io/log"
 )
 
 const (

@@ -6,11 +6,10 @@ import (
 
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
-	"upspin.io/log"
 )
 
 func testStore(t *testing.T) *Store {
-	s, err := NewStore(log.New(), stdopentracing.GlobalTracer())
+	s, err := NewStore(stdopentracing.GlobalTracer())
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}

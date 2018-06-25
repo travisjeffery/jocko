@@ -12,8 +12,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/travisjeffery/jocko/jocko/structs"
 	"github.com/travisjeffery/jocko/jocko/util"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/ugorji/go/codec"
-	"upspin.io/log"
 )
 
 var (

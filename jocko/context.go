@@ -46,7 +46,7 @@ func (ctx *Context) Err() error {
 }
 
 func (ctx *Context) String() string {
-	return fmt.Sprintf("ctx: %s", header)
+	return fmt.Sprintf("ctx: %s", ctx.header)
 }
 
 func (ctx *Context) Value(key interface{}) interface{} {
