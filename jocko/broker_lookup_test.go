@@ -11,11 +11,11 @@ import (
 func TestNewBrokerLookup(t *testing.T) {
 	lookup := NewBrokerLookup()
 	addr := "10.0.0.1:9092"
-	id := 1
-	svr := &metadata.Broker{ID: metadata.NodeID(id), RaftAddr: addr}
+	id := metadata.NodeID(1)
+	svr := &metadata.Broker{ID: id, RaftAddr: addr}
 
 	lookup.AddBroker(svr)
-	got, err := lookup.BrokerAddr(raft.ServerID(id))
+	got, err := lookup.BrokerAddr(raft.ServerID(id.String()))
 	require.NoError(t, err)
 	require.Equal(t, raft.ServerAddress(addr), got)
 
@@ -23,7 +23,7 @@ func TestNewBrokerLookup(t *testing.T) {
 	require.NotNil(t, broker)
 	require.Equal(t, addr, broker.RaftAddr)
 
-	broker = lookup.BrokerByID(raft.ServerID(id))
+	broker = lookup.BrokerByID(raft.ServerID(id.String()))
 	require.NotNil(t, broker)
 	require.Equal(t, addr, broker.RaftAddr)
 
@@ -31,7 +31,7 @@ func TestNewBrokerLookup(t *testing.T) {
 
 	lookup.RemoveBroker(svr)
 
-	got, err = lookup.BrokerAddr(raft.ServerID(id))
+	got, err = lookup.BrokerAddr(raft.ServerID(id.String()))
 	require.Error(t, err)
 	require.Equal(t, raft.ServerAddress(""), got)
 

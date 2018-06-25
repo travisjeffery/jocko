@@ -123,7 +123,7 @@ func (b *Broker) maybeBootstrap() {
 		return
 	}
 	if index != 0 {
-		log.Info.Printf("raft data found, disabling bootstrap mode: path: %s", filepath.Join(b.config.DataDir, raftState))
+		log.Info.Printf("raft data found, disabling bootstrap mode: index: %d, path: %s", index, filepath.Join(b.config.DataDir, raftState))
 		b.config.BootstrapExpect = 0
 		return
 	}
@@ -157,7 +157,7 @@ func (b *Broker) maybeBootstrap() {
 		addr := meta.RaftAddr
 		addrs = append(addrs, addr)
 		peer := raft.Server{
-			ID:      raft.ServerID(fmt.Sprintf("%d", meta.ID)),
+			ID:      raft.ServerID(meta.ID.String()),
 			Address: raft.ServerAddress(addr),
 		}
 		configuration.Servers = append(configuration.Servers, peer)

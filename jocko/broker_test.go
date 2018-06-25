@@ -16,10 +16,13 @@ import (
 
 	"github.com/travisjeffery/jocko/jocko/config"
 	"github.com/travisjeffery/jocko/jocko/structs"
+	"github.com/travisjeffery/jocko/log"
 	"github.com/travisjeffery/jocko/protocol"
 )
 
 func TestBroker_Run(t *testing.T) {
+	log.SetPrefix("broker_test: ")
+
 	// creating the config up here so we can set the nodeid in the expected test cases
 	mustEncode := func(e protocol.Encoder) []byte {
 		var b []byte
