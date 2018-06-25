@@ -96,7 +96,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	srv := jocko.NewServer(brokerCfg, broker, nil, tracer, closer.Close, logger)
+	srv := jocko.NewServer(brokerCfg, broker, nil, tracer, closer.Close)
 	if err := srv.Start(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting server: %v\n", err)
 		os.Exit(1)
