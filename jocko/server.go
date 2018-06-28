@@ -60,8 +60,8 @@ func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer 
 		handler:    handler,
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
-		requestCh:  make(chan *Context, 32),
-		responseCh: make(chan *Context, 32),
+		requestCh:  make(chan *Context, 1024),
+		responseCh: make(chan *Context, 1024),
 		tracer:     tracer,
 		close:      close,
 	}
@@ -88,7 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 			default:
 				conn, err := s.protocolLn.Accept()
 				if err != nil {
-					log.Error.Printf("server: listener accept error: %s", err)
+					log.Error.Printf("server/%d: listener accept error: %s", s.config.ID, err)
 					continue
 				}
 
@@ -109,12 +109,13 @@ func (s *Server) Start(ctx context.Context) error {
 					queueSpan.Finish()
 				}
 				if err := s.handleResponse(respCtx); err != nil {
-					log.Error.Printf("server: handle response error: %s", err)
+					log.Error.Printf("server/%d: handle response error: %s", s.config.ID, err)
 				}
 			}
 		}
 	}()
 
+	log.Debug.Printf("server/%d: run handler", s.config.ID)
 	go s.handler.Run(ctx, s.requestCh, s.responseCh)
 
 	return nil
@@ -141,8 +142,8 @@ func (s *Server) Shutdown() {
 func (s *Server) handleRequest(conn net.Conn) {
 	defer conn.Close()
 
-	p := make([]byte, 4)
 	for {
+		p := make([]byte, 4)
 		_, err := io.ReadFull(conn, p[:])
 		if err == io.EOF {
 			break
@@ -234,7 +235,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 		}
 
 		if err := req.Decode(d, header.APIVersion); err != nil {
-			log.Error.Printf("server: %s: decode request failed: %s", header, err)
+			log.Error.Printf("server/%d: %s: decode request failed: %s", s.config.ID, header, err)
 			span.LogKV("msg", "failed to decode request", "err", err)
 			span.Finish()
 			panic(err)
@@ -253,7 +254,7 @@ func (s *Server) handleRequest(conn net.Conn) {
 			conn:   conn,
 		}
 
-		log.Debug.Printf("server: handle request: %s", reqCtx)
+		log.Debug.Printf("server/%d: handle request: %s", s.config.ID, reqCtx)
 
 		s.requestCh <- reqCtx
 	}
@@ -263,7 +264,7 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
 
-	log.Debug.Printf("server: handle response: %s", respCtx)
+	log.Debug.Printf("server/%d: handle response: %s", s.config.ID, respCtx)
 
 	defer psp.Finish()
 	defer sp.Finish()

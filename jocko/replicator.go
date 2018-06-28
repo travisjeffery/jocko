@@ -31,7 +31,7 @@ type Replicator struct {
 type ReplicatorConfig struct {
 	MinBytes int32
 	// todo: make this a time.Duration
-	MaxWaitTime int32
+	MaxWaitTime time.Duration
 }
 
 // NewReplicator returns a new replicator instance.

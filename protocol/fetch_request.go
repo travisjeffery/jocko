@@ -1,5 +1,7 @@
 package protocol
 
+import "time"
+
 type IsolationLevel int8
 
 const (
@@ -22,7 +24,7 @@ type FetchRequest struct {
 	APIVersion int16
 
 	ReplicaID      int32
-	MaxWaitTime    int32
+	MaxWaitTime    time.Duration
 	MinBytes       int32
 	MaxBytes       int32
 	IsolationLevel IsolationLevel
@@ -35,7 +37,7 @@ func (r *FetchRequest) Encode(e PacketEncoder) (err error) {
 	} else {
 		e.PutInt32(r.ReplicaID)
 	}
-	e.PutInt32(r.MaxWaitTime)
+	e.PutInt32(int32(r.MaxWaitTime / time.Millisecond))
 	e.PutInt32(r.MinBytes)
 	if r.APIVersion >= 3 {
 		e.PutInt32(r.MaxBytes)
@@ -68,10 +70,11 @@ func (r *FetchRequest) Decode(d PacketDecoder, version int16) (err error) {
 	if err != nil {
 		return err
 	}
-	r.MaxWaitTime, err = d.Int32()
+	maxWaitTime, err := d.Int32()
 	if err != nil {
 		return err
 	}
+	r.MaxWaitTime = time.Duration(maxWaitTime) * time.Millisecond
 	r.MinBytes, err = d.Int32()
 	if err != nil {
 		return err
