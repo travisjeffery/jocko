@@ -1,5 +1,7 @@
 package protocol
 
+import "time"
+
 type CreateTopicRequest struct {
 	Topic             string
 	NumPartitions     int32
@@ -12,15 +14,15 @@ type CreateTopicRequests struct {
 	APIVersion int16
 
 	Requests     []*CreateTopicRequest
-	Timeout      int32
+	Timeout      time.Duration
 	ValidateOnly bool
 }
 
-func (c *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
-	if err = e.PutArrayLength(len(c.Requests)); err != nil {
+func (r *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
+	if err = e.PutArrayLength(len(r.Requests)); err != nil {
 		return err
 	}
-	for _, r := range c.Requests {
+	for _, r := range r.Requests {
 		if err = e.PutString(r.Topic); err != nil {
 			return err
 		}
@@ -47,23 +49,23 @@ func (c *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
 			}
 		}
 	}
-	e.PutInt32(c.Timeout)
-	if c.APIVersion >= 1 {
-		e.PutBool(c.ValidateOnly)
+	e.PutInt32(int32(r.Timeout / time.Millisecond))
+	if r.APIVersion >= 1 {
+		e.PutBool(r.ValidateOnly)
 	}
 	return nil
 }
 
-func (c *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
+func (r *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
 	var err error
 	requestCount, err := d.ArrayLength()
 	if err != nil {
 		return err
 	}
-	c.Requests = make([]*CreateTopicRequest, requestCount)
-	for i := range c.Requests {
+	r.Requests = make([]*CreateTopicRequest, requestCount)
+	for i := range r.Requests {
 		req := new(CreateTopicRequest)
-		c.Requests[i] = req
+		r.Requests[i] = req
 		req.Topic, err = d.String()
 		if err != nil {
 			return err
@@ -105,7 +107,7 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
 		if err != nil {
 			return err
 		}
-		c := make(map[string]*string, configCount)
+		r := make(map[string]*string, configCount)
 		for j := 0; j < configCount; j++ {
 			k, err := d.String()
 			if err != nil {
@@ -115,16 +117,17 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
 			if err != nil {
 				return err
 			}
-			c[k] = v
+			r[k] = v
 		}
-		req.Configs = c
+		req.Configs = r
 	}
-	c.Timeout, err = d.Int32()
+	timeout, err := d.Int32()
 	if err != nil {
 		return err
 	}
+	r.Timeout = time.Duration(timeout) * time.Millisecond
 	if version >= 1 {
-		c.ValidateOnly, err = d.Bool()
+		r.ValidateOnly, err = d.Bool()
 		if err != nil {
 			return nil
 		}
@@ -132,7 +135,7 @@ func (c *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
 	return nil
 }
 
-func (c *CreateTopicRequests) Key() int16 {
+func (r *CreateTopicRequests) Key() int16 {
 	return CreateTopicsKey
 }
 
