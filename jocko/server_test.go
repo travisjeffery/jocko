@@ -26,11 +26,9 @@ func init() {
 }
 
 func TestProduceConsume(t *testing.T) {
-	log.SetPrefix("server_test: ")
 	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
-		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true
 	}, nil)
 	ctx1, cancel1 := context.WithCancel((context.Background()))
@@ -40,6 +38,8 @@ func TestProduceConsume(t *testing.T) {
 	defer teardown1()
 	// TODO: mv close into teardown
 	defer s1.Shutdown()
+
+	jocko.WaitForLeader(t, s1)
 
 	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
@@ -169,10 +169,9 @@ func TestProduceConsume(t *testing.T) {
 }
 
 func TestConsumerGroup(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 
 	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
-		cfg.BootstrapExpect = 3
 		cfg.Bootstrap = true
 	}, nil)
 	ctx1, cancel1 := context.WithCancel((context.Background()))
@@ -182,6 +181,8 @@ func TestConsumerGroup(t *testing.T) {
 	defer teardown1()
 	// TODO: mv close into teardown
 	defer s1.Shutdown()
+
+	jocko.WaitForLeader(t, s1)
 
 	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
@@ -391,6 +392,7 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 		assignment = append(assignment, o.ID())
 	}
 	_, err = conn.CreateTopics(&protocol.CreateTopicRequests{
+		Timeout: 15 * time.Second,
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
 			NumPartitions:     int32(1),

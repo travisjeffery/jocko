@@ -32,7 +32,7 @@ func TestBroker_Replicate(t *testing.T) {
 
 	replicator := jocko.NewReplicator(jocko.ReplicatorConfig{
 		MinBytes:    5,
-		MaxWaitTime: int32(250 * time.Millisecond),
+		MaxWaitTime: 250 * time.Millisecond,
 	}, replica, l)
 	replicator.Replicate()
 

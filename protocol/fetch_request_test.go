@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -10,7 +11,7 @@ func TestFetchRequest(t *testing.T) {
 	req := require.New(t)
 	exp := &FetchRequest{
 		ReplicaID:   1,
-		MaxWaitTime: 2,
+		MaxWaitTime: time.Millisecond,
 		MinBytes:    3,
 		Topics: []*FetchTopic{{
 			Topic: "test_topic",
