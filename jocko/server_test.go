@@ -129,6 +129,7 @@ func TestProduceConsume(t *testing.T) {
 	case s3:
 		cancel3()
 	}
+	controller.Leave()
 	controller.Shutdown()
 
 	time.Sleep(3 * time.Second)

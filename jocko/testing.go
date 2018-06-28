@@ -72,6 +72,8 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 	config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
+	config.SerfLANConfig.MemberlistConfig.GossipToTheDeadTime = 15 * time.Second
+	config.SerfLANConfig.MemberlistConfig.PushPullInterval = time.Second
 
 	// Tighten the Raft timing
 	config.RaftConfig.LeaderLeaseTimeout = 50 * time.Millisecond
