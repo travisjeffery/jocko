@@ -11,6 +11,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/raft"
+	"github.com/hashicorp/serf/serf"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 
@@ -656,6 +657,66 @@ func TestBroker_LeftMember(t *testing.T) {
 			r.Fatal("node still registered")
 		}
 	})
+}
+
+// TODO: add reap test
+
+func TestBroker_ReapMember(t *testing.T) {
+	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 3
+	}, nil)
+	b1 := s1.broker()
+	defer t1()
+	defer b1.Shutdown()
+
+	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil)
+	b2 := s2.broker()
+	defer t2()
+	defer b2.Shutdown()
+
+	joinLAN(t, b1, b2)
+
+	state := b1.fsm.State()
+
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(b2.config.ID)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			r.Fatal("server not registered")
+		}
+	})
+
+	mems := b1.LANMembers()
+	var b2mem serf.Member
+	for _, m := range mems {
+		if m.Name == b2.config.NodeName {
+			b2mem = m
+			b2mem.Status = StatusReap
+			break
+		}
+	}
+	b1.reconcileCh <- b2mem
+
+	reaped := false
+	for start := time.Now(); time.Since(start) < 5*time.Second; {
+		_, node, err := state.GetNode(b2.config.ID)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			reaped = true
+			break
+		}
+	}
+	if !reaped {
+		t.Fatalf("server should not be registered")
+	}
 }
 
 func TestBroker_LeaveLeader(t *testing.T) {
