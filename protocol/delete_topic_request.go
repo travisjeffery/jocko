@@ -1,31 +1,37 @@
 package protocol
 
+import "time"
+
 type DeleteTopicsRequest struct {
 	APIVersion int16
 
 	Topics  []string
-	Timeout int32
+	Timeout time.Duration
 }
 
-func (c *DeleteTopicsRequest) Encode(e PacketEncoder) (err error) {
-	if err = e.PutStringArray(c.Topics); err != nil {
+func (r *DeleteTopicsRequest) Encode(e PacketEncoder) (err error) {
+	if err = e.PutStringArray(r.Topics); err != nil {
 		return err
 	}
-	e.PutInt32(c.Timeout)
+	e.PutInt32(int32(r.Timeout / time.Millisecond))
 	return nil
 }
 
-func (c *DeleteTopicsRequest) Decode(d PacketDecoder, version int16) (err error) {
-	c.APIVersion = version
-	c.Topics, err = d.StringArray()
+func (r *DeleteTopicsRequest) Decode(d PacketDecoder, version int16) (err error) {
+	r.APIVersion = version
+	r.Topics, err = d.StringArray()
 	if err != nil {
 		return err
 	}
-	c.Timeout, err = d.Int32()
+	timeout, err := d.Int32()
+	if err != nil {
+		return err
+	}
+	r.Timeout = time.Duration(timeout) * time.Millisecond
 	return err
 }
 
-func (c *DeleteTopicsRequest) Key() int16 {
+func (r *DeleteTopicsRequest) Key() int16 {
 	return DeleteTopicsKey
 }
 
