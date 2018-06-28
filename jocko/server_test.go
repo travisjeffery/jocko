@@ -3,6 +3,7 @@ package jocko_test
 import (
 	"bytes"
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -28,37 +29,37 @@ func init() {
 func TestProduceConsume(t *testing.T) {
 	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 
-	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 	}, nil)
 	ctx1, cancel1 := context.WithCancel((context.Background()))
 	defer cancel1()
 	err := s1.Start(ctx1)
 	require.NoError(t, err)
-	defer teardown1()
+	defer os.RemoveAll(dir1)
 	// TODO: mv close into teardown
 	defer s1.Shutdown()
 
 	jocko.WaitForLeader(t, s1)
 
-	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s2, dir2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx2, cancel2 := context.WithCancel((context.Background()))
 	defer cancel2()
 	err = s2.Start(ctx2)
 	require.NoError(t, err)
-	defer teardown2()
+	defer os.RemoveAll(dir2)
 	defer s2.Shutdown()
 
-	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s3, dir3 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx3, cancel3 := context.WithCancel((context.Background()))
 	defer cancel3()
 	err = s3.Start(ctx3)
 	require.NoError(t, err)
-	defer teardown3()
+	defer os.RemoveAll(dir3)
 	defer s3.Shutdown()
 
 	jocko.TestJoin(t, s1, s2, s3)
@@ -172,37 +173,37 @@ func TestProduceConsume(t *testing.T) {
 func TestConsumerGroup(t *testing.T) {
 	// t.Skip()
 
-	s1, teardown1 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 	}, nil)
 	ctx1, cancel1 := context.WithCancel((context.Background()))
 	defer cancel1()
 	err := s1.Start(ctx1)
 	require.NoError(t, err)
-	defer teardown1()
-	// TODO: mv close into teardown
+	defer os.RemoveAll(dir1)
+	// TODO: mv close into dir
 	defer s1.Shutdown()
 
 	jocko.WaitForLeader(t, s1)
 
-	s2, teardown2 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s2, dir2 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx2, cancel2 := context.WithCancel((context.Background()))
 	defer cancel2()
 	err = s2.Start(ctx2)
 	require.NoError(t, err)
-	defer teardown2()
+	defer os.RemoveAll(dir2)
 	defer s2.Shutdown()
 
-	s3, teardown3 := jocko.NewTestServer(t, func(cfg *config.Config) {
+	s3, dir3 := jocko.NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 	}, nil)
 	ctx3, cancel3 := context.WithCancel((context.Background()))
 	defer cancel3()
 	err = s3.Start(ctx3)
 	require.NoError(t, err)
-	defer teardown3()
+	defer os.RemoveAll(dir3)
 	defer s3.Shutdown()
 
 	jocko.TestJoin(t, s1, s2, s3)
@@ -319,12 +320,12 @@ func TestConsumerGroup(t *testing.T) {
 func BenchmarkServer(b *testing.B) {
 	ctx, cancel := context.WithCancel((context.Background()))
 	defer cancel()
-	srv, teardown := jocko.NewTestServer(b, func(cfg *config.Config) {
+	srv, dir := jocko.NewTestServer(b, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
-	defer teardown()
+	defer os.RemoveAll(dir)
 	err := srv.Start(ctx)
 	require.NoError(b, err)
 

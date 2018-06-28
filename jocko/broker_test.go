@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -140,18 +142,22 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
-						req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-							Topic:             "the-topic",
-							NumPartitions:     1,
-							ReplicationFactor: 1,
-						}}},
+						req: &protocol.CreateTopicRequests{
+							Timeout: 100 * time.Millisecond,
+							Requests: []*protocol.CreateTopicRequest{{
+								Topic:             "the-topic",
+								NumPartitions:     1,
+								ReplicationFactor: 1,
+							}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						req: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
-							Topic: "the-topic",
-							Data: []*protocol.Data{{
-								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+						req: &protocol.ProduceRequest{
+							Timeout: 100 * time.Millisecond,
+							TopicData: []*protocol.TopicData{{
+								Topic: "the-topic",
+								Data: []*protocol.Data{{
+									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
@@ -215,22 +221,39 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
-						req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-							Topic:             "the-topic",
-							NumPartitions:     1,
-							ReplicationFactor: 1,
-						}}},
+						req: &protocol.CreateTopicRequests{
+							Timeout: 100 * time.Millisecond,
+							Requests: []*protocol.CreateTopicRequest{{
+								Topic:             "the-topic",
+								NumPartitions:     1,
+								ReplicationFactor: 1,
+							}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						req: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
-							Topic: "the-topic",
-							Data: []*protocol.Data{{
-								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+						req: &protocol.ProduceRequest{
+							Timeout: 100 * time.Millisecond,
+							TopicData: []*protocol.TopicData{{
+								Topic: "the-topic",
+								Data: []*protocol.Data{{
+									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}},
+							}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
-						req:    &protocol.FetchRequest{ReplicaID: 1, MinBytes: 5, Topics: []*protocol.FetchTopic{{Topic: "the-topic", Partitions: []*protocol.FetchPartition{{Partition: 0, FetchOffset: 0, MaxBytes: 100}}}}},
+						req: &protocol.FetchRequest{
+							MaxWaitTime: 100 * time.Millisecond,
+							ReplicaID:   1,
+							MinBytes:    5,
+							Topics: []*protocol.FetchTopic{
+								{
+									Topic: "the-topic",
+									Partitions: []*protocol.FetchPartition{{Partition: 0,
+										FetchOffset: 0,
+										MaxBytes:    100,
+									}},
+								},
+							}},
 					},
 				},
 				responses: []*Context{
@@ -284,18 +307,22 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
-						req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-							Topic:             "the-topic",
-							NumPartitions:     1,
-							ReplicationFactor: 1,
-						}}},
+						req: &protocol.CreateTopicRequests{
+							Timeout: 100 * time.Millisecond,
+							Requests: []*protocol.CreateTopicRequest{{
+								Topic:             "the-topic",
+								NumPartitions:     1,
+								ReplicationFactor: 1,
+							}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
-						req: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
-							Topic: "the-topic",
-							Data: []*protocol.Data{{
-								RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
+						req: &protocol.ProduceRequest{
+							Timeout: 100 * time.Millisecond,
+							TopicData: []*protocol.TopicData{{
+								Topic: "the-topic",
+								Data: []*protocol.Data{{
+									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
@@ -348,10 +375,12 @@ func TestBroker_Run(t *testing.T) {
 				responseCh: make(chan *Context, 2),
 				requests: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 2},
-					req: &protocol.ProduceRequest{TopicData: []*protocol.TopicData{{
-						Topic: "another-topic",
-						Data: []*protocol.Data{{
-							RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
+					req: &protocol.ProduceRequest{
+						Timeout: 100 * time.Millisecond,
+						TopicData: []*protocol.TopicData{{
+							Topic: "another-topic",
+							Data: []*protocol.Data{{
+								RecordSet: mustEncode(&protocol.MessageSet{Offset: 1, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}}},
 				},
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 2},
@@ -397,7 +426,7 @@ func TestBroker_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.Config) {
+			s, dir := NewTestServer(t, func(cfg *config.Config) {
 				cfg.ID = 1
 				cfg.Bootstrap = true
 				cfg.BootstrapExpect = 1
@@ -414,9 +443,8 @@ func TestBroker_Run(t *testing.T) {
 			runCtx := opentracing.ContextWithSpan(ctx, span)
 
 			defer func() {
-				b.Leave()
-				b.Shutdown()
-				teardown()
+				os.RemoveAll(dir)
+				s.Shutdown()
 			}()
 
 			retry.Run(t, func(r *retry.R) {
@@ -489,16 +517,15 @@ func TestBroker_Shutdown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, teardown := NewTestServer(t, func(cfg *config.Config) {
-				cfg.ID = 1
+			s, dir := NewTestServer(t, func(cfg *config.Config) {
 				cfg.Bootstrap = true
-				cfg.BootstrapExpect = 1
-				cfg.StartAsLeader = true
 			}, nil)
-			defer teardown()
-			b := s.broker()
-			if err := b.Shutdown(); (err != nil) != tt.wantErr {
-				t.Errorf("Shutdown() error = %v, wantErr %v", err, tt.wantErr)
+			defer os.RemoveAll(dir)
+			if err := s.Start(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Shutdown(); (err != nil) != tt.wantErr {
+				t.Fatalf("Shutdown() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -517,47 +544,47 @@ func newFields() fields {
 }
 
 func TestBroker_JoinLAN(t *testing.T) {
-	s1, t1 := NewTestServer(t, nil, nil)
-	b1 := s1.broker()
-	defer t1()
-	defer b1.Shutdown()
-	s2, t2 := NewTestServer(t, nil, nil)
-	b2 := s2.broker()
-	defer t2()
-	defer b2.Shutdown()
+	s1, dir1 := NewTestServer(t, nil, nil)
 
-	joinLAN(t, b1, b2)
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+	s2, dir2 := NewTestServer(t, nil, nil)
+
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
+
+	joinLAN(t, s1, s2)
 
 	retry.Run(t, func(r *retry.R) {
-		require.Equal(t, 2, len(b1.LANMembers()))
-		require.Equal(t, 2, len(b2.LANMembers()))
+		require.Equal(t, 2, len(s1.broker().LANMembers()))
+		require.Equal(t, 2, len(s2.broker().LANMembers()))
 	})
 }
 
 func TestBroker_RegisterMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker()
-	defer t1()
-	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker()
-	defer t2()
-	defer b2.Shutdown()
 
-	joinLAN(t, b2, b1)
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
 
-	waitForLeader(t, b1, b2)
+	joinLAN(t, s2, s1)
 
-	state := b1.fsm.State()
+	waitForLeader(t, s1, s2)
+
+	state := s1.broker().fsm.State()
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.ID)
+		_, node, err := state.GetNode(s2.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -566,7 +593,7 @@ func TestBroker_RegisterMember(t *testing.T) {
 		}
 	})
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b1.config.ID)
+		_, node, err := state.GetNode(s1.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -577,19 +604,19 @@ func TestBroker_RegisterMember(t *testing.T) {
 }
 
 func TestBroker_FailedMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
-	defer t1()
+	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
-	defer t2()
+	defer os.RemoveAll(dir2)
 
 	TestJoin(t, s2, s1)
 
@@ -613,22 +640,22 @@ func TestBroker_FailedMember(t *testing.T) {
 }
 
 func TestBroker_LeftMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
-	b1 := s1.broker()
-	defer t1()
-	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.NonVoter = true
 	}, nil)
-	b2 := s2.broker()
-	defer t2()
-	defer b2.Shutdown()
+
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
 
 	TestJoin(t, s2, s1)
 
@@ -662,28 +689,24 @@ func TestBroker_LeftMember(t *testing.T) {
 // TODO: add reap test
 
 func TestBroker_ReapMember(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
-		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker()
-	defer t1()
-	defer b1.Shutdown()
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
-		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker()
-	defer t2()
-	defer b2.Shutdown()
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
 
-	joinLAN(t, b1, b2)
+	joinLAN(t, s1, s2)
 
-	state := b1.fsm.State()
+	state := s1.broker().fsm.State()
 
 	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(b2.config.ID)
+		_, node, err := state.GetNode(s2.config.ID)
 		if err != nil {
 			r.Fatalf("err: %v", err)
 		}
@@ -692,20 +715,20 @@ func TestBroker_ReapMember(t *testing.T) {
 		}
 	})
 
-	mems := b1.LANMembers()
+	mems := s1.broker().LANMembers()
 	var b2mem serf.Member
 	for _, m := range mems {
-		if m.Name == b2.config.NodeName {
+		if m.Name == s2.config.NodeName {
 			b2mem = m
 			b2mem.Status = StatusReap
 			break
 		}
 	}
-	b1.reconcileCh <- b2mem
+	s1.broker().reconcileCh <- b2mem
 
 	reaped := false
 	for start := time.Now(); time.Since(start) < 5*time.Second; {
-		_, node, err := state.GetNode(b2.config.ID)
+		_, node, err := state.GetNode(s2.config.ID)
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
@@ -719,35 +742,33 @@ func TestBroker_ReapMember(t *testing.T) {
 	}
 }
 
-func TestBroker_LeaveLeader(t *testing.T) {
-	s1, t1 := NewTestServer(t, func(cfg *config.Config) {
+func TestBroker_LeftLeader(t *testing.T) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b1 := s1.broker()
-	defer t1()
-	defer b1.Shutdown()
 
-	s2, t2 := NewTestServer(t, func(cfg *config.Config) {
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b2 := s2.broker()
-	defer t2()
-	defer b2.Shutdown()
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
 
-	s3, t3 := NewTestServer(t, func(cfg *config.Config) {
+	s3, dir3 := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = false
 		cfg.BootstrapExpect = 3
 	}, nil)
-	b3 := s3.broker()
-	defer t3()
-	defer b3.Shutdown()
+	defer os.RemoveAll(dir3)
+	defer s3.Shutdown()
 
-	brokers := []*Broker{b1, b2, b3}
+	brokers := []*Broker{s1.broker(), s2.broker(), s3.broker()}
 
-	joinLAN(t, b2, b1)
-	joinLAN(t, b3, b1)
+	joinLAN(t, s2, s1)
+	joinLAN(t, s3, s1)
 
 	for _, b := range brokers {
 		retry.Run(t, func(r *retry.R) {
@@ -809,12 +830,12 @@ func TestBroker_LeaveLeader(t *testing.T) {
 	})
 }
 
-func waitForLeader(t *testing.T, brokers ...*Broker) {
+func waitForLeader(t *testing.T, servers ...*Server) {
 	retry.Run(t, func(r *retry.R) {
-		var leader *Broker
-		for _, b := range brokers {
-			if raft.Leader == b.raft.State() {
-				leader = b
+		var leader *Server
+		for _, s := range servers {
+			if raft.Leader == s.broker().raft.State() {
+				leader = s
 			}
 		}
 		if leader == nil {
@@ -823,10 +844,40 @@ func waitForLeader(t *testing.T, brokers ...*Broker) {
 	})
 }
 
-func joinLAN(t *testing.T, b1 *Broker, b2 *Broker) {
-	addr := fmt.Sprintf("127.0.0.1:%d", b2.config.SerfLANConfig.MemberlistConfig.BindPort)
-	err := b1.JoinLAN(addr)
-	require.Equal(t, err, protocol.ErrNone)
+func joinLAN(t *testing.T, leader *Server, member *Server) {
+	if leader == nil || member == nil {
+		panic("no server")
+	}
+	leaderAddr := fmt.Sprintf("127.0.0.1:%d", leader.config.SerfLANConfig.MemberlistConfig.BindPort)
+	memberAddr := fmt.Sprintf("127.0.0.1:%d", member.config.SerfLANConfig.MemberlistConfig.BindPort)
+	if err := member.broker().JoinLAN(leaderAddr); err != protocol.ErrNone {
+		t.Fatal(err)
+	}
+	retry.Run(t, func(r *retry.R) {
+		if !seeEachOther(leader.broker().LANMembers(), member.broker().LANMembers(), leaderAddr, memberAddr) {
+			r.Fatalf("leader and member cannot see each other")
+		}
+	})
+	if !seeEachOther(leader.broker().LANMembers(), member.broker().LANMembers(), leaderAddr, memberAddr) {
+		t.Fatalf("leader and member cannot see each other")
+	}
+}
+
+func seeEachOther(a, b []serf.Member, addra, addrb string) bool {
+	return serfMembersContains(a, addrb) && serfMembersContains(b, addra)
+}
+
+func serfMembersContains(members []serf.Member, addr string) bool {
+	_, want, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(err)
+	}
+	for _, m := range members {
+		if got := fmt.Sprintf("%d", m.Port); got == want {
+			return true
+		}
+	}
+	return false
 }
 
 // wantPeers determines whether the server has the given

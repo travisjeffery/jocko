@@ -3,7 +3,6 @@ package jocko
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +22,7 @@ var (
 	nodeNumber int32
 )
 
-func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func(cfg *config.Config)) (*Server, func()) {
+func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func(cfg *config.Config)) (*Server, string) {
 	ports := dynaport.Get(4)
 	nodeID := atomic.AddInt32(&nodeNumber, 1)
 
@@ -93,10 +92,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 		cbServer(config)
 	}
 
-	return NewServer(config, b, nil, tracer, closer.Close), func() {
-		os.RemoveAll(config.DataDir)
-		os.RemoveAll(tmpDir)
-	}
+	return NewServer(config, b, nil, tracer, closer.Close), tmpDir
 }
 
 func TestJoin(t testing.T, s1 *Server, other ...*Server) {
