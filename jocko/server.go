@@ -35,6 +35,7 @@ func init() {
 // Broker is the interface that wraps the Broker's methods.
 type Handler interface {
 	Run(context.Context, <-chan *Context, chan<- *Context)
+	Leave() error
 	Shutdown() error
 }
 
@@ -119,6 +120,10 @@ func (s *Server) Start(ctx context.Context) error {
 	go s.handler.Run(ctx, s.requestCh, s.responseCh)
 
 	return nil
+}
+
+func (s *Server) Leave() error {
+	return s.handler.Leave()
 }
 
 // Shutdown closes the service.

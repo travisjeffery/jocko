@@ -290,6 +290,7 @@ func (b *Broker) handleAliveMember(m serf.Member) error {
 		// TODO: should still register?
 		return nil
 	}
+
 	log.Info.Printf("leader/%d: member joined, marking health alive: %s", b.config.ID, m.Name)
 	req := structs.RegisterNodeRequest{
 		Node: structs.Node{
