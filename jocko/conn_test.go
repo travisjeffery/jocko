@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -81,12 +82,12 @@ func (c *connPipe) SetWriteDeadline(t time.Time) error {
 }
 
 func TestConn(t *testing.T) {
-	s, cancel := NewTestServer(t, func(cfg *config.Config) {
+	s, dir := NewTestServer(t, func(cfg *config.Config) {
 		cfg.Bootstrap = true
 		cfg.BootstrapExpect = 1
 		cfg.StartAsLeader = true
 	}, nil)
-	defer cancel()
+	defer os.RemoveAll(dir)
 	err := s.Start(context.Background())
 	if err != nil {
 		t.Fatal(err)

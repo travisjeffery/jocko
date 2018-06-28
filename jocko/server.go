@@ -127,21 +127,27 @@ func (s *Server) Leave() error {
 }
 
 // Shutdown closes the service.
-func (s *Server) Shutdown() {
+func (s *Server) Shutdown() error {
 	s.shutdownLock.Lock()
 	defer s.shutdownLock.Unlock()
 
 	if s.shutdown {
-		return
+		return nil
 	}
 
 	s.shutdown = true
 	close(s.shutdownCh)
 
-	s.handler.Shutdown()
-	s.protocolLn.Close()
+	if err := s.handler.Shutdown(); err != nil {
+		return err
+	}
+	if err := s.protocolLn.Close(); err != nil {
+		return err
+	}
 
 	s.close()
+
+	return nil
 }
 
 func (s *Server) handleRequest(conn net.Conn) {
