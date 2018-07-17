@@ -107,6 +107,202 @@ func (c *Conn) CreateTopics(req *protocol.CreateTopicRequests) (*protocol.Create
 	return &resp, nil
 }
 
+// Produce sends a produce request and returns the response.
+func (c *Conn) Produce(req *protocol.ProduceRequest) (*protocol.ProduceResponse, error) {
+	var resp protocol.ProduceResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Offsets sends an offsets request and returns the response.
+func (c *Conn) Offsets(req *protocol.OffsetsRequest) (*protocol.OffsetsResponse, error) {
+	var resp protocol.OffsetsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// StopReplica sends a stop replica request and returns the response.
+func (c *Conn) StopReplica(req *protocol.StopReplicaRequest) (*protocol.StopReplicaResponse, error) {
+	var resp protocol.StopReplicaResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// OffsetFetch sends an offset fetch and returns the response.
+func (c *Conn) OffsetFetch(req *protocol.OffsetFetchRequest) (*protocol.OffsetFetchResponse, error) {
+	var resp protocol.OffsetFetchResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// FindCoordinator sends a find coordinator request and returns the response.
+func (c *Conn) FindCoordinator(req *protocol.FindCoordinatorRequest) (*protocol.FindCoordinatorResponse, error) {
+	var resp protocol.FindCoordinatorResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Heartbeat sends a heartbeat request and returns the response.
+func (c *Conn) Heartbeat(req *protocol.HeartbeatRequest) (*protocol.HeartbeatResponse, error) {
+	var resp protocol.HeartbeatResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// LeaveGroup sends a leave group request and returns the response.
+func (c *Conn) LeaveGroup(req *protocol.LeaveGroupRequest) (*protocol.LeaveGroupResponse, error) {
+	var resp protocol.LeaveGroupResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SyncGroup sends a sync group request and returns the response.
+func (c *Conn) SyncGroup(req *protocol.SyncGroupRequest) (*protocol.SyncGroupResponse, error) {
+	var resp protocol.SyncGroupResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DescribeGroups sends a describe groups request and returns the response.
+func (c *Conn) DescribeGroups(req *protocol.DescribeGroupsRequest) (*protocol.DescribeGroupsResponse, error) {
+	var resp protocol.DescribeGroupsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ListGroups sends a list groups request and returns the response.
+func (c *Conn) ListGroups(req *protocol.ListGroupsRequest) (*protocol.ListGroupsResponse, error) {
+	var resp protocol.ListGroupsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// APIVersions sends an api version request and returns the response.
+func (c *Conn) APIVersions(req *protocol.APIVersionsRequest) (*protocol.APIVersionsResponse, error) {
+	var resp protocol.APIVersionsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DeleteTopics sends a delete topic request and returns the response.
+func (c *Conn) DeleteTopics(req *protocol.DeleteTopicsRequest) (*protocol.DeleteTopicsResponse, error) {
+	var resp protocol.DeleteTopicsResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// JoinGroup sends a join group request and returns the response.
+func (c *Conn) JoinGroup(req *protocol.JoinGroupRequest) (*protocol.JoinGroupResponse, error) {
+	var resp protocol.JoinGroupResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Metadata sends a metadata request and returns the response.
+func (c *Conn) Metadata(req *protocol.MetadataRequest) (*protocol.MetadataResponse, error) {
+	var resp protocol.MetadataResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // Fetch sends a fetch request and returns the response.
 func (c *Conn) Fetch(req *protocol.FetchRequest) (*protocol.FetchResponse, error) {
 	var resp protocol.FetchResponse

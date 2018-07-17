@@ -96,5 +96,9 @@ func (r *OffsetCommitRequest) Decode(d PacketDecoder, version int16) (err error)
 
 func (r *OffsetCommitRequest) Version() int16 {
 	return r.APIVersion
+}
+
+func (r *OffsetCommitRequest) Key() int16 {
+	return OffsetCommitKey
 
 }
