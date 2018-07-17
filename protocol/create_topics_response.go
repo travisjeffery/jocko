@@ -28,7 +28,9 @@ func (c *CreateTopicsResponse) Encode(e PacketEncoder) (err error) {
 		}
 		e.PutInt16(t.ErrorCode)
 		if c.APIVersion >= 1 {
-			e.PutNullableString(t.ErrorMessage)
+			if err = e.PutNullableString(t.ErrorMessage); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
