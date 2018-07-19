@@ -149,9 +149,51 @@ func (c *Conn) StopReplica(req *protocol.StopReplicaRequest) (*protocol.StopRepl
 	return &resp, nil
 }
 
+// UpdateMetadata sends an update metadata request and returns the response.
+func (c *Conn) UpdateMetadata(req *protocol.UpdateMetadataRequest) (*protocol.UpdateMetadataResponse, error) {
+	var resp protocol.UpdateMetadataResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ControlledShutdown sends a controlled shutdown request and returns the response.
+func (c *Conn) ControlledShutdown(req *protocol.ControlledShutdownRequest) (*protocol.ControlledShutdownResponse, error) {
+	var resp protocol.ControlledShutdownResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // OffsetCommit sends an offset commit and returns the response.
 func (c *Conn) OffsetCommit(req *protocol.OffsetCommitRequest) (*protocol.OffsetCommitResponse, error) {
 	var resp protocol.OffsetCommitResponse
+	err := c.readOperation(func(deadline time.Time, id int32) error {
+		return c.writeRequest(req)
+	}, func(deadline time.Time, size int) error {
+		return c.readResponse(&resp, size, req.Version())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SaslHandshake sends a sasl handshake request and returns the response.
+func (c *Conn) SaslHandshake(req *protocol.SaslHandshakeRequest) (*protocol.SaslHandshakeResponse, error) {
+	var resp protocol.SaslHandshakeResponse
 	err := c.readOperation(func(deadline time.Time, id int32) error {
 		return c.writeRequest(req)
 	}, func(deadline time.Time, size int) error {

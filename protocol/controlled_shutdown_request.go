@@ -17,5 +17,5 @@ func (r *ControlledShutdownRequest) Key() int16 {
 }
 
 func (r ControlledShutdownRequest) Version() int16 {
-	return r.Versoin
+	return r.APIVersion
 }
