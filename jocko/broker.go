@@ -76,10 +76,11 @@ type Broker struct {
 	// raftNotifyCh ensures we get reliable leader transition notifications from the raft layer.
 	raftNotifyCh <-chan bool
 	// reconcileCh is used to pass events from the serf handler to the raft leader to update its state.
-	reconcileCh chan serf.Member
-	serf        *serf.Serf
-	fsm         *fsm.FSM
-	eventChLAN  chan serf.Event
+	reconcileCh      chan serf.Member
+	serf             *serf.Serf
+	fsm              *fsm.FSM
+	eventChLAN       chan serf.Event
+	logStateInterval time.Duration
 
 	tracer opentracing.Tracer
 
@@ -91,13 +92,14 @@ type Broker struct {
 // New is used to instantiate a new broker.
 func NewBroker(config *config.Config, tracer opentracing.Tracer) (*Broker, error) {
 	b := &Broker{
-		config:        config,
-		shutdownCh:    make(chan struct{}),
-		eventChLAN:    make(chan serf.Event, 256),
-		brokerLookup:  NewBrokerLookup(),
-		replicaLookup: NewReplicaLookup(),
-		reconcileCh:   make(chan serf.Member, 32),
-		tracer:        tracer,
+		config:           config,
+		shutdownCh:       make(chan struct{}),
+		eventChLAN:       make(chan serf.Event, 256),
+		brokerLookup:     NewBrokerLookup(),
+		replicaLookup:    NewReplicaLookup(),
+		reconcileCh:      make(chan serf.Member, 32),
+		tracer:           tracer,
+		logStateInterval: time.Millisecond * 250,
 	}
 
 	if err := b.setupRaft(); err != nil {
@@ -114,6 +116,8 @@ func NewBroker(config *config.Config, tracer opentracing.Tracer) (*Broker, error
 	go b.lanEventHandler()
 
 	go b.monitorLeadership()
+
+	go b.logState()
 
 	return b, nil
 }
@@ -1317,5 +1321,40 @@ func (b *Broker) withTimeout(timeout time.Duration, fn func() protocol.Error) pr
 		return err
 	case <-timer.C:
 		return protocol.ErrRequestTimedOut
+	}
+}
+
+func (b *Broker) logState() {
+	t := time.NewTicker(b.logStateInterval)
+	for {
+		select {
+		case <-b.shutdownCh:
+			return
+		case <-t.C:
+			var buf bytes.Buffer
+			buf.WriteString("\tmembers:\n")
+			members := b.LANMembers()
+			for i, member := range members {
+				buf.WriteString(fmt.Sprintf("\t\t- %d:\n\t\t\tname: %s\n\t\t\taddr: %s\n\t\t\tstatus: %s\n", i, member.Name, member.Addr, member.Status))
+			}
+			buf.WriteString("\tnodes:\n")
+			state := b.fsm.State()
+			_, nodes, err := state.GetNodes()
+			if err != nil {
+				panic(err)
+			}
+			for i, node := range nodes {
+				buf.WriteString(fmt.Sprintf("\t\t- %d:\n\t\t\tid: %d\n\t\t\tstatus: %s\n", i, node.Node, node.Check.Status))
+			}
+			_, topics, err := state.GetTopics()
+			if err != nil {
+				panic(err)
+			}
+			buf.WriteString("\ttopics:\n")
+			for i, topic := range topics {
+				buf.WriteString(fmt.Sprintf("\t\t- %d:\n\t\t\tid: %s\n\t\t\tpartitions: %v\n", i, topic.Topic, topic.Partitions))
+			}
+			log.Info.Printf("broker/%d: state:\n%s", b.config.ID, buf.String())
+		}
 	}
 }
