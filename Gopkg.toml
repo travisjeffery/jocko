@@ -1,0 +1,75 @@
+
+# Gopkg.toml example
+#
+# Refer to https://github.com/golang/dep/blob/master/docs/Gopkg.toml.md
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#  name = "github.com/x/y"
+#  version = "2.4.0"
+
+
+[[constraint]]
+  name = "github.com/Shopify/sarama"
+  version = "1.13.0"
+
+[[constraint]]
+  name = "github.com/gorilla/handlers"
+  version = "1.2.1"
+
+[[constraint]]
+  name = "github.com/gorilla/mux"
+  version = "1.5.0"
+
+[[constraint]]
+  name = "github.com/hashicorp/raft"
+  version = "=1.0.0"
+
+[[constraint]]
+  revision = "a8adffd05b79e3d8b1817d46bbe387a112265b3e"
+  name = "github.com/hashicorp/raft-boltdb"
+
+[[constraint]]
+  name = "github.com/hashicorp/serf"
+  revision = "911b3cc29e11db3e4c6ed4543c4c721e4e179752"
+
+[[constraint]]
+  name = "github.com/hashicorp/go-memdb"
+  revision = "75ff99613d288868d8888ec87594525906815dbc"
+
+[[constraint]]
+  name = "github.com/uber/jaeger-client-go"
+  version = "=2.11.2"
+
+[[constraint]]
+  name = "github.com/pkg/errors"
+  version = "=0.8.0"
+
+[[constraint]]
+  name = "github.com/prometheus/client_golang"
+  version = "=0.8.0"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.1.4"
+
+[[constraint]]
+  name = "github.com/tj/go-gracefully"
+  revision = "005c1d102f1bf3158f9ba29c12d68a73ac15f321"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/tysontate/gommap"
+
