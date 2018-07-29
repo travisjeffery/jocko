@@ -2,10 +2,8 @@ package commitlog_test
 
 import (
 	"bytes"
-	"fmt"
-	"math/rand"
+	"io/ioutil"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -147,8 +145,10 @@ func setup(t require.TestingT) *commitlog.CommitLog {
 }
 
 func setupWithOptions(t require.TestingT, opts commitlog.Options) *commitlog.CommitLog {
+	var err error
 	if opts.Path == "" {
-		opts.Path = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
+		opts.Path, err = ioutil.TempDir("", "commitlogtest")
+		require.NoError(t, err)
 	}
 	l, err := commitlog.New(opts)
 	require.NoError(t, err)
