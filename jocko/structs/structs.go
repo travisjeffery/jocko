@@ -126,6 +126,8 @@ type Topic struct {
 	Partitions map[int32][]int32
 	// Config
 	Config TopicConfig
+	// Internal, e.g. group metadata topic
+	Internal bool
 
 	RaftIndex
 }
@@ -158,6 +160,16 @@ type Member struct {
 	Assignment []byte
 }
 
+type GroupState int32
+
+const (
+	PreparingRebalance  GroupState = 0
+	CompletingRebalance GroupState = 1
+	Stable              GroupState = 2
+	Dead                GroupState = 3
+	Empty               GroupState = 4
+)
+
 // Group
 type Group struct {
 	ID          string
@@ -165,6 +177,7 @@ type Group struct {
 	Coordinator int32
 	LeaderID    string
 	Members     map[string]Member
+	State       GroupState
 
 	RaftIndex
 }
