@@ -513,6 +513,8 @@ func TestBroker_Run(t *testing.T) {
 	}
 }
 
+// setupTest sets up a server/broker to send requests to get responses back via the returned
+// channels. Call teardown when your test is finished.
 func setupTest(t *testing.T) (
 	ctx context.Context,
 	srv *Server,
