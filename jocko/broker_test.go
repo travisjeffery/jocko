@@ -513,7 +513,13 @@ func TestBroker_Run(t *testing.T) {
 	}
 }
 
-func TestBroker_Run_JoinSyncGroup(t *testing.T) {
+func setupTest(t *testing.T) (
+	ctx context.Context,
+	srv *Server,
+	reqCh chan *Context,
+	resCh chan *Context,
+	teardown func(),
+) {
 	s, dir := NewTestServer(t, func(cfg *config.Config) {
 		cfg.ID = 1
 		cfg.Bootstrap = true
@@ -524,18 +530,11 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	}, nil)
 	b := s.broker()
 
-	runCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	span := b.tracer.StartSpan("TestBroker_Run")
-	span.SetTag("name", "join_and_sync")
-	span.SetTag("test", true)
-	defer span.Finish()
-	spanCtx := opentracing.ContextWithSpan(runCtx, span)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	defer func() {
-		os.RemoveAll(dir)
-		s.Shutdown()
-	}()
+	span := b.tracer.StartSpan(t.Name())
+	span.SetTag("name", t.Name())
+	span.SetTag("test", true)
 
 	retry.Run(t, func(r *retry.R) {
 		if len(b.brokerLookup.Brokers()) != 1 {
@@ -543,16 +542,31 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 		}
 	})
 
-	requests := make(chan *Context, 2)
-	responses := make(chan *Context, 2)
+	reqCh = make(chan *Context, 2)
+	resCh = make(chan *Context, 2)
 
-	go b.Run(runCtx, requests, responses)
+	go b.Run(ctx, reqCh, resCh)
 
-	reqSpan := b.tracer.StartSpan("request", opentracing.ChildOf(span.Context()))
-	parent := opentracing.ContextWithSpan(spanCtx, reqSpan)
+	teardown = func() {
+		close(reqCh)
+		close(resCh)
+		span.Finish()
+		cancel()
+		os.RemoveAll(dir)
+		s.Shutdown()
+	}
+
+	ctx = opentracing.ContextWithSpan(ctx, span)
+
+	return ctx, s, reqCh, resCh, teardown
+}
+
+func TestBroker_Run_JoinSyncGroup(t *testing.T) {
+	ctx, _, reqCh, resCh, teardown := setupTest(t)
+	defer teardown()
 
 	// create topic
-	request := &Context{
+	req := &Context{
 		header: &protocol.RequestHeader{
 			CorrelationID: 1,
 			ClientID:      "join-and-sync",
@@ -564,11 +578,11 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 				NumPartitions:     1,
 				ReplicationFactor: 1,
 			}}},
-		parent: parent,
+		parent: ctx,
 	}
-	requests <- request
+	reqCh <- req
 
-	act := <-responses
+	act := <-resCh
 	exp := &Context{
 		header: &protocol.RequestHeader{CorrelationID: 1},
 		res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
@@ -580,7 +594,7 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	}
 
 	// join group
-	request = &Context{
+	req = &Context{
 		header: &protocol.RequestHeader{
 			CorrelationID: 3,
 			ClientID:      "join-and-sync",
@@ -593,10 +607,10 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 				ProtocolMetadata: []byte("protocolmetadata"),
 			}},
 		},
-		parent: parent,
+		parent: ctx,
 	}
-	requests <- request
-	act = <-responses
+	reqCh <- req
+	act = <-resCh
 
 	memberID := act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).MemberID
 	require.NotZero(t, memberID)
@@ -604,7 +618,7 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	require.Equal(t, memberID, act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).Members[0].MemberID)
 
 	// sync group
-	request = &Context{
+	req = &Context{
 		header: &protocol.RequestHeader{
 			CorrelationID: 4,
 			ClientID:      "join-and-sync",
@@ -614,11 +628,11 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 			GenerationID: 1,
 			MemberID:     memberID,
 		},
-		parent: parent,
+		parent: ctx,
 	}
-	requests <- request
+	reqCh <- req
 
-	act = <-responses
+	act = <-resCh
 	exp = &Context{
 		header: &protocol.RequestHeader{
 			CorrelationID: 4,
