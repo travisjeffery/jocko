@@ -23,6 +23,7 @@ func TestConfig(t *testing.T) (string, *config.Config) {
 	config.DataDir = dir
 	config.ID = atomic.AddInt32(&nodeID, 1)
 	config.SerfLANConfig.Logger = log.NewStdLogger(log.New(log.DebugLevel, fmt.Sprintf("serf/%d: ", config.ID)))
+	config.OffsetsTopicReplicationFactor = 3
 	config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
 	config.SerfLANConfig.MemberlistConfig.BindPort = ports[1]
 	config.SerfLANConfig.MemberlistConfig.AdvertiseAddr = "127.0.0.1"

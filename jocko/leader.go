@@ -240,12 +240,12 @@ func (b *Broker) reconcileReaped(known map[int32]struct{}) error {
 		return err
 	}
 	for _, node := range nodes {
-		if _, ok := known[node.ID]; ok {
+		if _, ok := known[node.Node]; ok {
 			continue
 		}
 		member := serf.Member{
 			Tags: map[string]string{
-				"id":   fmt.Sprintf("%b", node.ID),
+				"id":   fmt.Sprintf("%d", node.Node),
 				"role": "jocko",
 			},
 		}

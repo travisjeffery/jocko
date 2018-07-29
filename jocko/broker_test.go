@@ -73,7 +73,7 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-						Topic:             "the-topic",
+						Topic:             "test-topic",
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 					}}}},
@@ -81,7 +81,7 @@ func TestBroker_Run(t *testing.T) {
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 					}},
 				}},
 			},
@@ -94,7 +94,7 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-						Topic:             "the-topic",
+						Topic:             "test-topic",
 						NumPartitions:     1,
 						ReplicationFactor: 2,
 					}}}},
@@ -102,7 +102,7 @@ func TestBroker_Run(t *testing.T) {
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrInvalidReplicationFactor.Code()}},
 					}},
 				}},
 			},
@@ -115,22 +115,22 @@ func TestBroker_Run(t *testing.T) {
 				requests: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					req: &protocol.CreateTopicRequests{Requests: []*protocol.CreateTopicRequest{{
-						Topic:             "the-topic",
+						Topic:             "test-topic",
 						NumPartitions:     1,
 						ReplicationFactor: 1,
 					}}}}, {
 					header: &protocol.RequestHeader{CorrelationID: 2},
-					req:    &protocol.DeleteTopicsRequest{Topics: []string{"the-topic"}}},
+					req:    &protocol.DeleteTopicsRequest{Topics: []string{"test-topic"}}},
 				},
 				responses: []*Context{{
 					header: &protocol.RequestHeader{CorrelationID: 1},
 					res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 					}},
 				}, {
 					header: &protocol.RequestHeader{CorrelationID: 2},
 					res: &protocol.Response{CorrelationID: 2, Body: &protocol.DeleteTopicsResponse{
-						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 					}}}},
 			},
 		},
@@ -145,7 +145,7 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.CreateTopicRequests{
 							Timeout: 100 * time.Millisecond,
 							Requests: []*protocol.CreateTopicRequest{{
-								Topic:             "the-topic",
+								Topic:             "test-topic",
 								NumPartitions:     1,
 								ReplicationFactor: 1,
 							}}},
@@ -155,31 +155,31 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.ProduceRequest{
 							Timeout: 100 * time.Millisecond,
 							TopicData: []*protocol.TopicData{{
-								Topic: "the-topic",
+								Topic: "test-topic",
 								Data: []*protocol.Data{{
 									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
-						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -1}}}}},
+						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "test-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -1}}}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 4},
-						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "the-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
+						req:    &protocol.OffsetsRequest{ReplicaID: 0, Topics: []*protocol.OffsetsTopic{{Topic: "test-topic", Partitions: []*protocol.OffsetsPartition{{Partition: 0, Timestamp: -2}}}}},
 					},
 				},
 				responses: []*Context{
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
 						res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 						}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 2},
 						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
 							Responses: []*protocol.ProduceTopicResponse{{
-								Topic:              "the-topic",
+								Topic:              "test-topic",
 								PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
 							}},
 						}},
@@ -188,7 +188,7 @@ func TestBroker_Run(t *testing.T) {
 						header: &protocol.RequestHeader{CorrelationID: 3},
 						res: &protocol.Response{CorrelationID: 3, Body: &protocol.OffsetsResponse{
 							Responses: []*protocol.OffsetResponse{{
-								Topic:              "the-topic",
+								Topic:              "test-topic",
 								PartitionResponses: []*protocol.PartitionResponse{{Partition: 0, Offsets: []int64{1}, ErrorCode: protocol.ErrNone.Code()}},
 							}},
 						}},
@@ -197,7 +197,7 @@ func TestBroker_Run(t *testing.T) {
 						header: &protocol.RequestHeader{CorrelationID: 4},
 						res: &protocol.Response{CorrelationID: 4, Body: &protocol.OffsetsResponse{
 							Responses: []*protocol.OffsetResponse{{
-								Topic:              "the-topic",
+								Topic:              "test-topic",
 								PartitionResponses: []*protocol.PartitionResponse{{Partition: 0, Offsets: []int64{0}, ErrorCode: protocol.ErrNone.Code()}},
 							}},
 						}},
@@ -224,7 +224,7 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.CreateTopicRequests{
 							Timeout: 100 * time.Millisecond,
 							Requests: []*protocol.CreateTopicRequest{{
-								Topic:             "the-topic",
+								Topic:             "test-topic",
 								NumPartitions:     1,
 								ReplicationFactor: 1,
 							}}},
@@ -234,7 +234,7 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.ProduceRequest{
 							Timeout: 100 * time.Millisecond,
 							TopicData: []*protocol.TopicData{{
-								Topic: "the-topic",
+								Topic: "test-topic",
 								Data: []*protocol.Data{{
 									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}},
 							}},
@@ -247,7 +247,7 @@ func TestBroker_Run(t *testing.T) {
 							MinBytes:    5,
 							Topics: []*protocol.FetchTopic{
 								{
-									Topic: "the-topic",
+									Topic: "test-topic",
 									Partitions: []*protocol.FetchPartition{{Partition: 0,
 										FetchOffset: 0,
 										MaxBytes:    100,
@@ -260,7 +260,7 @@ func TestBroker_Run(t *testing.T) {
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
 						res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 						}},
 					},
 					{
@@ -268,7 +268,7 @@ func TestBroker_Run(t *testing.T) {
 						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
 							Responses: []*protocol.ProduceTopicResponse{
 								{
-									Topic:              "the-topic",
+									Topic:              "test-topic",
 									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
 								},
 							},
@@ -278,7 +278,7 @@ func TestBroker_Run(t *testing.T) {
 						header: &protocol.RequestHeader{CorrelationID: 3},
 						res: &protocol.Response{CorrelationID: 3, Body: &protocol.FetchResponse{
 							Responses: protocol.FetchTopicResponses{{
-								Topic: "the-topic",
+								Topic: "test-topic",
 								PartitionResponses: []*protocol.FetchPartitionResponse{{
 									Partition:     0,
 									ErrorCode:     protocol.ErrNone.Code(),
@@ -310,7 +310,7 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.CreateTopicRequests{
 							Timeout: 100 * time.Millisecond,
 							Requests: []*protocol.CreateTopicRequest{{
-								Topic:             "the-topic",
+								Topic:             "test-topic",
 								NumPartitions:     1,
 								ReplicationFactor: 1,
 							}}},
@@ -320,20 +320,20 @@ func TestBroker_Run(t *testing.T) {
 						req: &protocol.ProduceRequest{
 							Timeout: 100 * time.Millisecond,
 							TopicData: []*protocol.TopicData{{
-								Topic: "the-topic",
+								Topic: "test-topic",
 								Data: []*protocol.Data{{
 									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message.")}}})}}}}},
 					},
 					{
 						header: &protocol.RequestHeader{CorrelationID: 3},
-						req:    &protocol.MetadataRequest{Topics: []string{"the-topic", "unknown-topic"}},
+						req:    &protocol.MetadataRequest{Topics: []string{"test-topic", "unknown-topic"}},
 					},
 				},
 				responses: []*Context{
 					{
 						header: &protocol.RequestHeader{CorrelationID: 1},
 						res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
-							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "the-topic", ErrorCode: protocol.ErrNone.Code()}},
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 						}},
 					},
 					{
@@ -341,7 +341,7 @@ func TestBroker_Run(t *testing.T) {
 						res: &protocol.Response{CorrelationID: 2, Body: &protocol.ProduceResponse{
 							Responses: []*protocol.ProduceTopicResponse{
 								{
-									Topic:              "the-topic",
+									Topic:              "test-topic",
 									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
 								},
 							},
@@ -352,7 +352,7 @@ func TestBroker_Run(t *testing.T) {
 						res: &protocol.Response{CorrelationID: 3, Body: &protocol.MetadataResponse{
 							Brokers: []*protocol.Broker{{NodeID: 1, Host: "localhost", Port: 9092}},
 							TopicMetadata: []*protocol.TopicMetadata{
-								{Topic: "the-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), PartitionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
+								{Topic: "test-topic", TopicErrorCode: protocol.ErrNone.Code(), PartitionMetadata: []*protocol.PartitionMetadata{{PartitionErrorCode: protocol.ErrNone.Code(), PartitionID: 0, Leader: 1, Replicas: []int32{1}, ISR: []int32{1}}}},
 								{Topic: "unknown-topic", TopicErrorCode: protocol.ErrUnknownTopicOrPartition.Code()},
 							},
 						}},
@@ -400,29 +400,44 @@ func TestBroker_Run(t *testing.T) {
 				}
 			},
 		},
-		// {
-		// 	name: "find coordinator",
-		// 	args: args{
-		// 		requestCh:  make(chan *Context, 2),
-		// 		responseCh: make(chan *Context, 2),
-		// 		requests: []*Context{{
-		// 			header: &protocol.RequestHeader{CorrelationID: 3},
-		// 			req: &protocol.FindCoordinatorRequest{
-		// 				CoordinatorKey: "test-group",
-		// 			},
-		// 		}},
-		// 		responses: []*Context{{
-		// 			header: &protocol.RequestHeader{CorrelationID: 3},
-		// 			res: &protocol.res{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
-		// 				Coordinator: protocol.Coordinator{
-		// 					NodeID: 1,
-		// 					Host:   "localhost",
-		// 					Port:   9092,
-		// 				},
-		// 			}},
-		// 		}},
-		// 	},
-		// },
+		{
+			name: "find coordinator",
+			args: args{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{{
+					header: &protocol.RequestHeader{CorrelationID: 1},
+					req: &protocol.CreateTopicRequests{
+						Timeout: 100 * time.Millisecond,
+						Requests: []*protocol.CreateTopicRequest{{
+							Topic:             "test-topic",
+							NumPartitions:     1,
+							ReplicationFactor: 1,
+						}}},
+				}, {
+					header: &protocol.RequestHeader{CorrelationID: 3},
+					req: &protocol.FindCoordinatorRequest{
+						CoordinatorKey:  "test-group",
+						CoordinatorType: protocol.CoordinatorGroup,
+					},
+				}},
+				responses: []*Context{{
+					header: &protocol.RequestHeader{CorrelationID: 1},
+					res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+						TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
+					}},
+				}, {
+					header: &protocol.RequestHeader{CorrelationID: 3},
+					res: &protocol.Response{CorrelationID: 3, Body: &protocol.FindCoordinatorResponse{
+						Coordinator: protocol.Coordinator{
+							NodeID: 1,
+							Host:   "localhost",
+							Port:   9092,
+						},
+					}},
+				}},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -432,6 +447,7 @@ func TestBroker_Run(t *testing.T) {
 				cfg.BootstrapExpect = 1
 				cfg.StartAsLeader = true
 				cfg.Addr = "localhost:9092"
+				cfg.OffsetsTopicReplicationFactor = 1
 			}, nil)
 			b := s.broker()
 
@@ -494,6 +510,127 @@ func TestBroker_Run(t *testing.T) {
 			}
 			cancel()
 		})
+	}
+}
+
+func TestBroker_Run_JoinSyncGroup(t *testing.T) {
+	s, dir := NewTestServer(t, func(cfg *config.Config) {
+		cfg.ID = 1
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+		cfg.Addr = "localhost:9092"
+		cfg.OffsetsTopicReplicationFactor = 1
+	}, nil)
+	b := s.broker()
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	span := b.tracer.StartSpan("TestBroker_Run")
+	span.SetTag("name", "join_and_sync")
+	span.SetTag("test", true)
+	defer span.Finish()
+	spanCtx := opentracing.ContextWithSpan(runCtx, span)
+
+	defer func() {
+		os.RemoveAll(dir)
+		s.Shutdown()
+	}()
+
+	retry.Run(t, func(r *retry.R) {
+		if len(b.brokerLookup.Brokers()) != 1 {
+			r.Fatal("server not added")
+		}
+	})
+
+	requests := make(chan *Context, 2)
+	responses := make(chan *Context, 2)
+
+	go b.Run(runCtx, requests, responses)
+
+	reqSpan := b.tracer.StartSpan("request", opentracing.ChildOf(span.Context()))
+	parent := opentracing.ContextWithSpan(spanCtx, reqSpan)
+
+	// create topic
+	request := &Context{
+		header: &protocol.RequestHeader{
+			CorrelationID: 1,
+			ClientID:      "join-and-sync",
+		},
+		req: &protocol.CreateTopicRequests{
+			Timeout: 100 * time.Millisecond,
+			Requests: []*protocol.CreateTopicRequest{{
+				Topic:             "test-topic",
+				NumPartitions:     1,
+				ReplicationFactor: 1,
+			}}},
+		parent: parent,
+	}
+	requests <- request
+
+	act := <-responses
+	exp := &Context{
+		header: &protocol.RequestHeader{CorrelationID: 1},
+		res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+			TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
+		}},
+	}
+	if !reflect.DeepEqual(act.res, exp.res) {
+		t.Errorf("got %s, want: %s", spewstr(act.res), spewstr(exp.res))
+	}
+
+	// join group
+	request = &Context{
+		header: &protocol.RequestHeader{
+			CorrelationID: 3,
+			ClientID:      "join-and-sync",
+		},
+		req: &protocol.JoinGroupRequest{
+			GroupID:      "test-group",
+			ProtocolType: "consumer",
+			GroupProtocols: []*protocol.GroupProtocol{{
+				ProtocolName:     "protocolname",
+				ProtocolMetadata: []byte("protocolmetadata"),
+			}},
+		},
+		parent: parent,
+	}
+	requests <- request
+	act = <-responses
+
+	memberID := act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).MemberID
+	require.NotZero(t, memberID)
+	require.Equal(t, memberID, act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).LeaderID)
+	require.Equal(t, memberID, act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).Members[0].MemberID)
+
+	// sync group
+	request = &Context{
+		header: &protocol.RequestHeader{
+			CorrelationID: 4,
+			ClientID:      "join-and-sync",
+		},
+		req: &protocol.SyncGroupRequest{
+			GroupID:      "test-group",
+			GenerationID: 1,
+			MemberID:     memberID,
+		},
+		parent: parent,
+	}
+	requests <- request
+
+	act = <-responses
+	exp = &Context{
+		header: &protocol.RequestHeader{
+			CorrelationID: 4,
+		},
+		res: &protocol.Response{
+			CorrelationID: 4,
+			Body:          &protocol.SyncGroupResponse{},
+		},
+	}
+
+	if !reflect.DeepEqual(act.res, exp.res) {
+		t.Errorf("got %s, want: %s", spewstr(act.res), spewstr(exp.res))
 	}
 }
 
@@ -686,7 +823,57 @@ func TestBroker_LeftMember(t *testing.T) {
 	})
 }
 
-// TODO: add reap test
+func TestBroker_ReapLeader(t *testing.T) {
+	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+	}, nil)
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	s2, dir2 := NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = false
+	}, nil)
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
+
+	s3, dir3 := NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = false
+	}, nil)
+	defer os.RemoveAll(dir3)
+	defer s3.Shutdown()
+
+	joinLAN(t, s1, s2)
+	joinLAN(t, s1, s3)
+
+	state := s1.broker().fsm.State()
+
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(s3.config.ID)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			r.Fatal("server not registered")
+		}
+	})
+
+	knownMembers := make(map[int32]struct{})
+	knownMembers[s1.config.ID] = struct{}{}
+	knownMembers[s2.config.ID] = struct{}{}
+	err := s1.broker().reconcileReaped(knownMembers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry.Run(t, func(t *retry.R) {
+		_, node, err := state.GetNode(s3.config.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if node != nil {
+			t.Fatalf("server with id %v should be deregistered", s3.config.ID)
+		}
+	})
+}
 
 func TestBroker_ReapMember(t *testing.T) {
 	s1, dir1 := NewTestServer(t, func(cfg *config.Config) {

@@ -61,7 +61,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 	config.RaftAddr = fmt.Sprintf("%s:%d", "127.0.0.1", ports[1])
 	config.SerfLANConfig.MemberlistConfig.BindAddr = "127.0.0.1"
 	config.SerfLANConfig.MemberlistConfig.BindPort = ports[2]
-	config.LeaveDrainTime = 100 * time.Millisecond
+	config.LeaveDrainTime = 1 * time.Millisecond
 	config.ReconcileInterval = 300 * time.Millisecond
 
 	// Tighten the Serf timing
@@ -71,13 +71,11 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 	config.SerfLANConfig.MemberlistConfig.ProbeTimeout = 50 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.ProbeInterval = 100 * time.Millisecond
 	config.SerfLANConfig.MemberlistConfig.GossipInterval = 100 * time.Millisecond
-	config.SerfLANConfig.MemberlistConfig.GossipToTheDeadTime = 15 * time.Second
-	config.SerfLANConfig.MemberlistConfig.PushPullInterval = time.Second
 
 	// Tighten the Raft timing
-	config.RaftConfig.LeaderLeaseTimeout = 50 * time.Millisecond
-	config.RaftConfig.HeartbeatTimeout = 50 * time.Millisecond
-	config.RaftConfig.ElectionTimeout = 50 * time.Millisecond
+	config.RaftConfig.LeaderLeaseTimeout = 100 * time.Millisecond
+	config.RaftConfig.HeartbeatTimeout = 200 * time.Millisecond
+	config.RaftConfig.ElectionTimeout = 200 * time.Millisecond
 
 	if cbBroker != nil {
 		cbBroker(config)

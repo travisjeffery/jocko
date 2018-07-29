@@ -4,14 +4,16 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestIndex(t *testing.T) {
-	path, err := ioutil.TempDir("", "commitlog-index")
+	dir, err := ioutil.TempDir("", "commitlog-index")
 	require.NoError(t, err)
+	path := filepath.Join(dir, "test.index")
 
 	totalEntries := rand.Intn(10) + 10
 	//case for roundDown
@@ -73,8 +75,9 @@ func TestIndex(t *testing.T) {
 }
 
 func TestIndexScanner(t *testing.T) {
-	path, err := ioutil.TempDir("", "commitlog-index")
+	dir, err := ioutil.TempDir("", "commitlog-index")
 	require.NoError(t, err)
+	path := filepath.Join(dir, "test.index")
 
 	totalEntries := rand.Intn(10) + 10
 	//case for roundDown

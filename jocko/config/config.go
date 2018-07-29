@@ -14,22 +14,23 @@ const (
 
 // Config holds the configuration for a Config.
 type Config struct {
-	ID                int32
-	NodeName          string
-	DataDir           string
-	DevMode           bool
-	Addr              string
-	SerfLANConfig     *serf.Config
-	RaftConfig        *raft.Config
-	Bootstrap         bool
-	BootstrapExpect   int
-	StartAsLeader     bool
-	StartJoinAddrsLAN []string
-	StartJoinAddrsWAN []string
-	NonVoter          bool
-	RaftAddr          string
-	LeaveDrainTime    time.Duration
-	ReconcileInterval time.Duration
+	ID                            int32
+	NodeName                      string
+	DataDir                       string
+	DevMode                       bool
+	Addr                          string
+	SerfLANConfig                 *serf.Config
+	RaftConfig                    *raft.Config
+	Bootstrap                     bool
+	BootstrapExpect               int
+	StartAsLeader                 bool
+	StartJoinAddrsLAN             []string
+	StartJoinAddrsWAN             []string
+	NonVoter                      bool
+	RaftAddr                      string
+	LeaveDrainTime                time.Duration
+	ReconcileInterval             time.Duration
+	OffsetsTopicReplicationFactor int16
 }
 
 // DefaultConfig creates/returns a default configuration.
@@ -40,12 +41,13 @@ func DefaultConfig() *Config {
 	}
 
 	conf := &Config{
-		DevMode:           false,
-		NodeName:          hostname,
-		SerfLANConfig:     serfDefaultConfig(),
-		RaftConfig:        raft.DefaultConfig(),
-		LeaveDrainTime:    5 * time.Second,
-		ReconcileInterval: 60 * time.Second,
+		DevMode:                       false,
+		NodeName:                      hostname,
+		SerfLANConfig:                 serfDefaultConfig(),
+		RaftConfig:                    raft.DefaultConfig(),
+		LeaveDrainTime:                5 * time.Second,
+		ReconcileInterval:             60 * time.Second,
+		OffsetsTopicReplicationFactor: 3,
 	}
 
 	conf.SerfLANConfig.ReconnectTimeout = 3 * 24 * time.Hour
