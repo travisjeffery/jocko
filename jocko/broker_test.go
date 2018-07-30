@@ -650,12 +650,6 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	}
 }
 
-func spewstr(v interface{}) string {
-	var buf bytes.Buffer
-	spew.Fdump(&buf, v)
-	return buf.String()
-}
-
 func TestBroker_Shutdown(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -682,6 +676,12 @@ func TestBroker_Shutdown(t *testing.T) {
 			}
 		})
 	}
+}
+
+func spewstr(v interface{}) string {
+	var buf bytes.Buffer
+	spew.Fdump(&buf, v)
+	return buf.String()
 }
 
 type fields struct {

@@ -131,6 +131,10 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 		case reqCtx := <-requests:
 			log.Debug.Printf("broker/%d: request: %v", b.config.ID, reqCtx)
 
+			if reqCtx == nil {
+				goto DONE
+			}
+
 			queueSpan, ok := reqCtx.Value(requestQueueSpanKey).(opentracing.Span)
 			if ok {
 				queueSpan.Finish()
@@ -197,10 +201,12 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 				},
 			}
 		case <-ctx.Done():
-			log.Debug.Printf("broker/%d: run done", b.config.ID)
-			return
+			goto DONE
 		}
 	}
+DONE:
+	log.Debug.Printf("broker/%d: run done", b.config.ID)
+	return
 }
 
 // Join is used to have the broker join the gossip ring.
