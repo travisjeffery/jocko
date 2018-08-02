@@ -567,10 +567,12 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	ctx, _, reqCh, resCh, teardown := setupTest(t)
 	defer teardown()
 
+	correlationID := int32(1)
+
 	// create topic
 	req := &Context{
 		header: &protocol.RequestHeader{
-			CorrelationID: 1,
+			CorrelationID: correlationID,
 			ClientID:      "join-and-sync",
 		},
 		req: &protocol.CreateTopicRequests{
@@ -586,8 +588,8 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 
 	act := <-resCh
 	exp := &Context{
-		header: &protocol.RequestHeader{CorrelationID: 1},
-		res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+		header: &protocol.RequestHeader{CorrelationID: correlationID},
+		res: &protocol.Response{CorrelationID: correlationID, Body: &protocol.CreateTopicsResponse{
 			TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic", ErrorCode: protocol.ErrNone.Code()}},
 		}},
 	}
@@ -595,10 +597,12 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 		t.Errorf("got %s, want: %s", spewstr(act.res), spewstr(exp.res))
 	}
 
+	correlationID++
+
 	// join group
 	req = &Context{
 		header: &protocol.RequestHeader{
-			CorrelationID: 3,
+			CorrelationID: correlationID,
 			ClientID:      "join-and-sync",
 		},
 		req: &protocol.JoinGroupRequest{
@@ -619,10 +623,12 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	require.Equal(t, memberID, act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).LeaderID)
 	require.Equal(t, memberID, act.res.(*protocol.Response).Body.(*protocol.JoinGroupResponse).Members[0].MemberID)
 
+	correlationID++
+
 	// sync group
 	req = &Context{
 		header: &protocol.RequestHeader{
-			CorrelationID: 4,
+			CorrelationID: correlationID,
 			ClientID:      "join-and-sync",
 		},
 		req: &protocol.SyncGroupRequest{
@@ -637,10 +643,10 @@ func TestBroker_Run_JoinSyncGroup(t *testing.T) {
 	act = <-resCh
 	exp = &Context{
 		header: &protocol.RequestHeader{
-			CorrelationID: 4,
+			CorrelationID: correlationID,
 		},
 		res: &protocol.Response{
-			CorrelationID: 4,
+			CorrelationID: correlationID,
 			Body:          &protocol.SyncGroupResponse{},
 		},
 	}
