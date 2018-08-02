@@ -172,12 +172,13 @@ const (
 
 // Group
 type Group struct {
-	ID          string
-	Group       string
-	Coordinator int32
-	LeaderID    string
-	Members     map[string]Member
-	State       GroupState
+	ID           string
+	Group        string
+	Coordinator  int32
+	LeaderID     string
+	Members      map[string]Member
+	State        GroupState
+	GenerationID int32
 
 	RaftIndex
 }
