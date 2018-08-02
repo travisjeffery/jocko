@@ -649,8 +649,13 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 	res.GenerationID = 0
 	res.LeaderID = group.LeaderID
 	res.MemberID = r.MemberID
-	for _, m := range group.Members {
-		res.Members = append(res.Members, protocol.Member{MemberID: m.ID, MemberMetadata: m.Metadata})
+
+	if res.LeaderID == res.MemberID {
+		// fill in members on response, we only do this for the leader to reduce overhead
+		for _, m := range group.Members {
+			res.Members = append(res.Members, protocol.Member{MemberID: m.ID, MemberMetadata: m.Metadata})
+		}
+
 	}
 
 	return res
@@ -710,6 +715,46 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 		res.ErrorCode = protocol.ErrInvalidGroupId.Code()
 		return res
 	}
+	if _, ok := group.Members[r.MemberID]; !ok {
+		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return res
+	}
+	if r.GenerationID != group.GenerationID {
+		res.ErrorCode = protocol.ErrIllegalGeneration.Code()
+		return res
+	}
+	switch group.State {
+	case structs.GroupStateEmpty, structs.GroupStateDead:
+		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return res
+	case structs.GroupStatePreparingRebalance:
+		res.ErrorCode = protocol.ErrRebalanceInProgress.Code()
+		return res
+	case structs.GroupStateCompletingRebalance:
+		// TODO: wait to get member in group
+
+		if group.LeaderID == r.MemberID {
+			// if is leader, attempt to persist state and transition to stable
+			var assignment []protocol.GroupAssignment
+			for _, ga := range r.GroupAssignments {
+				if _, ok := group.Members[ga.MemberID]; !ok {
+					// if member isn't set fill in with empty assignment
+					assignment = append(assignment, protocol.GroupAssignment{
+						MemberID:         ga.MemberID,
+						MemberAssignment: nil,
+					})
+				} else {
+					assignment = append(assignment, ga)
+				}
+
+				// save group
+			}
+		}
+	case structs.GroupStateStable:
+		// in stable, return current assignment
+
+	}
+
 	if group.LeaderID == r.MemberID {
 		// take the assignments from the leader and save them
 		for _, ga := range r.GroupAssignments {
@@ -727,6 +772,7 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 			return res
 		}
 	} else {
+		// TODO: need to wait until leader sets assignments
 		if m, ok := group.Members[r.MemberID]; ok {
 			res.MemberAssignment = m.Assignment
 		} else {
