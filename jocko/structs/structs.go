@@ -163,11 +163,11 @@ type Member struct {
 type GroupState int32
 
 const (
-	PreparingRebalance  GroupState = 0
-	CompletingRebalance GroupState = 1
-	Stable              GroupState = 2
-	Dead                GroupState = 3
-	Empty               GroupState = 4
+	GroupStatePreparingRebalance  GroupState = 0
+	GroupStateCompletingRebalance GroupState = 1
+	GroupStateStable              GroupState = 2
+	GroupStateDead                GroupState = 3
+	GroupStateEmpty               GroupState = 4
 )
 
 // Group
