@@ -564,6 +564,8 @@ func setupTest(t *testing.T) (
 }
 
 func TestBroker_Run_JoinSyncGroup(t *testing.T) {
+	t.Skip()
+
 	ctx, _, reqCh, resCh, teardown := setupTest(t)
 	defer teardown()
 
