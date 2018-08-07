@@ -3,6 +3,8 @@ package jocko
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
+	"io"
 	"math"
 	"net"
 	"time"
@@ -36,6 +38,8 @@ type Dialer struct {
 	TLS *tls.Config
 	// DualStack enables RFC 6555-compliant "happy eyeballs" dialing.
 	DualStack bool
+	// SASL enables SASL plain authentication.
+	SASL *SASL
 }
 
 var (
@@ -110,7 +114,17 @@ func (d *Dialer) dialContext(ctx context.Context, network, address string) (conn
 	}
 
 	if d.TLS != nil {
-		return d.connectTLS(ctx, conn)
+		conn, err = d.connectTLS(ctx, conn)
+		if err != nil {
+			return
+		}
+	}
+
+	if d.SASL != nil {
+		if err = d.connectSASLPlain(ctx, conn); err != nil {
+			conn.Close()
+			return
+		}
 	}
 
 	return conn, nil
@@ -135,6 +149,23 @@ func (d *Dialer) connectTLS(ctx context.Context, conn net.Conn) (tlsConn *tls.Co
 	return
 }
 
+func (d *Dialer) connectSASLPlain(ctx context.Context, conn net.Conn) error {
+	length := 1 + len(d.SASL.User) + 1 + len(d.SASL.Pass)
+	msg := make([]byte, length+4) //4 byte length header + auth data
+	binary.BigEndian.PutUint32(msg, uint32(length))
+	copy(msg[4:], []byte("\x00"+d.SASL.User+"\x00"+d.SASL.Pass))
+	_, err := conn.Write(msg)
+	if err != nil {
+		return err
+	}
+	header := make([]byte, 4)
+	_, err = io.ReadFull(conn, header)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func splitHostPort(s string) (string, string) {
 	host, port, _ := net.SplitHostPort(s)
 	if len(host) == 0 && len(port) == 0 {
@@ -147,4 +178,8 @@ func splitHostPort(s string) (string, string) {
 type Resolver interface {
 	// LookupHost looks up the given host using the local resolver.
 	LookupHost(ctx context.Context, host string) ([]string, error)
+}
+
+type SASL struct {
+	User, Pass string
 }
