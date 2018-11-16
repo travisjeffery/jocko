@@ -1,9 +1,9 @@
-# JOCKO
-
-Kafka/distributed commit log service in Go.
+# Jocko
 
 [![Build Status](https://semaphoreci.com/api/v1/travisjeffery/jocko/branches/master/shields_badge.svg)](https://semaphoreci.com/travisjeffery/jocko) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![codecov](https://codecov.io/gh/travisjeffery/jocko/branch/master/graph/badge.svg)](https://codecov.io/gh/travisjeffery/jocko)
+
+Kafka/distributed commit log service in Go.
 
 ## Goals of this project:
 
@@ -79,9 +79,13 @@ Kafka/distributed commit log service in Go.
 
 `docker build -t travisjeffery/jocko:latest .`
 
+## Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
+
 ## License
 
-MIT
+Jocko is under the MIT license, see the [LICENSE](LICENSE) file for details.
 
 ---
 
