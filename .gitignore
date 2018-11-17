@@ -8,3 +8,4 @@ vendor/*
 .dir-locals.el
 .#*
 .DS_Store
+coverage.out
