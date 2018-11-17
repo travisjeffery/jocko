@@ -1,7 +1,6 @@
 FROM golang:1.9-alpine as build-base
 RUN apk update && apk upgrade && \
-    apk add --no-cache bash git openssh make && \
-    go get -u github.com/golang/dep/cmd/dep
+    apk add --no-cache bash git openssh make
 ADD . /go/src/github.com/travisjeffery/jocko
 WORKDIR /go/src/github.com/travisjeffery/jocko
 RUN GOOS=linux GOARCH=amd64 make build
