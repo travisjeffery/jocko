@@ -1,8 +1,6 @@
 BUILD_PATH := cmd/jocko/jocko
 DOCKER_TAG := latest
 
-TEST_DIR := $(shell go list ./... | grep -E 'commitlog$$|jocko$$|protocol$$' | grep -v examples)
-
 all: test
 
 deps:
@@ -29,11 +27,11 @@ generate:
 	@go generate
 
 test:
-	@echo "mode: count" > coverage.out
-	for d in $(TEST_DIR); do \
-		go test -v -covermode=count -coverprofile=profile.out $$d; \
+	@echo "" > coverage.out
+	for d in $(shell go list ./... | grep -v vendor); do \
+                go test -v -race -coverprofile=profile.out -covermode=atomic $$d; \
 		if [ -f profile.out ]; then \
-			cat profile.out | grep -v "mode:" >> coverage.out; \
+                        cat profile.out >> coverage.txt; \
 			rm profile.out; \
 		fi; \
 	done
