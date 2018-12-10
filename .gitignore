@@ -9,3 +9,5 @@ vendor/*
 .#*
 .DS_Store
 coverage.txt
+cmd/jocko/jocko
+
