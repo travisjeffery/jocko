@@ -1,6 +1,6 @@
 github.com/Shopify/sarama v1.13.0 h1:R+4WFsmMzUxN2uiGzWXoY9apBAQnARC+B+wYvy/kC3k=
 github.com/Shopify/sarama v1.13.0/go.mod h1:FVkBWblsNy7DGZRfXLU0O9RCGt5g3g3yEuWXgklEdEo=
-github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 h1:CZI8h5fmYwCCvd2RMSsjLqHN6OqABlWJweFKxz4vdEs=
+github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 h1:Fv9bK1Q+ly/ROk4aJsVMeuIwPel4bEnD8EPiI91nZMg=
 github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7/go.mod h1:cp2SuWMxlEZw2r+iP2GNCdIi4C1qmUzdZFSVb+bacwQ=
 github.com/armon/go-metrics v0.0.0-20171002182731-9a4b6e10bed6 h1:rfTl4Lc+Gfud1YdmAFg99WN4rICM1S65KXBuADdLTms=
 github.com/armon/go-metrics v0.0.0-20171002182731-9a4b6e10bed6/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
@@ -77,7 +77,7 @@ github.com/prometheus/client_model v0.0.0-20170216185247-6f3806018612 h1:13pIdM2
 github.com/prometheus/client_model v0.0.0-20170216185247-6f3806018612/go.mod h1:MbSGuTsp3dbXC40dX6PRTWyKYBIrTGTE9sqQNg2J8bo=
 github.com/prometheus/common v0.0.0-20171006141418-1bab55dd05db h1:PmL7nSW2mvuotGlJKuvUcSI/eE86zwYUcIAGoB6eHBk=
 github.com/prometheus/common v0.0.0-20171006141418-1bab55dd05db/go.mod h1:daVV7qP5qjZbuso7PdcryaAu0sAZbrN9i7WWcTMWvro=
-github.com/prometheus/procfs v0.0.0-20170703101242-e645f4e5aaa8 h1:uZfczEBIA1FZfOQo4/JWgGnMNd/4HVsM9A+B30wtlkA=
+github.com/prometheus/procfs v0.0.0-20170703101242-e645f4e5aaa8 h1:Kh7M6mzRpQ2de1rixoSQZr4BTINXFm8WDbeN5ttnwyE=
 github.com/prometheus/procfs v0.0.0-20170703101242-e645f4e5aaa8/go.mod h1:c3At6R/oaqEKCNdg8wHV1ftS6bRYblBhIjjI8uT2IGk=
 github.com/rcrowley/go-metrics v0.0.0-20161128210544-1f30fe9094a5 h1:gwcdIpH6NU2iF8CmcqD+CP6+1CkRBOhHaPR+iu6raBY=
 github.com/rcrowley/go-metrics v0.0.0-20161128210544-1f30fe9094a5/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
