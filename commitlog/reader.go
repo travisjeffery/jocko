@@ -47,15 +47,19 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 func (l *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
 	var s *segment
 	var idx int
+	segments := l.Segments()
+
 	if offset == 0 {
 		// TODO: seems hackish, should at least check if segments are set.
-		s, idx = l.Segments()[0], 0
+		s, idx = segments[0], 0
 	} else {
-		s, idx = findSegment(l.Segments(), offset)
+		s, idx = findSegment(segments, offset)
 	}
+
 	if s == nil {
-		return nil, errors.Wrapf(ErrSegmentNotFound, "segments: %d, offset: %d", len(l.Segments()), offset)
+		return nil, errors.Wrapf(ErrSegmentNotFound, "segments: %d, offset: %d", len(segments), offset)
 	}
+
 	e, err := s.findEntry(offset)
 	if err != nil {
 		return nil, err

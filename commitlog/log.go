@@ -44,10 +44,10 @@ type logScanner struct {
 	log *log
 	// buf must be set
 	buf *bytes.Buffer
-	pos int64
-	off int64
-	err error
+	pos int32
+	off int32
 	cur entry
+	err error
 }
 
 func (s *logScanner) Scan() bool {
@@ -58,16 +58,16 @@ func (s *logScanner) Scan() bool {
 		return false
 	}
 
-	size := int64(Encoding.Uint32(s.buf.Bytes()[8:12]))
-
-	if _, s.err = io.CopyN(s.buf, s.log, size); s.err != nil {
+	size := int32(Encoding.Uint32(s.buf.Bytes()[8:12]))
+	if _, s.err = io.CopyN(s.buf, s.log, int64(size)); s.err != nil {
 		return false
 	}
 
-	s.entry = entry{Off: s.off, Pos: s.Pos}
-
+	s.cur = entry{Off: s.off, Pos: s.pos}
 	s.off++
 	s.pos += size
+
+	return true
 }
 
 func (s *logScanner) Err() error {

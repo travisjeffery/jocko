@@ -29,12 +29,12 @@ const (
 )
 
 type CommitLog struct {
-	mu sync.RWMutex
-
 	Dir    string
 	Config Config
 
-	cleaner       cleaner
+	cleaner cleaner
+
+	segmentLock   sync.RWMutex
 	segments      []*segment
 	activeSegment *segment
 }
@@ -113,6 +113,8 @@ func New(dir string, c Config) (*CommitLog, error) {
 }
 
 func (l *CommitLog) newSegment(baseOffset int64) error {
+	l.segmentLock.Lock()
+	defer l.segmentLock.Unlock()
 	s, err := newSegment(l.Dir, baseOffset, l.Config)
 	if err != nil {
 		return err
@@ -123,6 +125,8 @@ func (l *CommitLog) newSegment(baseOffset int64) error {
 }
 
 func (l *CommitLog) Append(b []byte) (offset int64, err error) {
+	l.segmentLock.RLock()
+	defer l.segmentLock.RUnlock()
 	ms := MessageSet(b)
 	off := l.activeSegment.nextOffset
 	next, _, err := l.activeSegment.Append(b)
@@ -135,19 +139,28 @@ func (l *CommitLog) Append(b []byte) (offset int64, err error) {
 	return off, err
 }
 
+func (l *CommitLog) Segments() []*segment {
+	l.segmentLock.RLock()
+	defer l.segmentLock.RUnlock()
+	return l.segments
+}
+
 func (l *CommitLog) NewestOffset() int64 {
+	l.segmentLock.RLock()
+	defer l.segmentLock.RUnlock()
 	return l.activeSegment.nextOffset
 }
 
 func (l *CommitLog) OldestOffset() int64 {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.segmentLock.RLock()
+	defer l.segmentLock.RUnlock()
 	return l.segments[0].baseOffset
 }
 
 func (l *CommitLog) Close() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.segmentLock.RLock()
+	defer l.segmentLock.RUnlock()
+
 	for _, segment := range l.segments {
 		if err := segment.Close(); err != nil {
 			return err
@@ -164,8 +177,8 @@ func (l *CommitLog) Delete() error {
 }
 
 func (l *CommitLog) Truncate(offset int64) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.segmentLock.Lock()
+	defer l.segmentLock.Unlock()
 	var segments []*segment
 	for _, segment := range l.segments {
 		if segment.baseOffset < offset {

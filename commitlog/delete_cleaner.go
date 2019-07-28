@@ -31,7 +31,7 @@ func (c *DeleteCleaner) Clean(segments []*segment) ([]*segment, error) {
 		var i int
 		for i = len(segments) - 2; i > -1; i-- {
 			s := segments[i]
-			totalBytes += s.Position
+			totalBytes += s.Size()
 			if totalBytes > c.Retention.Bytes {
 				break
 			}
