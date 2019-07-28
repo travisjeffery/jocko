@@ -1,10 +1,9 @@
 package commitlog
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -15,162 +14,158 @@ import (
 const (
 	fileFormat    = "%020d%s"
 	logSuffix     = ".log"
-	cleanedSuffix = ".cleaned"
 	indexSuffix   = ".index"
+	cleanedSuffix = ".cleaned"
 )
 
-type Segment struct {
-	writer     io.Writer
-	reader     io.Reader
-	log        *os.File
-	Index      *Index
-	BaseOffset int64
-	NextOffset int64
-	Position   int64
-	maxBytes   int64
-	path       string
-	suffix     string
-
+type segment struct {
 	sync.Mutex
+
+	log        *log
+	index      *index
+	dir        string
+	baseOffset int64
+	nextOffset int64
+	config     Config
 }
 
-func NewSegment(path string, baseOffset, maxBytes int64, args ...interface{}) (*Segment, error) {
-	var suffix string
-	if len(args) != 0 {
-		suffix = args[0].(string)
+func newSegment(dir string, baseOffset int64, c Config) (*segment, error) {
+	s := &segment{
+		dir:        dir,
+		baseOffset: baseOffset,
+		config:     c,
 	}
-	s := &Segment{
-		maxBytes:   maxBytes,
-		BaseOffset: baseOffset,
-		NextOffset: baseOffset,
-		path:       path,
-		suffix:     suffix,
-	}
-	log, err := os.OpenFile(s.logPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	var err error
+	logFile, err := os.OpenFile(path.Join(dir, fmt.Sprintf("%d%s", baseOffset, logSuffix)), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return nil, errors.Wrap(err, "open file failed")
+		return nil, err
 	}
-	s.log = log
-	s.writer = log
-	s.reader = log
-	err = s.SetupIndex()
-	return s, err
-}
-
-// SetupIndex creates and initializes an Index.
-// Initialization is:
-// - Sanity check of the loaded Index
-// - Truncates the Index (clears it)
-// - Reads the log file from the beginning and re-initializes the Index
-func (s *Segment) SetupIndex() (err error) {
-	s.Index, err = NewIndex(options{
-		path:       s.indexPath(),
-		baseOffset: s.BaseOffset,
-	})
+	if s.log, err = newLog(logFile); err != nil {
+		return nil, err
+	}
+	indexFile, err := os.OpenFile(path.Join(dir, fmt.Sprintf("%d%s", baseOffset, indexSuffix)), os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return s.BuildIndex()
+	if err = indexFile.Truncate(
+		int64(nearestMultiple(c.MaxIndexBytes, entryWidth)),
+	); err != nil {
+		return nil, err
+	}
+	var lastEntry entry
+	if s.index, lastEntry, err = newIndex(indexFile, baseOffset); err != nil {
+		return nil, err
+	}
+	if lastEntry.IsZero() {
+		s.nextOffset = baseOffset
+	} else {
+		s.nextOffset = lastEntry.Off + 1
+	}
+	// TODO: should check integriy and possible clear and reinitialize
+	return s, nil
 }
 
-func (s *Segment) BuildIndex() (err error) {
-	if err = s.Index.SanityCheck(); err != nil {
-		return err
-	}
-	if err := s.Index.TruncateEntries(0); err != nil {
-		return err
-	}
+// func (s *segment) BuildIndex() (err error) {
+// 	if err = s.Index.SanityCheck(); err != nil {
+// 		return err
+// 	}
+// 	if err := s.Index.TruncateEntries(0); err != nil {
+// 		return err
+// 	}
 
-	_, err = s.log.Seek(0, 0)
-	if err != nil {
-		return err
-	}
+// 	_, err = s.log.Seek(0, 0)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	b := new(bytes.Buffer)
+// 	b := new(bytes.Buffer)
 
-	nextOffset := s.BaseOffset
-	position := int64(0)
+// 	nextOffset := s.baseOffset
+// 	position := int64(0)
 
-loop:
-	for {
-		// get offset and size
-		_, err = io.CopyN(b, s.log, 8)
-		if err != nil {
-			break loop
-		}
+// loop:
+// 	for {
+// 		// get offset and size
+// 		_, err = io.CopyN(b, s.log, 8)
+// 		if err != nil {
+// 			break loop
+// 		}
 
-		_, err = io.CopyN(b, s.log, 4)
-		if err != nil {
-			break loop
-		}
-		size := int64(Encoding.Uint32(b.Bytes()[8:12]))
+// 		_, err = io.CopyN(b, s.log, 4)
+// 		if err != nil {
+// 			break loop
+// 		}
+// 		size := int64(Encoding.Uint32(b.Bytes()[8:12]))
 
-		_, err = io.CopyN(b, s.log, size)
-		if err != nil {
-			break loop
-		}
+// 		_, err = io.CopyN(b, s.log, size)
+// 		if err != nil {
+// 			break loop
+// 		}
 
-		// Reset the buffer to not get an overflow
-		b.Truncate(0)
+// 		// Reset the buffer to not get an overflow
+// 		b.Truncate(0)
 
-		entry := Entry{
-			Offset:   nextOffset,
-			Position: position,
-		}
-		err = s.Index.WriteEntry(entry)
-		if err != nil {
-			break loop
-		}
+// 		entry := entry{
+// 			Off: nextOffset,
+// 			Pos: position,
+// 		}
+// 		err = s.Index.WriteEntry(entry)
+// 		if err != nil {
+// 			break loop
+// 		}
 
-		position += size + msgSetHeaderLen
-		nextOffset++
+// 		position += size + msgSetHeaderLen
+// 		nextOffset++
 
-		_, err = s.log.Seek(size, 1)
-		if err != nil {
-			break loop
-		}
-	}
-	if err == io.EOF {
-		s.NextOffset = nextOffset
-		s.Position = position
-		return nil
-	}
-	return err
-}
+// 		_, err = s.log.Seek(size, 1)
+// 		if err != nil {
+// 			break loop
+// 		}
+// 	}
+// 	if err == io.EOF {
+// 		s.nextOffset = nextOffset
+// 		s.Position = position
+// 		return nil
+// 	}
+// 	return err
+// }
 
-func (s *Segment) IsFull() bool {
-	s.Lock()
-	defer s.Unlock()
-	return s.Position >= s.maxBytes
+func (s *segment) Append(p []byte) (int64, int64, error) {
+	return 0, 0, nil
 }
 
 // Write writes a byte slice to the log at the current position.
 // It increments the offset as well as sets the position to the new tail.
-func (s *Segment) Write(p []byte) (n int, err error) {
+func (s *segment) Write(p []byte) (n int, err error) {
 	s.Lock()
 	defer s.Unlock()
 	n, err = s.writer.Write(p)
 	if err != nil {
 		return n, errors.Wrap(err, "log write failed")
 	}
-	s.NextOffset++
+	s.nextOffset++
 	s.Position += int64(n)
 	return n, nil
 }
 
-func (s *Segment) Read(p []byte) (n int, err error) {
+func (s *segment) IsMaxed() bool {
+	return s.log.size >= s.config.MaxSegmentBytes ||
+		s.index.pos >= s.config.MaxIndexBytes
+}
+
+func (s *segment) Read(p []byte) (n int, err error) {
 	s.Lock()
 	defer s.Unlock()
 	return s.reader.Read(p)
 }
 
-func (s *Segment) ReadAt(p []byte, off int64) (n int, err error) {
+func (s *segment) ReadAt(p []byte, off int64) (n int, err error) {
 	s.Lock()
 	defer s.Unlock()
 	return s.log.ReadAt(p, off)
 }
 
-func (s *Segment) Close() error {
+func (s *segment) Close() error {
 	s.Lock()
 	defer s.Unlock()
 	if err := s.log.Close(); err != nil {
@@ -180,12 +175,12 @@ func (s *Segment) Close() error {
 }
 
 // Cleaner creates a cleaner segment for this segment.
-func (s *Segment) Cleaner() (*Segment, error) {
-	return NewSegment(s.path, s.BaseOffset, s.maxBytes, cleanedSuffix)
+func (s *segment) Cleaner() (*segment, error) {
+	return NewSegment(s.path, s.baseOffset, s.maxBytes, cleanedSuffix)
 }
 
 // Replace replaces the given segment with the callee.
-func (s *Segment) Replace(old *Segment) (err error) {
+func (s *segment) Replace(old *segment) (err error) {
 	if err = old.Close(); err != nil {
 		return err
 	}
@@ -210,14 +205,14 @@ func (s *Segment) Replace(old *Segment) (err error) {
 }
 
 // findEntry returns the nearest entry whose offset is greater than or equal to the given offset.
-func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
+func (s *segment) findEntry(offset int64) (e *entry, err error) {
 	s.Lock()
 	defer s.Unlock()
-	e = &Entry{}
+	e = &entry{}
 	n := int(s.Index.bytes / entryWidth)
 	idx := sort.Search(n, func(i int) bool {
 		_ = s.Index.ReadEntryAtFileOffset(e, int64(i*entryWidth))
-		return e.Offset >= offset || e.Offset == 0
+		return e.Off >= offset || e.Off == 0
 	})
 	if idx == n {
 		return nil, errors.New("entry not found")
@@ -227,7 +222,7 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 }
 
 // Delete closes the segment and then deletes its log and index files.
-func (s *Segment) Delete() error {
+func (s *segment) Delete() error {
 	if err := s.Close(); err != nil {
 		return err
 	}
@@ -242,13 +237,17 @@ func (s *Segment) Delete() error {
 	return nil
 }
 
-type SegmentScanner struct {
-	s  *Segment
-	is *IndexScanner
+func (s *segment) Size() int64 {
+	return s.log.Size()
 }
 
-func NewSegmentScanner(segment *Segment) *SegmentScanner {
-	return &SegmentScanner{s: segment, is: NewIndexScanner(segment.Index)}
+type SegmentScanner struct {
+	s  *segment
+	is *indexScanner
+}
+
+func NewSegmentScanner(segment *segment) *SegmentScanner {
+	return &SegmentScanner{s: segment, is: newIndexScanner(segment.Index)}
 }
 
 // Scan should be called repeatedly to iterate over the messages in the segment, it will return
@@ -259,13 +258,13 @@ func (s *SegmentScanner) Scan() (ms MessageSet, err error) {
 		return nil, err
 	}
 	header := make(MessageSet, msgSetHeaderLen)
-	_, err = s.s.ReadAt(header, entry.Position)
+	_, err = s.s.ReadAt(header, entry.Pos)
 	if err != nil {
 		return nil, err
 	}
 	size := int64(header.Size() - msgSetHeaderLen)
 	payload := make([]byte, size)
-	_, err = s.s.ReadAt(payload, entry.Position+msgSetHeaderLen)
+	_, err = s.s.ReadAt(payload, entry.Pos+msgSetHeaderLen)
 	if err != nil {
 		return nil, err
 	}
@@ -273,10 +272,18 @@ func (s *SegmentScanner) Scan() (ms MessageSet, err error) {
 	return msgSet, nil
 }
 
-func (s *Segment) logPath() string {
-	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.BaseOffset, logSuffix+s.suffix))
+func (s *segment) logPath() string {
+	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.baseOffset, logSuffix+s.suffix))
 }
 
-func (s *Segment) indexPath() string {
-	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.BaseOffset, indexSuffix+s.suffix))
+func (s *segment) indexPath() string {
+	return filepath.Join(s.path, fmt.Sprintf(fileFormat, s.baseOffset, indexSuffix+s.suffix))
+}
+
+func nearestMultiple(j, k uint64) uint64 {
+	if j >= 0 {
+		return (j / k) * k
+	}
+	return ((j - k + 1) / k) * k
+
 }

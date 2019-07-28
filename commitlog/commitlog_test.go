@@ -139,14 +139,14 @@ func check(t require.TestingT, got, want []byte) {
 }
 
 func setup(t require.TestingT) *commitlog.CommitLog {
-	opts := commitlog.Options{
+	opts := commitlog.Config{
 		MaxSegmentBytes: 6,
 		MaxLogBytes:     30,
 	}
 	return setupWithOptions(t, opts)
 }
 
-func setupWithOptions(t require.TestingT, opts commitlog.Options) *commitlog.CommitLog {
+func setupWithOptions(t require.TestingT, opts commitlog.Config) *commitlog.CommitLog {
 	if opts.Path == "" {
 		opts.Path = filepath.Join(os.TempDir(), fmt.Sprintf("commitlogtest%d", rand.Int63()))
 	}

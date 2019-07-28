@@ -48,7 +48,7 @@ func TestDeleteCleaner(t *testing.T) {
 	fmt.Println(path)
 	defer os.RemoveAll(path)
 
-	l := setupWithOptions(t, commitlog.Options{
+	l := setupWithOptions(t, commitlog.Config{
 		MaxSegmentBytes: int64(len(msgSets[0]) + len(msgSets[1])),
 		MaxLogBytes:     1000,
 	})

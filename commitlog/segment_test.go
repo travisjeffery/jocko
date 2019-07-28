@@ -10,7 +10,7 @@ import (
 func TestSegmentScanner(t *testing.T) {
 	var err error
 
-	l := setupWithOptions(t, commitlog.Options{
+	l := setupWithOptions(t, commitlog.Config{
 		MaxSegmentBytes: 1000,
 		MaxLogBytes:     1000,
 	})

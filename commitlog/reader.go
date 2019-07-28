@@ -45,7 +45,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 }
 
 func (l *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
-	var s *Segment
+	var s *segment
 	var idx int
 	if offset == 0 {
 		// TODO: seems hackish, should at least check if segments are set.
@@ -63,6 +63,6 @@ func (l *CommitLog) NewReader(offset int64, maxBytes int32) (io.Reader, error) {
 	return &Reader{
 		cl:  l,
 		idx: idx,
-		pos: e.Position,
+		pos: e.Pos,
 	}, nil
 }

@@ -6,10 +6,10 @@ import (
 
 // findSegments returns the nearest segment whose base offset is greater than or equal to the given
 // offset.
-func findSegment(segments []*Segment, offset int64) (*Segment, int) {
+func findSegment(segments []*segment, offset int64) (*segment, int) {
 	n := len(segments)
 	idx := sort.Search(n, func(i int) bool {
-		return segments[i].NextOffset > offset
+		return segments[i].nextOffset > offset
 	})
 	if idx == n {
 		return nil, idx

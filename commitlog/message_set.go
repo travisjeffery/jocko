@@ -36,6 +36,11 @@ func (ms MessageSet) Payload() []byte {
 	return ms[msgSetHeaderLen:]
 }
 
+func (ms MessageSet) IsZero() bool {
+	return ms.Offset() == 0 &&
+		ms.Size() == 0
+}
+
 func (ms MessageSet) Messages() (msgs []Message) {
 	var offset int32
 	var msg Message

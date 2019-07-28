@@ -15,7 +15,7 @@ func NewCompactCleaner() *CompactCleaner {
 	}
 }
 
-func (c *CompactCleaner) Clean(segments []*Segment) (cleaned []*Segment, err error) {
+func (c *CompactCleaner) Clean(segments []*segment) (cleaned []*segment, err error) {
 	if len(segments) == 0 {
 		return segments, nil
 	}
@@ -40,7 +40,7 @@ func (c *CompactCleaner) Clean(segments []*Segment) (cleaned []*Segment, err err
 	for _, ds := range segments {
 		ss = NewSegmentScanner(ds)
 
-		cs, err := NewSegment(ds.path, ds.BaseOffset, ds.maxBytes, cleanedSuffix)
+		cs, err := newSegment(ds.dir, ds.baseOffset, ds.config)
 		if err != nil {
 			return nil, err
 		}

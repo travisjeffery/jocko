@@ -22,7 +22,7 @@ func TestReader(t *testing.T) {
 	for _, test := range readerTests {
 		t.Run(test.name, func(t *testing.T) {
 			var err error
-			l := setupWithOptions(t, commitlog.Options{
+			l := setupWithOptions(t, commitlog.Config{
 				MaxSegmentBytes: test.segmentSize,
 				MaxLogBytes:     -1,
 			})
