@@ -184,6 +184,6 @@ func (e Error) Error() string {
 	case ErrOperationNotAttempted:
 		return "operation not attempted"
 	default:
-		return fmt.Sprintf("error code %d not bound", e)
+		return fmt.Sprintf("error code %d (not bound)", e)
 	}
 }
