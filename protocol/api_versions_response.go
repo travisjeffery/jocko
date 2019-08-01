@@ -5,7 +5,7 @@ import "time"
 type APIVersionsResponse struct {
 	APIVersion int16
 
-	ErrorCode    int16
+	ErrorCode    Error
 	APIVersions  []APIVersion
 	ThrottleTime time.Duration
 }
@@ -17,7 +17,7 @@ type APIVersion struct {
 }
 
 func (c *APIVersionsResponse) Encode(e PacketEncoder) error {
-	e.PutInt16(c.ErrorCode)
+	e.PutInt16FromError(c.ErrorCode)
 
 	if err := e.PutArrayLength(len(c.APIVersions)); err != nil {
 		return err

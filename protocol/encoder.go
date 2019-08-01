@@ -8,6 +8,7 @@ type PacketEncoder interface {
 	PutBool(in bool)
 	PutInt8(in int8)
 	PutInt16(in int16)
+	PutInt16FromError(in Error)
 	PutInt32(in int32)
 	PutInt64(in int64)
 	PutArrayLength(in int) error
@@ -63,6 +64,10 @@ func (e *LenEncoder) PutInt8(in int8) {
 }
 
 func (e *LenEncoder) PutInt16(in int16) {
+	e.Length += 2
+}
+
+func (e *LenEncoder) PutInt16FromError(in Error) {
 	e.Length += 2
 }
 
@@ -183,6 +188,11 @@ func (e *ByteEncoder) PutInt8(in int8) {
 }
 
 func (e *ByteEncoder) PutInt16(in int16) {
+	Encoding.PutUint16(e.b[e.off:], uint16(in))
+	e.off += 2
+}
+
+func (e *ByteEncoder) PutInt16FromError(in Error) {
 	Encoding.PutUint16(e.b[e.off:], uint16(in))
 	e.off += 2
 }

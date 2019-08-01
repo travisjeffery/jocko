@@ -6,11 +6,11 @@ type HeartbeatResponse struct {
 	APIVersion int16
 
 	ThrottleTime time.Duration
-	ErrorCode    int16
+	ErrorCode    Error
 }
 
 func (r *HeartbeatResponse) Encode(e PacketEncoder) error {
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	return nil
 }
 
@@ -24,7 +24,7 @@ func (r *HeartbeatResponse) Decode(d PacketDecoder, version int16) (err error) {
 		}
 		r.ThrottleTime = time.Duration(throttle) / time.Millisecond
 	}
-	r.ErrorCode, err = d.Int16()
+	r.ErrorCode, err = d.Int16AsError()
 	return err
 }
 

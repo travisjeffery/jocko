@@ -10,7 +10,7 @@ type DescribeConfigsResponse struct {
 }
 
 type DescribeConfigsResourceResponse struct {
-	ErrorCode     int16
+	ErrorCode     Error
 	ErrorMessage  *string
 	Type          int8
 	Name          string
@@ -38,7 +38,7 @@ func (r *DescribeConfigsResponse) Encode(e PacketEncoder) error {
 		return err
 	}
 	for _, resource := range r.Resources {
-		e.PutInt16(resource.ErrorCode)
+		e.PutInt16FromError(resource.ErrorCode)
 		if err := e.PutNullableString(resource.ErrorMessage); err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func (r *DescribeConfigsResponse) Decode(d PacketDecoder, version int16) (err er
 	r.Resources = make([]DescribeConfigsResourceResponse, resourceCount)
 	for i := 0; i < resourceCount; i++ {
 		resource := DescribeConfigsResourceResponse{}
-		if resource.ErrorCode, err = d.Int16(); err != nil {
+		if resource.ErrorCode, err = d.Int16AsError(); err != nil {
 			return err
 		}
 		if resource.ErrorMessage, err = d.NullableString(); err != nil {

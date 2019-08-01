@@ -14,6 +14,7 @@ type PacketDecoder interface {
 	Bool() (bool, error)
 	Int8() (int8, error)
 	Int16() (int16, error)
+	Int16AsError() (Error, error)
 	Int32() (int32, error)
 	Int64() (int64, error)
 	ArrayLength() (int, error)
@@ -82,6 +83,11 @@ func (d *ByteDecoder) Int16() (int16, error) {
 	tmp := int16(Encoding.Uint16(d.b[d.off:]))
 	d.off += 2
 	return tmp, nil
+}
+
+func (d *ByteDecoder) Int16AsError() (Error, error) {
+	i, err := d.Int16()
+	return Error(i), err
 }
 
 func (d *ByteDecoder) Int32() (int32, error) {

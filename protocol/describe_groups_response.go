@@ -52,7 +52,7 @@ func (r *DescribeGroupsResponse) Key() int16 {
 }
 
 type Group struct {
-	ErrorCode    int16
+	ErrorCode    Error
 	GroupID      string
 	State        string
 	ProtocolType string
@@ -61,7 +61,7 @@ type Group struct {
 }
 
 func (r *Group) Encode(e PacketEncoder) error {
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	if err := e.PutString(r.GroupID); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (r *Group) Encode(e PacketEncoder) error {
 }
 
 func (r *Group) Decode(d PacketDecoder, version int16) (err error) {
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	if r.GroupID, err = d.String(); err != nil {

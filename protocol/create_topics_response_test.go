@@ -11,7 +11,7 @@ func TestCreateTopicResponse(t *testing.T) {
 	exp := &CreateTopicsResponse{
 		TopicErrorCodes: []*TopicErrorCode{{
 			Topic:     "test",
-			ErrorCode: ErrCorruptMessage.Code(),
+			ErrorCode: ErrCorruptMessage,
 		}}}
 	b, err := Encode(exp)
 	req.NoError(err)

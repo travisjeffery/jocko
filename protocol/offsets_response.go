@@ -4,7 +4,7 @@ import "time"
 
 type PartitionResponse struct {
 	Partition int32
-	ErrorCode int16
+	ErrorCode Error
 	Timestamp time.Time
 	Offsets   []int64
 	Offset    int64
@@ -38,7 +38,7 @@ func (r *OffsetsResponse) Encode(e PacketEncoder) (err error) {
 		}
 		for _, p := range resp.PartitionResponses {
 			e.PutInt32(p.Partition)
-			e.PutInt16(p.ErrorCode)
+			e.PutInt16FromError(p.ErrorCode)
 			if r.APIVersion == 0 {
 				if err = e.PutInt64Array(p.Offsets); err != nil {
 					return err
@@ -84,7 +84,7 @@ func (r *OffsetsResponse) Decode(d PacketDecoder, version int16) (err error) {
 			if err != nil {
 				return err
 			}
-			p.ErrorCode, err = d.Int16()
+			p.ErrorCode, err = d.Int16AsError()
 			if err != nil {
 				return err
 			}

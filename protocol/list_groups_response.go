@@ -11,7 +11,7 @@ type ListGroupsResponse struct {
 	APIVersion int16
 
 	ThrottleTime time.Duration
-	ErrorCode    int16
+	ErrorCode    Error
 	Groups       []ListGroup
 }
 
@@ -19,7 +19,7 @@ func (r *ListGroupsResponse) Encode(e PacketEncoder) error {
 	if r.APIVersion >= 1 {
 		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
 	}
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	if err := e.PutArrayLength(len(r.Groups)); err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (r *ListGroupsResponse) Decode(d PacketDecoder, version int16) (err error) 
 		}
 		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
 	}
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	groupCount, err := d.ArrayLength()

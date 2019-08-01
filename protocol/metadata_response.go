@@ -8,7 +8,7 @@ type Broker struct {
 }
 
 type PartitionMetadata struct {
-	PartitionErrorCode int16
+	PartitionErrorCode Error
 	PartitionID        int32
 	Leader             int32
 	Replicas           []int32
@@ -16,7 +16,7 @@ type PartitionMetadata struct {
 }
 
 type TopicMetadata struct {
-	TopicErrorCode    int16
+	TopicErrorCode    Error
 	Topic             string
 	PartitionMetadata []*PartitionMetadata
 }
@@ -47,7 +47,7 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 		return err
 	}
 	for _, t := range r.TopicMetadata {
-		e.PutInt16(t.TopicErrorCode)
+		e.PutInt16FromError(t.TopicErrorCode)
 		if err = e.PutString(t.Topic); err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 			return err
 		}
 		for _, p := range t.PartitionMetadata {
-			e.PutInt16(p.PartitionErrorCode)
+			e.PutInt16FromError(p.PartitionErrorCode)
 			e.PutInt32(p.PartitionID)
 			e.PutInt32(p.Leader)
 			if err = e.PutInt32Array(p.Replicas); err != nil {
@@ -109,7 +109,7 @@ func (r *MetadataResponse) Decode(d PacketDecoder, version int16) (err error) {
 	r.TopicMetadata = make([]*TopicMetadata, topicCount)
 	for i := range r.TopicMetadata {
 		m := &TopicMetadata{}
-		m.TopicErrorCode, err = d.Int16()
+		m.TopicErrorCode, err = d.Int16AsError()
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func (r *MetadataResponse) Decode(d PacketDecoder, version int16) (err error) {
 		partitions := make([]*PartitionMetadata, partitionCount)
 		for i := range partitions {
 			p := &PartitionMetadata{}
-			p.PartitionErrorCode, err = d.Int16()
+			p.PartitionErrorCode, err = d.Int16AsError()
 			if err != nil {
 				return err
 			}

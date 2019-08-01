@@ -3,16 +3,16 @@ package protocol
 type StopReplicaResponsePartition struct {
 	Topic     string
 	Partition int32
-	ErrorCode int16
+	ErrorCode Error
 }
 
 type StopReplicaResponse struct {
-	ErrorCode  int16
+	ErrorCode  Error
 	Partitions []*StopReplicaResponsePartition
 }
 
 func (r *StopReplicaResponse) Encode(e PacketEncoder) (err error) {
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	if err = e.PutArrayLength(len(r.Partitions)); err != nil {
 		return err
 	}
@@ -21,13 +21,13 @@ func (r *StopReplicaResponse) Encode(e PacketEncoder) (err error) {
 			return err
 		}
 		e.PutInt32(partition.Partition)
-		e.PutInt16(partition.ErrorCode)
+		e.PutInt16FromError(partition.ErrorCode)
 	}
 	return nil
 }
 
 func (r *StopReplicaResponse) Decode(d PacketDecoder, version int16) (err error) {
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	partitionCount, err := d.ArrayLength()
@@ -42,7 +42,7 @@ func (r *StopReplicaResponse) Decode(d PacketDecoder, version int16) (err error)
 		if r.Partitions[i].Partition, err = d.Int32(); err != nil {
 			return err
 		}
-		if r.Partitions[i].ErrorCode, err = d.Int16(); err != nil {
+		if r.Partitions[i].ErrorCode, err = d.Int16AsError(); err != nil {
 			return err
 		}
 	}

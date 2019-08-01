@@ -3,19 +3,19 @@ package protocol
 type LeaderAndISRPartition struct {
 	Topic     string
 	Partition int32
-	ErrorCode int16
+	ErrorCode Error
 }
 
 type LeaderAndISRResponse struct {
 	APIVersion int16
 
-	ErrorCode  int16
+	ErrorCode  Error
 	Partitions []*LeaderAndISRPartition
 }
 
 func (r *LeaderAndISRResponse) Encode(e PacketEncoder) error {
 	var err error
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	if err = e.PutArrayLength(len(r.Partitions)); err != nil {
 		return err
 	}
@@ -24,7 +24,7 @@ func (r *LeaderAndISRResponse) Encode(e PacketEncoder) error {
 			return err
 		}
 		e.PutInt32(p.Partition)
-		e.PutInt16(p.ErrorCode)
+		e.PutInt16FromError(p.ErrorCode)
 	}
 	return nil
 }
@@ -32,7 +32,7 @@ func (r *LeaderAndISRResponse) Encode(e PacketEncoder) error {
 func (r *LeaderAndISRResponse) Decode(d PacketDecoder, version int16) (err error) {
 	r.APIVersion = version
 
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	partitionCount, err := d.ArrayLength()
@@ -48,7 +48,7 @@ func (r *LeaderAndISRResponse) Decode(d PacketDecoder, version int16) (err error
 		if p.Partition, err = d.Int32(); err != nil {
 			return err
 		}
-		if p.ErrorCode, err = d.Int16(); err != nil {
+		if p.ErrorCode, err = d.Int16AsError(); err != nil {
 			return err
 		}
 		r.Partitions[i] = p

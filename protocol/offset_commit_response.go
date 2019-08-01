@@ -16,7 +16,7 @@ type OffsetCommitTopicResponse struct {
 
 type OffsetCommitPartitionResponse struct {
 	Partition int32
-	ErrorCode int16
+	ErrorCode Error
 }
 
 func (r *OffsetCommitResponse) Encode(e PacketEncoder) (err error) {
@@ -35,7 +35,7 @@ func (r *OffsetCommitResponse) Encode(e PacketEncoder) (err error) {
 		}
 		for _, p := range t.PartitionResponses {
 			e.PutInt32(p.Partition)
-			e.PutInt16(p.ErrorCode)
+			e.PutInt16FromError(p.ErrorCode)
 		}
 	}
 	return nil
@@ -71,7 +71,7 @@ func (r *OffsetCommitResponse) Decode(d PacketDecoder, version int16) (err error
 			if err != nil {
 				return err
 			}
-			p.ErrorCode, err = d.Int16()
+			p.ErrorCode, err = d.Int16AsError()
 			if err != nil {
 				return err
 			}

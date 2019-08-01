@@ -16,7 +16,7 @@ func TestFetchResponse(t *testing.T) {
 			Topic: "test_topic",
 			PartitionResponses: []*FetchPartitionResponse{{
 				Partition:     1,
-				ErrorCode:     ErrReplicaNotAvailable.Code(),
+				ErrorCode:     ErrReplicaNotAvailable,
 				HighWatermark: 2,
 				RecordSet:     []byte("sup"),
 			}},
