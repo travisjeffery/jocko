@@ -5,8 +5,8 @@ import "time"
 type IsolationLevel int8
 
 const (
-	ReadUncommitted IsolationLevel = 0
-	ReadCommitted   IsolationLevel = 1
+	ReadUncommitted IsolationLevel = iota
+	ReadCommitted
 )
 
 type FetchPartition struct {
