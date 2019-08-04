@@ -215,7 +215,7 @@ func (b *Broker) JoinLAN(addrs ...string) error {
 	if _, err := b.serf.Join(addrs, true); err != nil {
 		return err
 	}
-	return protocol.ErrNone
+	return nil
 }
 
 // req handling.
@@ -298,10 +298,7 @@ func (b *Broker) handleDeleteTopics(ctx *Context, reqs *protocol.DeleteTopicsReq
 					Topic: topic,
 				},
 			})
-			if err != nil {
-				return err
-			}
-			return protocol.ErrNone
+			return err
 		})
 		res.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 			Topic:     topic,
@@ -346,28 +343,28 @@ func (b *Broker) handleLeaderAndISR(ctx *Context, req *protocol.LeaderAndISRRequ
 		if p.Leader == b.config.ID && (replica.Partition.Leader == b.config.ID) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
 
-			if err := b.startReplica(replica); err != protocol.ErrNone {
+			if err := b.startReplica(replica); err != nil {
 				setErr(i, p, err)
 				continue
 			}
 
-			if err := b.becomeLeader(replica, p); err != protocol.ErrNone {
+			if err := b.becomeLeader(replica, p); err != nil {
 				setErr(i, p, err)
 				continue
 			}
 		} else if contains(p.Replicas, b.config.ID) && (p.Leader != b.config.ID) {
 			// is command asking this broker to follow leader who it isn't a leader of already
-			if err := b.startReplica(replica); err != protocol.ErrNone {
+			if err := b.startReplica(replica); err != nil {
 				setErr(i, p, err)
 				continue
 			}
 
-			if err := b.becomeFollower(replica, p); err != protocol.ErrNone {
+			if err := b.becomeFollower(replica, p); err != nil {
 				setErr(i, p, err)
 				continue
 			}
 		}
-		res.Partitions[i] = &protocol.LeaderAndISRPartition{Partition: p.Partition, Topic: p.Topic, ErrorCode: protocol.ErrNone}
+		res.Partitions[i] = &protocol.LeaderAndISRPartition{Partition: p.Partition, Topic: p.Topic}
 	}
 	return res
 }
@@ -442,7 +439,7 @@ func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *prot
 				}
 				pres.BaseOffset = offset
 				pres.LogAppendTime = time.Now()
-				return protocol.ErrNone
+				return nil
 			})
 			pres.ErrorCode = mapErrorCode(err)
 			tres[j] = pres
@@ -492,7 +489,7 @@ func (b *Broker) handleMetadata(ctx *Context, req *protocol.MetadataRequest) *pr
 	}
 	var topicMetadata []*protocol.TopicMetadata
 	topicMetadataFn := func(topic *structs.Topic, err error) *protocol.TopicMetadata {
-		if err != protocol.ErrNone {
+		if err != nil {
 			return &protocol.TopicMetadata{
 				TopicErrorCode: mapErrorCode(err),
 				Topic:          topic.Topic,
@@ -517,14 +514,12 @@ func (b *Broker) handleMetadata(ctx *Context, req *protocol.MetadataRequest) *pr
 			}
 			partitionMetadata = append(partitionMetadata, &protocol.PartitionMetadata{
 				PartitionID:        p.ID,
-				PartitionErrorCode: protocol.ErrNone,
 				Leader:             p.Leader,
 				Replicas:           p.AR,
 				ISR:                p.ISR,
 			})
 		}
 		return &protocol.TopicMetadata{
-			TopicErrorCode:    protocol.ErrNone,
 			Topic:             topic.Topic,
 			PartitionMetadata: partitionMetadata,
 		}
@@ -535,18 +530,18 @@ func (b *Broker) handleMetadata(ctx *Context, req *protocol.MetadataRequest) *pr
 		_, topics, _ := state.GetTopics()
 		topicMetadata = make([]*protocol.TopicMetadata, 0, len(topics))
 		for _, topic := range topics {
-			topicMetadata = append(topicMetadata, topicMetadataFn(topic, protocol.ErrNone))
+			topicMetadata = append(topicMetadata, topicMetadataFn(topic, nil))
 		}
 	} else {
 		topicMetadata = make([]*protocol.TopicMetadata, 0, len(req.Topics))
 		for _, topicName := range req.Topics {
 			_, topic, err := state.GetTopic(topicName)
-			if topic == nil {
-				topicMetadata = append(topicMetadata, topicMetadataFn(&structs.Topic{Topic: topicName}, protocol.ErrUnknownTopicOrPartition))
-			} else if err != nil {
+			if err != nil {
 				topicMetadata = append(topicMetadata, topicMetadataFn(&structs.Topic{Topic: topicName}, err))
+			} else if topic == nil {
+				topicMetadata = append(topicMetadata, topicMetadataFn(&structs.Topic{Topic: topicName}, protocol.ErrUnknownTopicOrPartition))
 			} else {
-				topicMetadata = append(topicMetadata, topicMetadataFn(topic, protocol.ErrNone))
+				topicMetadata = append(topicMetadata, topicMetadataFn(topic, nil))
 			}
 		}
 	}
@@ -793,7 +788,7 @@ func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *pr
 	state := b.fsm.State()
 	_, group, err := state.GetGroup(r.GroupID)
 	if err != nil {
-		res.ErrorCode = protocol.ErrUnknown
+		res.ErrorCode = mapErrorCode(err)
 		return res
 	}
 	if group == nil {
@@ -801,8 +796,6 @@ func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *pr
 		return res
 	}
 	// TODO: need to handle case when rebalance is in process
-
-	res.ErrorCode = protocol.ErrNone
 
 	return res
 }
@@ -855,7 +848,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 				}
 				fpres.HighWatermark = replica.Log.NewestOffset() - 1
 				fpres.RecordSet = buf.Bytes()
-				return protocol.ErrNone
+				return nil
 			})
 			fpres.ErrorCode = mapErrorCode(err)
 			fr.PartitionResponses[j] = fpres
@@ -1001,7 +994,10 @@ func (b *Broker) startReplica(replica *Replica) error {
 	defer b.Unlock()
 
 	state := b.fsm.State()
-	_, topic, _ := state.GetTopic(replica.Partition.Topic)
+	_, topic, err := state.GetTopic(replica.Partition.Topic)
+	if err != nil {
+		return err
+	}
 
 	// TODO: think i need to just ensure/add the topic if it's not here yet
 
@@ -1024,7 +1020,7 @@ func (b *Broker) startReplica(replica *Replica) error {
 		// TODO: register leader-change listener on r.replica.Partition.id
 	}
 
-	return protocol.ErrNone
+	return nil
 }
 
 // createTopic is used to create the topic across the cluster.
@@ -1035,7 +1031,7 @@ func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) e
 		return protocol.ErrTopicAlreadyExists
 	}
 	ps, err := b.buildPartitions(topic.Topic, topic.NumPartitions, topic.ReplicationFactor)
-	if err != protocol.ErrNone {
+	if err != nil {
 		return err
 	}
 	tt := structs.Topic{
@@ -1090,7 +1086,7 @@ func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) e
 			spew.Dump("leader and isr res", res)
 		}
 	}
-	return protocol.ErrNone
+	return nil
 }
 
 func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicationFactor int16) ([]structs.Partition, error) {
@@ -1130,7 +1126,7 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 		partitions = append(partitions, partition)
 	}
 
-	return partitions, protocol.ErrNone
+	return partitions, nil
 }
 
 // Leave is used to prepare for a graceful shutdown.
@@ -1245,7 +1241,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if !b.config.DevMode {
 		r.Replicate()
 	}
-	return protocol.ErrNone
+	return nil
 }
 
 func (b *Broker) becomeLeader(replica *Replica, cmd *protocol.PartitionState) error {
@@ -1261,7 +1257,7 @@ func (b *Broker) becomeLeader(replica *Replica, cmd *protocol.PartitionState) er
 	replica.Partition.AR = cmd.Replicas
 	replica.Partition.ISR = cmd.ISR
 	replica.Partition.LeaderEpoch = cmd.ZKVersion
-	return protocol.ErrNone
+	return nil
 }
 
 func contains(rs []int32, r int32) bool {
@@ -1345,7 +1341,7 @@ func (b *Broker) offsetsTopic(ctx *Context) (topic *structs.Topic, err error) {
 
 	// doesn't exist so let's create it
 	partitions, err := b.buildPartitions(OffsetsTopicName, 50, b.config.OffsetsTopicReplicationFactor)
-	if err != protocol.ErrNone {
+	if err != nil {
 		return nil, err
 	}
 	topic = &structs.Topic{
@@ -1375,7 +1371,7 @@ func (b *Broker) debugSnapshot() {
 func (b *Broker) withTimeout(timeout time.Duration, fn func() error) error {
 	if timeout <= 0 {
 		go fn()
-		return protocol.ErrNone
+		return nil
 	}
 
 	c := make(chan error, 1)

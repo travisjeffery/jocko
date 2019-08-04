@@ -1063,7 +1063,7 @@ func joinLAN(t *testing.T, leader *Server, member *Server) {
 	}
 	leaderAddr := fmt.Sprintf("127.0.0.1:%d", leader.config.SerfLANConfig.MemberlistConfig.BindPort)
 	memberAddr := fmt.Sprintf("127.0.0.1:%d", member.config.SerfLANConfig.MemberlistConfig.BindPort)
-	if err := member.broker().JoinLAN(leaderAddr); err != protocol.ErrNone {
+	if err := member.broker().JoinLAN(leaderAddr); err != nil {
 		t.Fatal(err)
 	}
 	retry.Run(t, func(r *retry.R) {

@@ -133,10 +133,9 @@ func createTopic(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "error with request to broker: %v\n", err)
 		os.Exit(1)
 	}
-	for _, topicErrCode := range resp.TopicErrorCodes {
-		if topicErrCode.ErrorCode != protocol.ErrNone.Code() {
-			err := protocol.Errs[topicErrCode.ErrorCode]
-			fmt.Fprintf(os.Stderr, "error code: %v\n", err)
+	for _, c := range resp.TopicErrorCodes {
+		if c.ErrorCode != protocol.ErrNone {
+			fmt.Fprintf(os.Stderr, "error code: %v\n", c.ErrorCode)
 			os.Exit(1)
 		}
 	}
