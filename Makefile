@@ -1,11 +1,13 @@
 BUILD_PATH := cmd/jocko/jocko
 DOCKER_TAG := latest
 
+.EXPORT_ALL_VARIABLES:
+GO111MODULE = on
+
 all: test
 
 deps:
-	@which dep 2>/dev/null || go get -u github.com/golang/dep/cmd/dep
-	@dep ensure -v
+	@go mod download
 
 vet:
 	@go list ./... | grep -v vendor | xargs go vet
