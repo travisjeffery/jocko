@@ -33,6 +33,10 @@ Kafka/distributed commit log service in Go.
 - [ ] API versioning [more API versions to implement]
 - [ ] Replication [first draft done - testing heavily now]
 
+## Hiatus Writing Book
+
+I’m writing a book for PragProg called Building Distributed Services with Go. [You can sign up on this mailing list and get updated when the book’s available.](http://eepurl.com/dC5-l1) It walks you through building a distributed commit log from scratch. I hope it will help Jocko contributors and people who want to work on distributed services.
+
 ## Reading
 
 - [How Jocko's built-in service discovery and consensus works](https://medium.com/the-hoard/building-a-kafka-that-doesnt-depend-on-zookeeper-2c4701b6e961#.uamxtq1yz)
