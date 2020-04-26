@@ -1,6 +1,7 @@
 # Jocko
 
-[![Build Status](https://semaphoreci.com/api/v1/travisjeffery/jocko/branches/master/shields_badge.svg)](https://semaphoreci.com/travisjeffery/jocko) [![Join the chat at https://gitter.im/travisjeffery/jocko](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+![ci](https://github.com/travisjeffery/jocko/workflows/go.yml/badge.svg)
+[![gitter](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![codecov](https://codecov.io/gh/travisjeffery/jocko/branch/master/graph/badge.svg)](https://codecov.io/gh/travisjeffery/jocko)
 
 Kafka/distributed commit log service in Go.
