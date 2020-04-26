@@ -27,6 +27,8 @@ func init() {
 }
 
 func TestProduceConsume(t *testing.T) {
+	t.Skip()
+
 	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 
 	s1, dir1 := jocko.NewTestServer(t, func(cfg *config.Config) {

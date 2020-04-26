@@ -37,11 +37,11 @@ func (b *Broker) setupRaft() (err error) {
 		return err
 	}
 
-	trans, err := raft.NewTCPTransportWithLogger(b.config.RaftAddr,
+	trans, err := raft.NewTCPTransport(b.config.RaftAddr,
 		nil,
 		3,
 		10*time.Second,
-		log.NewStdLogger(log.New(log.DebugLevel, fmt.Sprintf("raft transport/%d: ", b.config.ID))),
+		nil,
 	)
 	if err != nil {
 		return err
@@ -112,7 +112,6 @@ func (b *Broker) setupRaft() (err error) {
 	raftNotifyCh := make(chan bool, 1)
 	b.config.RaftConfig.NotifyCh = raftNotifyCh
 	b.raftNotifyCh = raftNotifyCh
-	b.config.RaftConfig.Logger = log.NewStdLogger(log.New(log.DebugLevel, fmt.Sprintf("raft/%d: ", b.config.ID)))
 
 	// setup raft store
 	b.raft, err = raft.NewRaft(b.config.RaftConfig, b.fsm, logStore, stable, snap, trans)
