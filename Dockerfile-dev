@@ -1,0 +1,16 @@
+# The file using for build conatiner for regular development,
+# it skip downloading vedor files if `go.*` files was not edited
+
+FROM golang:1.14-alpine as build-base
+WORKDIR /build
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o /jocko cmd/jocko/main.go
+
+FROM scratch
+COPY --from=build-base /jocko /jocko
+EXPOSE 9092 9093 9094 9095
+VOLUME "/tmp/jocko"
+ENTRYPOINT ["/jocko"]

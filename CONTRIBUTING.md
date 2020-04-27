@@ -14,10 +14,15 @@ When creating a pull-request you should:
     ```
 
 - **Get the deps**:
+
+    Just get the deps from go.mod file
+    ```shell script
+    go mod download
     ```
-    dep ensure
-    ``` 
-    (If you don't have dep, run: `go get -u github.com/golang/dep/cmd/dep`)
+    Get deps and [upgrade](https://github.com/golang/go/issues/28692) to the latest version for all transitive dependencies:
+    ```shell script
+    go get -d -v all
+    ```
 
 - **Check the tests pass**:
     ```
@@ -26,7 +31,7 @@ When creating a pull-request you should:
 
 - **Make your change**
 - **Write tests and check they pass**
-- **Lint your code**: Use `gofmt`, `golint`, and `govet` to clean up your code
+- **Lint your code**: Use `gofmt`, `golint`, `govet`, and `go mod tidy` to clean up your code
 - **Start your commit message with a verb**: your commit message must start a lowercase verb such as: "add", "fix", "refactor", "remove"
 - **Reference the issue**: Reference your issue N by including "closes #N" in the commit message
 

@@ -77,9 +77,6 @@ I’m writing a book for PragProg called Building Distributed Services with Go. 
     $ make build
     ```
 
-    (If you see an error about `dep` not being found, ensure that
-    `$GOPATH/bin` is in your `PATH`)
-
 ### Docker
 
 `docker build -t travisjeffery/jocko:latest .`

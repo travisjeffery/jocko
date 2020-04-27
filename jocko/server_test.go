@@ -9,7 +9,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
-	"github.com/hashicorp/consul/testutil/retry"
+	"github.com/hashicorp/consul/sdk/testutil/retry"
 	ti "github.com/mitchellh/go-testing-interface"
 	"github.com/stretchr/testify/require"
 	"github.com/travisjeffery/jocko/jocko"
