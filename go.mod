@@ -52,7 +52,7 @@ require (
 	github.com/stretchr/testify v1.3.0
 	github.com/tj/go-gracefully v0.0.0-20141227061038-005c1d102f1b
 	github.com/travisjeffery/go-dynaport v0.0.0-20171203090423-24009f4f2f49
-	github.com/tysontate/gommap v0.0.0-20131202084435-e87a6e482c2c
+	github.com/tysontate/gommap v0.0.0-20190103205956-899e1273fb5c
 	github.com/uber/jaeger-client-go v2.11.2+incompatible
 	github.com/uber/jaeger-lib v1.3.1
 	github.com/ugorji/go v0.0.0-20180112141927-9831f2c3ac10
