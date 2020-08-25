@@ -93,6 +93,9 @@ func (r *Replicator) fetchMessages() {
 					if p.RecordSet == nil {
 						goto BACKOFF
 					}
+					if len(p.RecordSet) == 0 {
+						goto BACKOFF
+					}
 					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8]))
 					if offset > r.offset {
 						r.msgs <- p.RecordSet

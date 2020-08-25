@@ -39,6 +39,9 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 			return err
 		}
 		e.PutInt32(b.Port)
+		if r.APIVersion >= 1 {
+			e.PutString("")
+		}
 	}
 	if r.APIVersion >= 1 {
 		e.PutInt32(r.ControllerID)
@@ -50,6 +53,9 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 		e.PutInt16(t.TopicErrorCode)
 		if err = e.PutString(t.Topic); err != nil {
 			return err
+		}
+		if r.APIVersion >= 1 {
+			e.PutInt8(0)
 		}
 		if err = e.PutArrayLength(len(t.PartitionMetadata)); err != nil {
 			return err

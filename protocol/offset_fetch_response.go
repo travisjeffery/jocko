@@ -7,7 +7,7 @@ type OffsetFetchTopicResponse struct {
 
 type OffsetFetchPartition struct {
 	Partition int32
-	Offset    int16
+	Offset    int64
 	Metadata  *string
 	ErrorCode int16
 }
@@ -31,7 +31,7 @@ func (r *OffsetFetchResponse) Encode(e PacketEncoder) (err error) {
 		}
 		for _, p := range resp.Partitions {
 			e.PutInt32(p.Partition)
-			e.PutInt16(p.Offset)
+			e.PutInt64(p.Offset)
 			if err := e.PutNullableString(p.Metadata); err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func (r *OffsetFetchResponse) Decode(d PacketDecoder, version int16) (err error)
 			if p.Partition, err = d.Int32(); err != nil {
 				return err
 			}
-			if p.Offset, err = d.Int16(); err != nil {
+			if p.Offset, err = d.Int64(); err != nil {
 				return err
 			}
 			if p.Metadata, err = d.NullableString(); err != nil {

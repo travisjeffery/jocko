@@ -55,7 +55,7 @@ func testGroup(t *testing.T) {
 	in := RegisterGroupRequest{
 		Group: Group{
 			Group:   "group-id",
-			Members: map[string]Member{},
+			Members: map[string]*Member{},
 		},
 	}
 	b, err := Encode(RegisterGroupRequestType, &in)

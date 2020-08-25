@@ -86,7 +86,7 @@ func (r *FetchPartitionResponse) Encode(e PacketEncoder, version int16) (err err
 		}
 	}
 
-	if err = e.PutBytes(r.RecordSet); err != nil {
+	if err = e.PutNotNullBytes(r.RecordSet); err != nil {
 		return err
 	}
 

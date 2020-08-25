@@ -263,10 +263,10 @@ func (d *ByteDecoder) StringArray() ([]string, error) {
 		d.off = len(d.b)
 		return nil, ErrInsufficientData
 	}
-	n := int(Encoding.Uint32(d.b[d.off:]))
+	n := int32(Encoding.Uint32(d.b[d.off:]))
 	d.off += 4
 
-	if n == 0 {
+	if n == 0 || n == -1 {
 		return nil, nil
 	}
 

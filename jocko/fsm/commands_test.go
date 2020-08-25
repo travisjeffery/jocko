@@ -107,7 +107,7 @@ func TestRegisterGroup(t *testing.T) {
 	}
 
 	req := structs.RegisterGroupRequest{
-		Group: structs.Group{Group: "group-id", Members: map[string]structs.Member{}},
+		Group: structs.Group{Group: "group-id", Members: map[string]*structs.Member{}},
 	}
 	buf, err := structs.Encode(structs.RegisterGroupRequestType, req)
 	if err != nil {
