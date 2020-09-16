@@ -112,6 +112,7 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	// NOTE:
 	// Do not move the code below to a goroutine.
 	// The `ConsumeClaim` itself is called within a goroutine, see:
+	log.Printf("claim memberId %s id %d generation %d", session.MemberID(), consumer.ID, session.GenerationID())
 	consumer.ClaimChan <- idAndClaim{claim: claim, ID: consumer.ID, generation: session.GenerationID()}
 	// https://github.com/Shopify/sarama/blob/master/consumer_group.go#L27-L29
 	for message := range claim.Messages() {
