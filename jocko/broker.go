@@ -980,7 +980,7 @@ RETRY_GET_ASSIGNMENT:
 			goto RETRY_GET_ASSIGNMENT
 		}
 	}
-
+	log.Debug.Printf("SyncGroupResponse %s", r.MemberID)
 	return res
 }
 func checkMemberHeartbeat(group *structs.Group, memberId string,
