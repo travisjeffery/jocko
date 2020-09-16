@@ -221,13 +221,13 @@ func JoinAndLeave(t *testing.T, partitionNum, consumerNum int32) {
 			beginConsume(consumers[j], brokers, group, topics)
 		}(i)
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(20 * time.Second)
 	checkRangeAssignmentClaims(t, claimAggregate, partitionNum, consumerNum)
 	consumers[0].QuitChan <- true //actively send leave group request
-	time.Sleep(10 * time.Second)
+	time.Sleep(20 * time.Second)
 	checkRangeAssignmentClaims(t, claimAggregate, partitionNum, consumerNum-1)
 	consumers[1].QuitChan <- false //without leave group, coordinator will find this consumer heartbeat timed out and rebalance
-	time.Sleep(20 * time.Second)
+	time.Sleep(30 * time.Second)
 	checkRangeAssignmentClaims(t, claimAggregate, partitionNum, consumerNum-2)
 }
 func checkRangeAssignmentClaims(t *testing.T, claimAggregate chan idAndClaim, partitionNum int32, consumerNum int32) {
