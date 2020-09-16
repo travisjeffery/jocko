@@ -27,7 +27,7 @@ func init() {
 }
 
 func TestProduceConsume(t *testing.T) {
-	//t.Skip()
+	t.Skip()
 
 	sarama.Logger = log.NewStdLogger(log.New(log.DebugLevel, "server_test: sarama: "))
 
