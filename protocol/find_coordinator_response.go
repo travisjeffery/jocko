@@ -12,7 +12,7 @@ type FindCoordinatorResponse struct {
 	APIVersion int16
 
 	ThrottleTime time.Duration
-	ErrorCode    int16
+	ErrorCode    Error
 	ErrorMessage *string
 	Coordinator  Coordinator
 }
@@ -21,7 +21,7 @@ func (r *FindCoordinatorResponse) Encode(e PacketEncoder) (err error) {
 	if r.APIVersion >= 1 {
 		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
 	}
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	if r.APIVersion >= 1 {
 		if err = e.PutNullableString(r.ErrorMessage); err != nil {
 			return err
@@ -45,7 +45,7 @@ func (r *FindCoordinatorResponse) Decode(d PacketDecoder, version int16) (err er
 		}
 		r.ThrottleTime = time.Duration(throttle) * time.Millisecond
 	}
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	if version >= 1 {

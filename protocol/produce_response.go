@@ -4,7 +4,7 @@ import "time"
 
 type ProducePartitionResponse struct {
 	Partition      int32
-	ErrorCode      int16
+	ErrorCode      Error
 	BaseOffset     int64
 	LogAppendTime  time.Time
 	LogStartOffset int64
@@ -35,7 +35,7 @@ func (r *ProduceResponse) Encode(e PacketEncoder) (err error) {
 		}
 		for _, p := range resp.PartitionResponses {
 			e.PutInt32(p.Partition)
-			e.PutInt16(p.ErrorCode)
+			e.PutInt16FromError(p.ErrorCode)
 			if r.APIVersion >= 2 {
 				e.PutInt64(p.BaseOffset)
 				e.PutInt64(int64(p.LogAppendTime.UnixNano() / int64(time.Millisecond)))
@@ -82,7 +82,7 @@ func (r *ProduceResponse) Decode(d PacketDecoder, version int16) (err error) {
 			if err != nil {
 				return err
 			}
-			p.ErrorCode, err = d.Int16()
+			p.ErrorCode, err = d.Int16AsError()
 			if err != nil {
 				return err
 			}

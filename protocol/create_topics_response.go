@@ -4,7 +4,7 @@ import "time"
 
 type TopicErrorCode struct {
 	Topic        string
-	ErrorCode    int16
+	ErrorCode    Error
 	ErrorMessage *string
 }
 
@@ -26,7 +26,7 @@ func (c *CreateTopicsResponse) Encode(e PacketEncoder) (err error) {
 		if err = e.PutString(t.Topic); err != nil {
 			return err
 		}
-		e.PutInt16(t.ErrorCode)
+		e.PutInt16FromError(t.ErrorCode)
 		if c.APIVersion >= 1 {
 			if err = e.PutNullableString(t.ErrorMessage); err != nil {
 				return err
@@ -57,7 +57,7 @@ func (c *CreateTopicsResponse) Decode(d PacketDecoder, version int16) error {
 		if err != nil {
 			return err
 		}
-		errorCode, err := d.Int16()
+		errorCode, err := d.Int16AsError()
 		if err != nil {
 			return err
 		}

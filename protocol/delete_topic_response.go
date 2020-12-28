@@ -16,7 +16,7 @@ func (c *DeleteTopicsResponse) Encode(e PacketEncoder) error {
 	e.PutArrayLength(len(c.TopicErrorCodes))
 	for _, t := range c.TopicErrorCodes {
 		e.PutString(t.Topic)
-		e.PutInt16(t.ErrorCode)
+		e.PutInt16FromError(t.ErrorCode)
 	}
 	return nil
 }
@@ -40,7 +40,7 @@ func (c *DeleteTopicsResponse) Decode(d PacketDecoder, version int16) error {
 		if err != nil {
 			return err
 		}
-		errorCode, err := d.Int16()
+		errorCode, err := d.Int16AsError()
 		if err != nil {
 			return err
 		}

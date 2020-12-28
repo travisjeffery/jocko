@@ -10,7 +10,7 @@ type AlterConfigsResponse struct {
 }
 
 type AlterConfigResourceResponse struct {
-	ErrorCode    int16
+	ErrorCode    Error
 	ErrorMessage *string
 	Type         int8
 	Name         string
@@ -20,7 +20,7 @@ func (r *AlterConfigsResponse) Encode(e PacketEncoder) error {
 	e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
 	e.PutArrayLength(len(r.Resources))
 	for _, resource := range r.Resources {
-		e.PutInt16(resource.ErrorCode)
+		e.PutInt16FromError(resource.ErrorCode)
 		if err := e.PutNullableString(resource.ErrorMessage); err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ func (r *AlterConfigsResponse) Decode(d PacketDecoder, version int16) (err error
 	r.Resources = make([]AlterConfigResourceResponse, resourceCount)
 	for i := 0; i < resourceCount; i++ {
 		resource := AlterConfigResourceResponse{}
-		if resource.ErrorCode, err = d.Int16(); err != nil {
+		if resource.ErrorCode, err = d.Int16AsError(); err != nil {
 			return err
 		}
 		if resource.ErrorMessage, err = d.NullableString(); err != nil {

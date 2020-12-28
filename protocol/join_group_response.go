@@ -11,7 +11,7 @@ type JoinGroupResponse struct {
 	APIVersion int16
 
 	ThrottleTime  time.Duration
-	ErrorCode     int16
+	ErrorCode     Error
 	GenerationID  int32
 	GroupProtocol string
 	LeaderID      string
@@ -23,7 +23,7 @@ func (r *JoinGroupResponse) Encode(e PacketEncoder) (err error) {
 	if r.APIVersion >= 1 {
 		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
 	}
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	e.PutInt32(r.GenerationID)
 	if err = e.PutString(r.GroupProtocol); err != nil {
 		return err
@@ -58,7 +58,7 @@ func (r *JoinGroupResponse) Decode(d PacketDecoder, version int16) (err error) {
 		}
 		r.ThrottleTime = time.Duration(timeout) * time.Millisecond
 	}
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	if r.GenerationID, err = d.Int32(); err != nil {

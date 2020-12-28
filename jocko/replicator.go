@@ -86,7 +86,7 @@ func (r *Replicator) fetchMessages() {
 			}
 			for _, resp := range fetchResponse.Responses {
 				for _, p := range resp.PartitionResponses {
-					if p.ErrorCode != protocol.ErrNone.Code() {
+					if p.ErrorCode != protocol.ErrNone {
 						log.Error.Printf("replicator: partition response error: %d", p.ErrorCode)
 						goto BACKOFF
 					}

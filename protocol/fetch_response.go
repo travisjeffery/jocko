@@ -25,7 +25,7 @@ func (t *AbortedTransaction) Encode(e PacketEncoder) (err error) {
 
 type FetchPartitionResponse struct {
 	Partition           int32
-	ErrorCode           int16
+	ErrorCode           Error
 	HighWatermark       int64
 	LastStableOffset    int64
 	AbortedTransactions []*AbortedTransaction
@@ -36,7 +36,7 @@ func (r *FetchPartitionResponse) Decode(d PacketDecoder, version int16) (err err
 	if r.Partition, err = d.Int32(); err != nil {
 		return err
 	}
-	if r.ErrorCode, err = d.Int16(); err != nil {
+	if r.ErrorCode, err = d.Int16AsError(); err != nil {
 		return err
 	}
 	if r.HighWatermark, err = d.Int64(); err != nil {
@@ -72,7 +72,7 @@ func (r *FetchPartitionResponse) Decode(d PacketDecoder, version int16) (err err
 
 func (r *FetchPartitionResponse) Encode(e PacketEncoder, version int16) (err error) {
 	e.PutInt32(r.Partition)
-	e.PutInt16(r.ErrorCode)
+	e.PutInt16FromError(r.ErrorCode)
 	e.PutInt64(r.HighWatermark)
 
 	if version >= 4 {

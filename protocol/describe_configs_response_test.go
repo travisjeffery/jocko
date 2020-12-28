@@ -8,8 +8,8 @@ import (
 
 func TestDescribeConfigsResponse(t *testing.T) {
 	req := require.New(t)
-	code := ErrBrokerNotAvailable.Code()
-	msg := ErrBrokerNotAvailable.String()
+	code := ErrBrokerNotAvailable
+	msg := ErrBrokerNotAvailable.Error()
 	exp := &DescribeConfigsResponse{
 		Resources: []DescribeConfigsResourceResponse{
 			{
