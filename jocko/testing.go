@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/consul/testutil/retry"
+	"github.com/hashicorp/consul/sdk/testutil/retry"
 	"github.com/hashicorp/raft"
 	"github.com/mitchellh/go-testing-interface"
 	dynaport "github.com/travisjeffery/go-dynaport"

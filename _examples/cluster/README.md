@@ -44,3 +44,8 @@ $ ./jocko broker \
 ## docker-compose cluster
 
 To start a [docker compose](https://docs.docker.com/compose/) cluster use the provided `docker-compose.yml`.
+
+```shell
+docker-compose -f docker-compose.yml build
+docker-compose -f docker-compose.yml up
+```
