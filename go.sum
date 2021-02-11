@@ -173,8 +173,8 @@ github.com/tj/go-gracefully v0.0.0-20141227061038-005c1d102f1b/go.mod h1:uqlTeGU
 github.com/travisjeffery/go-dynaport v0.0.0-20171203090423-24009f4f2f49 h1:K+L347hjHiye7Xijn7oLHC+nIdXd0Z5cYrp2zt+ZrFk=
 github.com/travisjeffery/go-dynaport v0.0.0-20171203090423-24009f4f2f49/go.mod h1:0LHuDS4QAx+mAc4ri3WkQdavgVoBIZ7cE9ob17KIAJk=
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
-github.com/tysontate/gommap v0.0.0-20131202084435-e87a6e482c2c h1:TsrnIwyIZbPxVRyG58Tbyb46v5Nx/3DPlKjST9dBo6E=
-github.com/tysontate/gommap v0.0.0-20131202084435-e87a6e482c2c/go.mod h1:D/qzp3BypYxGri+RgzDSv3Fml0qkzA85BPPwrNNYbSs=
+github.com/tysontate/gommap v0.0.0-20201017170033-6edfc905bae0 h1:eRyU6DOTKfqVkaAuXI3aSMeMe6F9Z4FeCo7ckcBfeak=
+github.com/tysontate/gommap v0.0.0-20201017170033-6edfc905bae0/go.mod h1:D/qzp3BypYxGri+RgzDSv3Fml0qkzA85BPPwrNNYbSs=
 github.com/uber/jaeger-client-go v2.11.2+incompatible h1:D2idO5gYBl+40qnsowJaqtwCV6z1rxYy2yhYBh3mVvI=
 github.com/uber/jaeger-client-go v2.11.2+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-lib v1.3.1 h1:QaTh7g9oG56uB4I2MiwJbh/svRjHhZogAiQozBzxL3g=
