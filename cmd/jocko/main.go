@@ -74,7 +74,7 @@ func run(cmd *cobra.Command, args []string) {
 			Param: 1,
 		},
 		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans: true,
+			//LogSpans: true,
 		},
 	}
 

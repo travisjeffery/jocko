@@ -149,6 +149,10 @@ func (b *Broker) Run(ctx context.Context, reqCtx *Context) *Context {
 			case *protocol.ProduceRequest:
 				res = b.handleProduce(reqCtx, req)
 			case *protocol.FetchRequest:
+				if b.config.UseSendfile {
+					b.handleFetchSendFile(reqCtx, req)
+					return nil
+				}
 				res = b.handleFetch(reqCtx, req)
 			case *protocol.OffsetsRequest:
 				res = b.handleOffsets(reqCtx, req)
@@ -196,7 +200,7 @@ func (b *Broker) Run(ctx context.Context, reqCtx *Context) *Context {
 
 			return &Context{
 				parent: responseCtx,
-				conn:   reqCtx.conn,
+				Conn:   reqCtx.Conn,
 				header: reqCtx.header,
 				res: &protocol.Response{
 					CorrelationID: reqCtx.header.CorrelationID,

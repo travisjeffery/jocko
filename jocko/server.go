@@ -231,17 +231,19 @@ func (s *Server) handleRequest(conn net.Conn) {
 		ctx := opentracing.ContextWithSpan(context.Background(), span)
 		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
-
 		reqCtx := &Context{
 			parent: ctx,
 			header: header,
 			req:    req,
-			conn:   conn,
+			Conn:   conn.(*net.TCPConn),
 		}
 
-		//log.Debug.Printf("server/%d: handle request: %s", s.config.ID, reqCtx)
+		log.Info.Printf("server/%d: handle request: %s", s.config.ID, reqCtx)
 
 		respCtx := s.handler.Run(ctx, reqCtx)
+		if header.APIKey == protocol.FetchKey && s.config.UseSendfile {
+			continue
+		}
 		if queueSpan, ok := respCtx.Value(responseQueueSpanKey).(opentracing.Span); ok {
 			queueSpan.Finish()
 		}
@@ -255,7 +257,7 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
 
-	//log.Debug.Printf("server/%d: handle response: %s", s.config.ID, respCtx)
+	log.Info.Printf("server/%d: handle response: %s", s.config.ID, respCtx)
 
 	defer psp.Finish()
 	defer sp.Finish()
@@ -264,7 +266,7 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = respCtx.conn.Write(b)
+	_, err = respCtx.Conn.Write(b)
 	return err
 }
 

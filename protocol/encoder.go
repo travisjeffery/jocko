@@ -294,3 +294,9 @@ func (e *ByteEncoder) Pop() {
 	e.stack = e.stack[:len(e.stack)-1]
 	pe.Fill(e.off, e.b)
 }
+func (e *ByteEncoder) SetOffset(offset int) {
+	e.off = offset
+}
+func (e *ByteEncoder) GetOffset() int {
+	return e.off
+}

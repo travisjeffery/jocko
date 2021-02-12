@@ -1,6 +1,9 @@
 package jocko
 
-import "io"
+import (
+	"io"
+	"os"
+)
 
 type CommitLog interface {
 	Delete() error
@@ -9,4 +12,5 @@ type CommitLog interface {
 	NewestOffset() int64
 	OldestOffset() int64
 	Append([]byte) (int64, error)
+	SendfileParams(offset int64, maxBytes int32) (*os.File, int64, int, error)
 }
