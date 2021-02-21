@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
 )
@@ -11,11 +12,14 @@ var ErrInvalidArrayLength = errors.New("kafka: invalid array length")
 var ErrInvalidByteSliceLength = errors.New("invalid byteslice length")
 
 type PacketDecoder interface {
+	FlexVar()
 	Bool() (bool, error)
 	Int8() (int8, error)
 	Int16() (int16, error)
 	Int32() (int32, error)
 	Int64() (int64, error)
+	Varint() (int64, error)
+	Uvarint() (uint64, error)
 	ArrayLength() (int, error)
 	Bytes() ([]byte, error)
 	String() (string, error)
@@ -49,9 +53,14 @@ func Decode(b []byte, in VersionedDecoder, version int16) error {
 }
 
 type ByteDecoder struct {
-	b     []byte
-	off   int
-	stack []PushDecoder
+	b       []byte
+	off     int
+	stack   []PushDecoder
+	flexVar bool
+}
+
+func (d *ByteDecoder) FlexVar() {
+	d.flexVar = true
 }
 
 func (d *ByteDecoder) Offset() int {
@@ -104,17 +113,40 @@ func (d *ByteDecoder) Int64() (int64, error) {
 	return tmp, nil
 }
 
-func (d *ByteDecoder) ArrayLength() (int, error) {
-	if d.remaining() < 4 {
-		d.off = len(d.b)
+func (d *ByteDecoder) Varint() (int64, error) {
+	x, n := binary.Varint(d.b[d.off:])
+	if n <= 0 {
 		return -1, ErrInsufficientData
 	}
-	tmp := int(Encoding.Uint32(d.b[d.off:]))
-	d.off += 4
-	if tmp > d.remaining() {
-		d.off = len(d.b)
-		return -1, ErrInsufficientData
-	} else if tmp > 2*math.MaxUint16 {
+	d.off += n
+	return x, nil
+}
+
+func (d *ByteDecoder) Uvarint() (uint64, error) {
+	x, n := binary.Uvarint(d.b[d.off:])
+	if n <= 0 {
+		return 0, ErrInsufficientData
+	}
+	d.off += n
+	return x, nil
+}
+
+func (d *ByteDecoder) ArrayLength() (int, error) {
+	var tmp int
+	if d.flexVar {
+		len, err := d.Uvarint()
+		if err != nil {
+			return -1, err
+		}
+		tmp = int(len)
+	} else {
+		len, err := d.Int32()
+		if err != nil {
+			return -1, err
+		}
+		tmp = int(len)
+	}
+	if tmp > 2*math.MaxUint16 {
 		return -1, ErrInvalidArrayLength
 	}
 	return tmp, nil
@@ -123,14 +155,10 @@ func (d *ByteDecoder) ArrayLength() (int, error) {
 // collections
 
 func (d *ByteDecoder) Bytes() ([]byte, error) {
-	tmp, err := d.Int32()
-
+	n, err := d.ArrayLength()
 	if err != nil {
 		return nil, err
 	}
-
-	n := int(tmp)
-
 	switch {
 	case n < -1:
 		return nil, ErrInvalidByteSliceLength
@@ -149,19 +177,13 @@ func (d *ByteDecoder) Bytes() ([]byte, error) {
 }
 
 func (d *ByteDecoder) String() (string, error) {
-	tmp, err := d.Int16()
-
+	n, err := d.stringLength()
 	if err != nil {
 		return "", err
 	}
-
-	n := int(tmp)
-
 	switch {
-	case n < -1:
-		return "", ErrInvalidStringLength
-	case n == -1:
-		return "", nil
+	case n <= -1:
+		return "", ErrInvalidArrayLength
 	case n == 0:
 		return "", nil
 	case n > d.remaining():
@@ -175,25 +197,42 @@ func (d *ByteDecoder) String() (string, error) {
 }
 
 func (d *ByteDecoder) stringLength() (int, error) {
-	l, err := d.Int16()
-	if err != nil {
-		return 0, err
+	var tmp int
+	if d.flexVar {
+		if len, err := d.Uvarint(); err != nil {
+			return 0, err
+		} else {
+			tmp = int(len) - 1
+		}
+	} else {
+		if len, err := d.Int16(); err != nil {
+			return 0, err
+		} else {
+			tmp = int(len)
+		}
 	}
-	n := int(l)
-	switch {
-	case n < -1:
-		return 0, ErrInvalidStringLength
-	case n > d.remaining():
-		d.off = len(d.b)
-		return 0, ErrInsufficientData
+	if tmp > 2*math.MaxUint16 {
+		return -1, ErrInvalidArrayLength
 	}
-	return n, nil
+	return tmp, nil
 }
 
 func (d *ByteDecoder) NullableString() (*string, error) {
 	n, err := d.stringLength()
-	if err != nil || n == -1 {
+	if err != nil {
 		return nil, err
+	}
+	var str string
+	switch {
+	case n < -1:
+		return nil, ErrInvalidArrayLength
+	case n == -1:
+		return nil, nil
+	case n == 0:
+		return &str, nil
+	case n > d.remaining():
+		d.off = len(d.b)
+		return nil, ErrInsufficientData
 	}
 	tmpStr := string(d.b[d.off : d.off+n])
 	d.off += n
@@ -201,85 +240,77 @@ func (d *ByteDecoder) NullableString() (*string, error) {
 }
 
 func (d *ByteDecoder) Int32Array() ([]int32, error) {
-	if d.remaining() < 4 {
-		d.off = len(d.b)
-		return nil, ErrInsufficientData
-	}
-	n := int(Encoding.Uint32(d.b[d.off:]))
-	d.off += 4
-
-	if d.remaining() < 4*n {
-		d.off = len(d.b)
-		return nil, ErrInsufficientData
+	n, err := d.ArrayLength()
+	if err != nil {
+		return nil, err
 	}
 
-	if n == 0 {
-		return nil, nil
-	}
-
-	if n < 0 {
+	switch {
+	case n < -1:
 		return nil, ErrInvalidArrayLength
+	case n == -1:
+		return nil, nil
+	case n == 0:
+		return []int32{}, nil
+	case d.remaining() < 4*n:
+		d.off = len(d.b)
+		return nil, ErrInsufficientData
 	}
 
 	ret := make([]int32, n)
 	for i := range ret {
-		ret[i] = int32(Encoding.Uint32(d.b[d.off:]))
-		d.off += 4
+		if ret[i], err = d.Int32(); err != nil {
+			return nil, err
+		}
 	}
 	return ret, nil
 }
 
 func (d *ByteDecoder) Int64Array() ([]int64, error) {
-	if d.remaining() < 4 {
-		d.off = len(d.b)
-		return nil, ErrInsufficientData
-	}
-	n := int(Encoding.Uint32(d.b[d.off:]))
-	d.off += 4
-
-	if d.remaining() < 8*n {
-		d.off = len(d.b)
-		return nil, ErrInsufficientData
+	n, err := d.ArrayLength()
+	if err != nil {
+		return nil, err
 	}
 
-	if n == 0 {
-		return nil, nil
-	}
-
-	if n < 0 {
+	switch {
+	case n < -1:
 		return nil, ErrInvalidArrayLength
+	case n == -1:
+		return nil, nil
+	case n == 0:
+		return []int64{}, nil
+	case d.remaining() < 8*n:
+		d.off = len(d.b)
+		return nil, ErrInsufficientData
 	}
-
 	ret := make([]int64, n)
 	for i := range ret {
-		ret[i] = int64(Encoding.Uint64(d.b[d.off:]))
-		d.off += 8
+		if ret[i], err = d.Int64(); err != nil {
+			return nil, err
+		}
 	}
 	return ret, nil
 }
 
 func (d *ByteDecoder) StringArray() ([]string, error) {
-	if d.remaining() < 4 {
-		d.off = len(d.b)
-		return nil, ErrInsufficientData
-	}
-	n := int(Encoding.Uint32(d.b[d.off:]))
-	d.off += 4
-
-	if n == 0 {
-		return nil, nil
+	n, err := d.ArrayLength()
+	if err != nil {
+		return nil, err
 	}
 
-	if n < 0 {
+	switch {
+	case n < -1:
 		return nil, ErrInvalidArrayLength
+	case n == -1:
+		return nil, nil
+	case n == 0:
+		return []string{}, nil
 	}
 
 	ret := make([]string, n)
 	for i := range ret {
-		if str, err := d.String(); err != nil {
+		if ret[i], err = d.String(); err != nil {
 			return nil, err
-		} else {
-			ret[i] = str
 		}
 	}
 	return ret, nil

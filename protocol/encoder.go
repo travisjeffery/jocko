@@ -1,15 +1,19 @@
 package protocol
 
 import (
+	"encoding/binary"
 	"math"
 )
 
 type PacketEncoder interface {
+	FlexVer()
 	PutBool(in bool)
 	PutInt8(in int8)
 	PutInt16(in int16)
 	PutInt32(in int32)
 	PutInt64(in int64)
+	PutVarint(in int64)
+	PutUvarint(int uint64)
 	PutArrayLength(in int) error
 	PutRawBytes(in []byte) error
 	PutBytes(in []byte) error
@@ -50,8 +54,13 @@ func Encode(e Encoder) ([]byte, error) {
 }
 
 type LenEncoder struct {
-	Length int
-	stack  []int
+	Length  int
+	stack   []int
+	flexVer bool
+}
+
+func (e *LenEncoder) FlexVer() {
+	e.flexVer = true
 }
 
 func (e *LenEncoder) PutBool(in bool) {
@@ -74,20 +83,47 @@ func (e *LenEncoder) PutInt64(in int64) {
 	e.Length += 8
 }
 
+func (e *LenEncoder) PutVarint(in int64) {
+	buf := make([]byte, binary.MaxVarintLen64)
+	e.Length += binary.PutVarint(buf, in)
+}
+
+func (e *LenEncoder) PutUvarint(in uint64) {
+	buf := make([]byte, binary.MaxVarintLen64)
+	e.Length += binary.PutUvarint(buf, in)
+}
+
 func (e *LenEncoder) PutArrayLength(in int) error {
 	if in > math.MaxInt32 {
 		return ErrInvalidArrayLength
 	}
-	e.Length += 4
+	if e.flexVer {
+		if in == -1 {
+			e.PutUvarint(0)
+			return nil
+		}
+		i := uint64(in)
+		e.PutUvarint(i + 1)
+	} else {
+		if in == -1 {
+			e.PutInt32(-1)
+		} else {
+			e.PutInt32(0)
+		}
+	}
 	return nil
 }
 
 // arrays
-
 func (e *LenEncoder) PutBytes(in []byte) error {
-	e.Length += 4
+	var err error
 	if in == nil {
-		return nil
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
+	if err != nil {
+		return err
 	}
 	return e.PutRawBytes(in)
 }
@@ -101,7 +137,11 @@ func (e *LenEncoder) PutRawBytes(in []byte) error {
 }
 
 func (e *LenEncoder) PutString(in string) error {
-	e.Length += 2
+	if e.flexVer {
+		e.PutUvarint(uint64(len(in)) + 1)
+	} else {
+		e.PutInt16(0)
+	}
 	if len(in) > math.MaxInt16 {
 		return ErrInvalidStringLength
 	}
@@ -110,15 +150,28 @@ func (e *LenEncoder) PutString(in string) error {
 }
 
 func (e *LenEncoder) PutNullableString(in *string) error {
-	if in == nil {
-		e.Length += 2
-		return nil
+	if e.flexVer {
+		if in == nil {
+			e.PutUvarint(0)
+			return nil
+		}
+		e.PutUvarint(uint64(len(*in)) + 1)
+	} else {
+		e.PutInt16(0)
+		if in == nil {
+			return nil
+		}
 	}
 	return e.PutString(*in)
 }
 
 func (e *LenEncoder) PutStringArray(in []string) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
@@ -133,7 +186,12 @@ func (e *LenEncoder) PutStringArray(in []string) error {
 }
 
 func (e *LenEncoder) PutInt32Array(in []int32) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
@@ -142,7 +200,12 @@ func (e *LenEncoder) PutInt32Array(in []int32) error {
 }
 
 func (e *LenEncoder) PutInt64Array(in []int64) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
@@ -157,9 +220,14 @@ func (e *LenEncoder) Push(pe PushEncoder) {
 func (e *LenEncoder) Pop() {}
 
 type ByteEncoder struct {
-	b     []byte
-	off   int
-	stack []PushEncoder
+	b       []byte
+	off     int
+	stack   []PushEncoder
+	flexVer bool
+}
+
+func (b *ByteEncoder) FlexVer() {
+	b.flexVer = true
 }
 
 func (b *ByteEncoder) Bytes() []byte {
@@ -197,8 +265,28 @@ func (e *ByteEncoder) PutInt64(in int64) {
 	e.off += 8
 }
 
+func (e *ByteEncoder) PutVarint(in int64) {
+	e.off += binary.PutVarint(e.b[e.off:], in)
+}
+
+func (e *ByteEncoder) PutUvarint(in uint64) {
+	e.off += binary.PutUvarint(e.b[e.off:], in)
+}
+
 func (e *ByteEncoder) PutArrayLength(in int) error {
-	e.PutInt32(int32(in))
+	if e.flexVer {
+		if in == -1 {
+			e.PutUvarint(0)
+		} else {
+			e.PutUvarint(uint64(in) + 1)
+		}
+	} else {
+		if in == -1 {
+			e.PutInt32(-1)
+		} else {
+			e.PutInt32(int32(in))
+		}
+	}
 	return nil
 }
 
@@ -209,16 +297,24 @@ func (e *ByteEncoder) PutRawBytes(in []byte) error {
 }
 
 func (e *ByteEncoder) PutBytes(in []byte) error {
+	var err error
 	if in == nil {
-		e.PutInt32(-1)
-		return nil
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
 	}
-	e.PutInt32(int32(len(in)))
+	if err != nil {
+		return err
+	}
 	return e.PutRawBytes(in)
 }
 
 func (e *ByteEncoder) PutString(in string) error {
-	e.PutInt16(int16(len(in)))
+	if e.flexVer {
+		e.PutUvarint(uint64(len(in)) + 1)
+	} else {
+		e.PutInt16(int16(len(in)))
+	}
 	copy(e.b[e.off:], in)
 	e.off += len(in)
 	return nil
@@ -226,14 +322,23 @@ func (e *ByteEncoder) PutString(in string) error {
 
 func (e *ByteEncoder) PutNullableString(in *string) error {
 	if in == nil {
-		e.PutInt16(-1)
+		if e.flexVer {
+			e.PutUvarint(0)
+		} else {
+			e.PutInt16(-1)
+		}
 		return nil
 	}
 	return e.PutString(*in)
 }
 
 func (e *ByteEncoder) PutStringArray(in []string) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
@@ -248,7 +353,12 @@ func (e *ByteEncoder) PutStringArray(in []string) error {
 }
 
 func (e *ByteEncoder) PutInt32Array(in []int32) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
@@ -259,10 +369,16 @@ func (e *ByteEncoder) PutInt32Array(in []int32) error {
 }
 
 func (e *ByteEncoder) PutInt64Array(in []int64) error {
-	err := e.PutArrayLength(len(in))
+	var err error
+	if in == nil {
+		err = e.PutArrayLength(-1)
+	} else {
+		err = e.PutArrayLength(len(in))
+	}
 	if err != nil {
 		return err
 	}
+
 	for _, val := range in {
 		e.PutInt64(val)
 	}
