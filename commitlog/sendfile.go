@@ -4,7 +4,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"runtime"
 	"syscall"
 )
 
@@ -12,9 +11,6 @@ const maxSendfileSize int = 4 << 20
 
 func Sendfile(conn *net.TCPConn, file *os.File, offsetInt int64, size int, chunkSize int) (int, error) {
 	offset := &offsetInt
-	defer func() {
-		runtime.KeepAlive(offset)
-	}()
 	written := 0
 	var remain int = size
 	n := chunkSize

@@ -68,7 +68,7 @@ func sendRes(resp *protocol.Response,
 	b := make([]byte, maxSize)
 	e := protocol.NewByteEncoder(b)
 	// outer response
-	correlationIDSize := int32(4)
+	const correlationIDSize = 4
 	e.PutInt32(resp.Size + correlationIDSize)
 	e.PutInt32(resp.CorrelationID)
 	//fetch response
