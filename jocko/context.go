@@ -3,7 +3,7 @@ package jocko
 import (
 	"context"
 	"fmt"
-	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -12,7 +12,7 @@ import (
 
 type Context struct {
 	mu     sync.Mutex
-	conn   io.ReadWriter
+	Conn   *net.TCPConn
 	err    error
 	header *protocol.RequestHeader
 	parent context.Context

@@ -2,7 +2,9 @@ package structs
 
 import (
 	"bytes"
+	"sync"
 
+	"github.com/travisjeffery/jocko/protocol"
 	"github.com/ugorji/go/codec"
 )
 
@@ -155,9 +157,15 @@ type Partition struct {
 
 // Member
 type Member struct {
-	ID         string
-	Metadata   []byte
-	Assignment []byte
+	ID                 string
+	Metadata           []byte
+	Assignment         []byte
+	SupportedProtocols map[string][]byte //converted from JoinGroupRequest's GroupProtocols
+	JoinChan           chan protocol.JoinGroupResponse
+	SyncChan           chan bool
+	LastHeartbeat      int64
+	SessionTimeout     int32
+	RebalanceTimeout   int32
 }
 
 type GroupState int32
@@ -176,9 +184,33 @@ type Group struct {
 	Group        string
 	Coordinator  int32
 	LeaderID     string
-	Members      map[string]Member
+	Members      map[string]*Member
 	State        GroupState
 	GenerationID int32
 
 	RaftIndex
+	sync.Mutex
+}
+
+func NewGroup(groupId string, coordinatorId int32) *Group {
+	return &Group{
+		ID:          groupId,
+		Group:       groupId,
+		Coordinator: coordinatorId,
+		Members:     make(map[string]*Member),
+	}
+}
+func (g *Group) AllKnownMemberJoined() bool {
+	for _, member := range g.Members {
+		if member.JoinChan == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *Group) InLock(f func()) {
+	g.Lock()
+	defer g.Unlock()
+	f()
 }

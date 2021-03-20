@@ -57,6 +57,7 @@ func (r *CreateTopicRequests) Encode(e PacketEncoder) (err error) {
 }
 
 func (r *CreateTopicRequests) Decode(d PacketDecoder, version int16) error {
+	r.APIVersion = version
 	var err error
 	requestCount, err := d.ArrayLength()
 	if err != nil {

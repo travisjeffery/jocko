@@ -1,6 +1,9 @@
 package protocol
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 type AbortedTransaction struct {
 	ProducerID  int64
@@ -30,6 +33,9 @@ type FetchPartitionResponse struct {
 	LastStableOffset    int64
 	AbortedTransactions []*AbortedTransaction
 	RecordSet           []byte
+	FileHandle          *os.File
+	SendOffset          int64
+	SendSize            int
 }
 
 func (r *FetchPartitionResponse) Decode(d PacketDecoder, version int16) (err error) {
@@ -86,7 +92,7 @@ func (r *FetchPartitionResponse) Encode(e PacketEncoder, version int16) (err err
 		}
 	}
 
-	if err = e.PutBytes(r.RecordSet); err != nil {
+	if err = e.PutNotNullBytes(r.RecordSet); err != nil {
 		return err
 	}
 

@@ -20,7 +20,7 @@ type JoinGroupResponse struct {
 }
 
 func (r *JoinGroupResponse) Encode(e PacketEncoder) (err error) {
-	if r.APIVersion >= 1 {
+	if r.APIVersion >= 2 {
 		e.PutInt32(int32(r.ThrottleTime / time.Millisecond))
 	}
 	e.PutInt16(r.ErrorCode)
@@ -41,7 +41,7 @@ func (r *JoinGroupResponse) Encode(e PacketEncoder) (err error) {
 		if err = e.PutString(member.MemberID); err != nil {
 			return err
 		}
-		if err = e.PutBytes(member.MemberMetadata); err != nil {
+		if err = e.PutNotNullBytes(member.MemberMetadata); err != nil {
 			return err
 		}
 	}

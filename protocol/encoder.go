@@ -13,6 +13,7 @@ type PacketEncoder interface {
 	PutArrayLength(in int) error
 	PutRawBytes(in []byte) error
 	PutBytes(in []byte) error
+	PutNotNullBytes(in []byte) error
 	PutString(in string) error
 	PutNullableString(in *string) error
 	PutStringArray(in []string) error
@@ -90,6 +91,10 @@ func (e *LenEncoder) PutBytes(in []byte) error {
 		return nil
 	}
 	return e.PutRawBytes(in)
+}
+func (e *LenEncoder) PutNotNullBytes(in []byte) error {
+	//TODO is this correct?
+	return e.PutBytes(in)
 }
 
 func (e *LenEncoder) PutRawBytes(in []byte) error {
@@ -216,6 +221,14 @@ func (e *ByteEncoder) PutBytes(in []byte) error {
 	e.PutInt32(int32(len(in)))
 	return e.PutRawBytes(in)
 }
+func (e *ByteEncoder) PutNotNullBytes(in []byte) error {
+	if in == nil {
+		e.PutInt32(0)
+		return nil
+	}
+	e.PutInt32(int32(len(in)))
+	return e.PutRawBytes(in)
+}
 
 func (e *ByteEncoder) PutString(in string) error {
 	e.PutInt16(int16(len(in)))
@@ -280,4 +293,10 @@ func (e *ByteEncoder) Pop() {
 	pe := e.stack[len(e.stack)-1]
 	e.stack = e.stack[:len(e.stack)-1]
 	pe.Fill(e.off, e.b)
+}
+func (e *ByteEncoder) SetOffset(offset int) {
+	e.off = offset
+}
+func (e *ByteEncoder) GetOffset() int {
+	return e.off
 }

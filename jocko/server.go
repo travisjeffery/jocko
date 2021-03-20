@@ -34,7 +34,7 @@ func init() {
 
 // Broker is the interface that wraps the Broker's methods.
 type Handler interface {
-	Run(context.Context, <-chan *Context, chan<- *Context)
+	Run(context.Context, *Context) *Context
 	Leave() error
 	Shutdown() error
 }
@@ -49,8 +49,6 @@ type Server struct {
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
 	metrics      *Metrics
-	requestCh    chan *Context
-	responseCh   chan *Context
 	tracer       opentracing.Tracer
 	close        func() error
 }
@@ -61,8 +59,6 @@ func NewServer(config *config.Config, handler Handler, metrics *Metrics, tracer 
 		handler:    handler,
 		metrics:    metrics,
 		shutdownCh: make(chan struct{}),
-		requestCh:  make(chan *Context, 1024),
-		responseCh: make(chan *Context, 1024),
 		tracer:     tracer,
 		close:      close,
 	}
@@ -97,28 +93,6 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 	}()
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			case <-s.shutdownCh:
-				break
-			case respCtx := <-s.responseCh:
-				if queueSpan, ok := respCtx.Value(responseQueueSpanKey).(opentracing.Span); ok {
-					queueSpan.Finish()
-				}
-				if err := s.handleResponse(respCtx); err != nil {
-					log.Error.Printf("server/%d: handle response error: %s", s.config.ID, err)
-				}
-			}
-		}
-	}()
-
-	log.Debug.Printf("server/%d: run handler", s.config.ID)
-	go s.handler.Run(ctx, s.requestCh, s.responseCh)
-
 	return nil
 }
 
@@ -257,17 +231,25 @@ func (s *Server) handleRequest(conn net.Conn) {
 		ctx := opentracing.ContextWithSpan(context.Background(), span)
 		queueSpan := s.tracer.StartSpan("server: queue request", opentracing.ChildOf(span.Context()))
 		ctx = context.WithValue(ctx, requestQueueSpanKey, queueSpan)
-
 		reqCtx := &Context{
 			parent: ctx,
 			header: header,
 			req:    req,
-			conn:   conn,
+			Conn:   conn.(*net.TCPConn),
 		}
 
-		log.Debug.Printf("server/%d: handle request: %s", s.config.ID, reqCtx)
+		log.Info.Printf("server/%d: handle request: %s", s.config.ID, reqCtx)
 
-		s.requestCh <- reqCtx
+		respCtx := s.handler.Run(ctx, reqCtx)
+		if header.APIKey == protocol.FetchKey && s.config.UseSendfile {
+			continue
+		}
+		if queueSpan, ok := respCtx.Value(responseQueueSpanKey).(opentracing.Span); ok {
+			queueSpan.Finish()
+		}
+		if err := s.handleResponse(respCtx); err != nil {
+			log.Error.Printf("server/%d: handle response error: %s", s.config.ID, err)
+		}
 	}
 }
 
@@ -275,7 +257,7 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	psp := opentracing.SpanFromContext(respCtx)
 	sp := s.tracer.StartSpan("server: handle response", opentracing.ChildOf(psp.Context()))
 
-	log.Debug.Printf("server/%d: handle response: %s", s.config.ID, respCtx)
+	log.Info.Printf("server/%d: handle response: %s", s.config.ID, respCtx)
 
 	defer psp.Finish()
 	defer sp.Finish()
@@ -284,7 +266,7 @@ func (s *Server) handleResponse(respCtx *Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = respCtx.conn.Write(b)
+	_, err = respCtx.Conn.Write(b)
 	return err
 }
 

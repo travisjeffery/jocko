@@ -31,6 +31,7 @@ type Config struct {
 	LeaveDrainTime                time.Duration
 	ReconcileInterval             time.Duration
 	OffsetsTopicReplicationFactor int16
+	UseSendfile                   bool
 }
 
 // DefaultConfig creates/returns a default configuration.
@@ -48,6 +49,7 @@ func DefaultConfig() *Config {
 		LeaveDrainTime:                5 * time.Second,
 		ReconcileInterval:             60 * time.Second,
 		OffsetsTopicReplicationFactor: 3,
+		UseSendfile:                   true,
 	}
 
 	conf.SerfLANConfig.ReconnectTimeout = 3 * 24 * time.Hour

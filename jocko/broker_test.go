@@ -302,6 +302,129 @@ func TestBroker_Run(t *testing.T) {
 			},
 		},
 		{
+			name: "create two topics then produce one msg for each then fetch from one",
+			args: args{
+				requestCh:  make(chan *Context, 2),
+				responseCh: make(chan *Context, 2),
+				requests: []*Context{
+					{
+						header: &protocol.RequestHeader{CorrelationID: 1},
+						req: &protocol.CreateTopicRequests{
+							Timeout: 100 * time.Millisecond,
+							Requests: []*protocol.CreateTopicRequest{{
+								Topic:             "test-topic1",
+								NumPartitions:     1,
+								ReplicationFactor: 1,
+							}}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 2},
+						req: &protocol.CreateTopicRequests{
+							Timeout: 100 * time.Millisecond,
+							Requests: []*protocol.CreateTopicRequest{{
+								Topic:             "test-topic2",
+								NumPartitions:     1,
+								ReplicationFactor: 1,
+							}}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 3},
+						req: &protocol.ProduceRequest{
+							Timeout: 100 * time.Millisecond,
+							TopicData: []*protocol.TopicData{{
+								Topic: "test-topic1",
+								Data: []*protocol.Data{{
+									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message1.")}}})}}},
+							}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 4},
+						req: &protocol.ProduceRequest{
+							Timeout: 100 * time.Millisecond,
+							TopicData: []*protocol.TopicData{{
+								Topic: "test-topic2",
+								Data: []*protocol.Data{{
+									RecordSet: mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message2.")}}})}}},
+							}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 5},
+						req: &protocol.FetchRequest{
+							MaxWaitTime: 100 * time.Millisecond,
+							ReplicaID:   1,
+							MinBytes:    5,
+							Topics: []*protocol.FetchTopic{
+								{
+									Topic: "test-topic1",
+									Partitions: []*protocol.FetchPartition{{Partition: 0,
+										FetchOffset: 0,
+										MaxBytes:    100,
+									}},
+								},
+							}},
+					},
+				},
+				responses: []*Context{
+					{
+						header: &protocol.RequestHeader{CorrelationID: 1},
+						res: &protocol.Response{CorrelationID: 1, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic1", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 2},
+						res: &protocol.Response{CorrelationID: 2, Body: &protocol.CreateTopicsResponse{
+							TopicErrorCodes: []*protocol.TopicErrorCode{{Topic: "test-topic2", ErrorCode: protocol.ErrNone.Code()}},
+						}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 3},
+						res: &protocol.Response{CorrelationID: 3, Body: &protocol.ProduceResponse{
+							Responses: []*protocol.ProduceTopicResponse{
+								{
+									Topic:              "test-topic1",
+									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+								},
+							},
+						}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 4},
+						res: &protocol.Response{CorrelationID: 4, Body: &protocol.ProduceResponse{
+							Responses: []*protocol.ProduceTopicResponse{
+								{
+									Topic:              "test-topic2",
+									PartitionResponses: []*protocol.ProducePartitionResponse{{Partition: 0, BaseOffset: 0, ErrorCode: protocol.ErrNone.Code()}},
+								},
+							},
+						}},
+					},
+					{
+						header: &protocol.RequestHeader{CorrelationID: 5},
+						res: &protocol.Response{CorrelationID: 5, Body: &protocol.FetchResponse{
+							Responses: protocol.FetchTopicResponses{{
+								Topic: "test-topic1",
+								PartitionResponses: []*protocol.FetchPartitionResponse{{
+									Partition:     0,
+									ErrorCode:     protocol.ErrNone.Code(),
+									HighWatermark: 0,
+									RecordSet:     mustEncode(&protocol.MessageSet{Offset: 0, Messages: []*protocol.Message{{Value: []byte("The message1.")}}}),
+								}},
+							}}},
+						},
+					},
+				},
+			},
+			handle: func(t *testing.T, _ *Broker, ctx *Context) {
+				switch res := ctx.res.(*protocol.Response).Body.(type) {
+				// handle timestamp explicitly since we don't know what
+				// it'll be set to
+				case *protocol.ProduceResponse:
+					handleProduceResponse(t, res)
+				}
+			},
+		},
+		{
 			name: "metadata",
 			args: args{
 				requestCh:  make(chan *Context, 2),
@@ -489,17 +612,12 @@ func TestBroker_Run(t *testing.T) {
 				}
 			}
 
-			go b.Run(ctx, tt.args.requestCh, tt.args.responseCh)
-
 			for i := 0; i < len(tt.args.requests); i++ {
 				request := tt.args.requests[i]
 				reqSpan := b.tracer.StartSpan("request", opentracing.ChildOf(span.Context()))
 
 				ctx := &Context{header: request.header, req: request.req, parent: opentracing.ContextWithSpan(runCtx, reqSpan)}
-
-				tt.args.requestCh <- ctx
-
-				ctx = <-tt.args.responseCh
+				ctx = b.Run(ctx, ctx)
 
 				if tt.handle != nil {
 					tt.handle(t, b, ctx)
@@ -545,11 +663,8 @@ func setupTest(t *testing.T) (
 			r.Fatal("server not added")
 		}
 	})
-
-	reqCh = make(chan *Context, 2)
-	resCh = make(chan *Context, 2)
-
-	go b.Run(ctx, reqCh, resCh)
+	//todo
+	//go b.Run(ctx, reqCh, resCh)
 
 	teardown = func() {
 		close(reqCh)
