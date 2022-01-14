@@ -4,25 +4,24 @@ import (
 	"fmt"
 	"io/ioutil"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/testutil/retry"
-	"github.com/hashicorp/raft"
-	"github.com/mitchellh/go-testing-interface"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
 
-	"github.com/uber/jaeger-lib/metrics"
-
+	"github.com/hashicorp/consul/testutil/retry"
+	"github.com/hashicorp/raft"
 	"github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"github.com/uber/jaeger-lib/metrics"
 )
 
 var (
 	nodeNumber int32
 )
 
-func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func(cfg *config.Config)) (*Server, string) {
+func NewTestServer(t testing.TB, cbBroker func(cfg *config.Config), cbServer func(cfg *config.Config)) (*Server, string) {
 	ports := dynaport.Get(4)
 	nodeID := atomic.AddInt32(&nodeNumber, 1)
 
@@ -93,7 +92,7 @@ func NewTestServer(t testing.T, cbBroker func(cfg *config.Config), cbServer func
 	return NewServer(config, b, nil, tracer, closer.Close), tmpDir
 }
 
-func TestJoin(t testing.T, s1 *Server, other ...*Server) {
+func TestJoin(t testing.TB, s1 *Server, other ...*Server) {
 	addr := fmt.Sprintf("127.0.0.1:%d",
 		s1.config.SerfLANConfig.MemberlistConfig.BindPort)
 	for _, s2 := range other {
@@ -106,7 +105,7 @@ func TestJoin(t testing.T, s1 *Server, other ...*Server) {
 }
 
 // WaitForLeader waits for one of the servers to be leader, failing the test if no one is the leader. Returns the leader (if there is one) and non-leaders.
-func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
+func WaitForLeader(t testing.TB, servers ...*Server) (*Server, []*Server) {
 	tmp := struct {
 		leader    *Server
 		followers map[*Server]bool
