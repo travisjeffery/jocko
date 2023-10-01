@@ -10,7 +10,7 @@ import (
 	"github.com/travisjeffery/jocko/protocol"
 )
 
-// Conn implemenets net.Conn for connections to Jocko brokers. It's used as an internal client for replication fetches and leader and ISR requests.
+// Conn implements net.Conn for connections to Jocko brokers. It's used as an internal client for replication fetches and leader and ISR requests.
 type Conn struct {
 	conn          net.Conn
 	rlock         sync.Mutex
