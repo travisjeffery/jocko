@@ -1,4 +1,4 @@
-FROM golang:1.9-alpine as build-base
+FROM golang:1.21-alpine as build-base
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh make && \
     go get -u github.com/golang/dep/cmd/dep
