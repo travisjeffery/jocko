@@ -109,6 +109,101 @@ func TestKafkaClientProduceConsume(t *testing.T) {
 	}
 }
 
+func TestKafkaConsumerGroupProduceConsume(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, dir := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+		cfg.OffsetsTopicReplicationFactor = 1
+	}, nil)
+	defer os.RemoveAll(dir)
+
+	err := srv.Start(ctx)
+	require.NoError(t, err)
+	defer srv.Shutdown()
+
+	jocko.WaitForLeader(t, srv)
+
+	err = createTopic(t, srv)
+	require.NoError(t, err)
+
+	config := cluster.NewConfig()
+	config.ClientID = "kafka-consumer-group-e2e-test"
+	config.Version = sarama.V0_10_0_0
+	config.ChannelBufferSize = 1
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 10
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Return.Errors = true
+
+	brokers := []string{srv.Addr().String()}
+	producer, err := sarama.NewSyncProducer(brokers, &config.Config)
+	require.NoError(t, err)
+	defer producer.Close()
+
+	firstValue := []byte("first consumer group message")
+	firstPartition, firstOffset, err := producer.SendMessage(&sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.ByteEncoder(firstValue),
+	})
+	require.NoError(t, err)
+
+	groupID := "consumer-group-e2e"
+	consumer, err := cluster.NewConsumer(brokers, groupID, []string{topic}, config)
+	require.NoError(t, err)
+
+	firstMsg := waitForClusterMessage(t, consumer, 10*time.Second)
+	require.Equal(t, firstOffset, firstMsg.Offset)
+	require.Equal(t, firstPartition, firstMsg.Partition)
+	require.Equal(t, topic, firstMsg.Topic)
+	require.Equal(t, firstValue, firstMsg.Value)
+
+	consumer.MarkOffset(firstMsg, "first-done")
+	require.NoError(t, consumer.CommitOffsets())
+	require.NoError(t, consumer.Close())
+
+	secondValue := []byte("second consumer group message")
+	secondPartition, secondOffset, err := producer.SendMessage(&sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.ByteEncoder(secondValue),
+	})
+	require.NoError(t, err)
+	require.Equal(t, firstPartition, secondPartition)
+	require.Equal(t, firstOffset+1, secondOffset)
+
+	consumer, err = cluster.NewConsumer(brokers, groupID, []string{topic}, config)
+	require.NoError(t, err)
+	defer consumer.Close()
+
+	secondMsg := waitForClusterMessage(t, consumer, 10*time.Second)
+	require.Equal(t, secondOffset, secondMsg.Offset)
+	require.Equal(t, secondPartition, secondMsg.Partition)
+	require.Equal(t, topic, secondMsg.Topic)
+	require.Equal(t, secondValue, secondMsg.Value)
+}
+
+func waitForClusterMessage(t *testing.T, consumer *cluster.Consumer, timeout time.Duration) *sarama.ConsumerMessage {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case msg := <-consumer.Messages():
+			return msg
+		case err := <-consumer.Errors():
+			require.NoError(t, err)
+		case <-timer.C:
+			t.Fatal("timed out waiting for consumer group message")
+		}
+	}
+}
+
 func TestProduceConsume(t *testing.T) {
 	t.Skip()
 

@@ -57,21 +57,21 @@ func (r *OffsetCommitResponse) Decode(d PacketDecoder, version int16) (err error
 		return err
 	}
 	r.Responses = make([]OffsetCommitTopicResponse, topicCount)
-	for _, t := range r.Responses {
-		if t.Topic, err = d.String(); err != nil {
+	for i := range r.Responses {
+		if r.Responses[i].Topic, err = d.String(); err != nil {
 			return err
 		}
 		partitionCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		t.PartitionResponses = make([]OffsetCommitPartitionResponse, partitionCount)
-		for _, p := range t.PartitionResponses {
-			p.Partition, err = d.Int32()
+		r.Responses[i].PartitionResponses = make([]OffsetCommitPartitionResponse, partitionCount)
+		for j := range r.Responses[i].PartitionResponses {
+			r.Responses[i].PartitionResponses[j].Partition, err = d.Int32()
 			if err != nil {
 				return err
 			}
-			p.ErrorCode, err = d.Int16()
+			r.Responses[i].PartitionResponses[j].ErrorCode, err = d.Int16()
 			if err != nil {
 				return err
 			}

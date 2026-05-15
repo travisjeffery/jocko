@@ -26,17 +26,36 @@ func (r *OffsetCommitRequest) Encode(e PacketEncoder) (err error) {
 	if err = e.PutString(r.GroupID); err != nil {
 		return err
 	}
+	if r.APIVersion >= 1 {
+		e.PutInt32(r.GenerationID)
+		if err := e.PutString(r.MemberID); err != nil {
+			return err
+		}
+	}
+	if r.APIVersion >= 2 {
+		e.PutInt64(r.RetentionTime)
+	}
 	if err := e.PutArrayLength(len(r.Topics)); err != nil {
 		return err
 	}
 	for _, t := range r.Topics {
+		if err := e.PutString(t.Topic); err != nil {
+			return err
+		}
 		if err := e.PutArrayLength(len(t.Partitions)); err != nil {
 			return err
 		}
 		for _, p := range t.Partitions {
 			e.PutInt32(p.Partition)
 			e.PutInt64(p.Offset)
-			if err := e.PutNullableString(p.Metadata); err != nil {
+			if r.APIVersion == 1 {
+				e.PutInt64(p.Timestamp)
+			}
+			metadata := ""
+			if p.Metadata != nil {
+				metadata = *p.Metadata
+			}
+			if err := e.PutString(metadata); err != nil {
 				return err
 			}
 		}
@@ -68,27 +87,32 @@ func (r *OffsetCommitRequest) Decode(d PacketDecoder, version int16) (err error)
 		return err
 	}
 	r.Topics = make([]OffsetCommitTopicRequest, topicCount)
-	for _, t := range r.Topics {
+	for i := range r.Topics {
+		if r.Topics[i].Topic, err = d.String(); err != nil {
+			return err
+		}
 		partitionCount, err := d.ArrayLength()
 		if err != nil {
 			return err
 		}
-		t.Partitions = make([]OffsetCommitPartitionRequest, partitionCount)
-		for _, p := range t.Partitions {
-			if p.Partition, err = d.Int32(); err != nil {
+		r.Topics[i].Partitions = make([]OffsetCommitPartitionRequest, partitionCount)
+		for j := range r.Topics[i].Partitions {
+			if r.Topics[i].Partitions[j].Partition, err = d.Int32(); err != nil {
 				return err
 			}
-			if p.Offset, err = d.Int64(); err != nil {
+			if r.Topics[i].Partitions[j].Offset, err = d.Int64(); err != nil {
 				return err
 			}
-			if version >= 1 {
-				if p.Timestamp, err = d.Int64(); err != nil {
+			if version == 1 {
+				if r.Topics[i].Partitions[j].Timestamp, err = d.Int64(); err != nil {
 					return err
 				}
 			}
-			if p.Metadata, err = d.NullableString(); err != nil {
+			metadata, err := d.String()
+			if err != nil {
 				return err
 			}
+			r.Topics[i].Partitions[j].Metadata = &metadata
 		}
 	}
 	return nil
