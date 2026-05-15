@@ -155,9 +155,10 @@ type Partition struct {
 
 // Member
 type Member struct {
-	ID         string
-	Metadata   []byte
-	Assignment []byte
+	ID               string
+	Metadata         []byte
+	Assignment       []byte
+	JoinedGeneration int32
 }
 
 type Offset struct {

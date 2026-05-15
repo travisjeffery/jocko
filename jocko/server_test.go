@@ -186,6 +186,235 @@ func TestKafkaConsumerGroupProduceConsume(t *testing.T) {
 	require.Equal(t, secondValue, secondMsg.Value)
 }
 
+func TestKafkaConsumerGroupMultiMemberRebalance(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, dir := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+		cfg.OffsetsTopicReplicationFactor = 1
+	}, nil)
+	defer os.RemoveAll(dir)
+
+	err := srv.Start(ctx)
+	require.NoError(t, err)
+	defer srv.Shutdown()
+
+	jocko.WaitForLeader(t, srv)
+
+	err = createTopicWithPartitions(t, srv, 4)
+	require.NoError(t, err)
+
+	brokers := []string{srv.Addr().String()}
+	producerConfig := sarama.NewConfig()
+	producerConfig.ClientID = "kafka-consumer-group-rebalance-producer"
+	producerConfig.Version = sarama.V0_10_0_0
+	producerConfig.Producer.Return.Successes = true
+	producerConfig.Producer.RequiredAcks = sarama.WaitForAll
+	producerConfig.Producer.Partitioner = sarama.NewManualPartitioner
+
+	producer, err := sarama.NewSyncProducer(brokers, producerConfig)
+	require.NoError(t, err)
+	defer producer.Close()
+
+	groupID := "consumer-group-rebalance-e2e"
+	consumerA, err := cluster.NewConsumer(brokers, groupID, []string{topic}, consumerGroupConfig("consumer-group-member-a"))
+	require.NoError(t, err)
+	defer consumerA.Close()
+
+	waitForConsumerPartitions(t, consumerA, 4, 10*time.Second)
+
+	consumerB, err := cluster.NewConsumer(brokers, groupID, []string{topic}, consumerGroupConfig("consumer-group-member-b"))
+	require.NoError(t, err)
+	defer consumerB.Close()
+
+	assignA, assignB := waitForBalancedConsumers(t, consumerA, consumerB, 4, 10*time.Second)
+
+	firstBatch := producePartitionMessages(t, producer, "first-rebalance", 4)
+	firstMessages := collectConsumerMessages(t, map[string]*cluster.Consumer{
+		"a": consumerA,
+		"b": consumerB,
+	}, firstBatch, 10*time.Second)
+	assertMessagesMatchAssignments(t, firstMessages, map[string]map[int32]bool{
+		"a": assignA,
+		"b": assignB,
+	})
+	commitCollectedMessages(t, firstMessages, map[string]*cluster.Consumer{
+		"a": consumerA,
+		"b": consumerB,
+	})
+
+	require.NoError(t, consumerB.Close())
+	waitForConsumerPartitions(t, consumerA, 4, 10*time.Second)
+
+	secondBatch := producePartitionMessages(t, producer, "after-leave", 4)
+	secondMessages := collectConsumerMessages(t, map[string]*cluster.Consumer{
+		"a": consumerA,
+	}, secondBatch, 10*time.Second)
+	require.Len(t, secondMessages, 4)
+	for _, msg := range secondMessages {
+		require.Equal(t, "a", msg.consumer)
+	}
+}
+
+func consumerGroupConfig(clientID string) *cluster.Config {
+	config := cluster.NewConfig()
+	config.ClientID = clientID
+	config.Version = sarama.V0_10_0_0
+	config.ChannelBufferSize = 1
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Return.Errors = true
+	return config
+}
+
+func waitForConsumerPartitions(t *testing.T, consumer *cluster.Consumer, want int, timeout time.Duration) map[int32]bool {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		partitions := partitionSet(consumer.Subscriptions())
+		if len(partitions) == want {
+			return partitions
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d partitions, got %v", want, consumer.Subscriptions())
+	return nil
+}
+
+func waitForBalancedConsumers(t *testing.T, consumerA, consumerB *cluster.Consumer, partitionCount int, timeout time.Duration) (map[int32]bool, map[int32]bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		assignA := partitionSet(consumerA.Subscriptions())
+		assignB := partitionSet(consumerB.Subscriptions())
+		if len(assignA) > 0 && len(assignB) > 0 && disjoint(assignA, assignB) && len(assignA)+len(assignB) == partitionCount {
+			return assignA, assignB
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for balanced consumers: a=%v b=%v", consumerA.Subscriptions(), consumerB.Subscriptions())
+	return nil, nil
+}
+
+func partitionSet(subscriptions map[string][]int32) map[int32]bool {
+	partitions := make(map[int32]bool)
+	for _, topicPartitions := range subscriptions {
+		for _, partition := range topicPartitions {
+			partitions[partition] = true
+		}
+	}
+	return partitions
+}
+
+func disjoint(a, b map[int32]bool) bool {
+	for partition := range a {
+		if b[partition] {
+			return false
+		}
+	}
+	return true
+}
+
+func producePartitionMessages(t *testing.T, producer sarama.SyncProducer, prefix string, partitionCount int32) map[int32][]byte {
+	t.Helper()
+
+	messages := make(map[int32][]byte, partitionCount)
+	for partition := int32(0); partition < partitionCount; partition++ {
+		value := []byte(fmt.Sprintf("%s-partition-%d", prefix, partition))
+		producedPartition, _, err := producer.SendMessage(&sarama.ProducerMessage{
+			Topic:     topic,
+			Partition: partition,
+			Value:     sarama.ByteEncoder(value),
+		})
+		require.NoError(t, err)
+		require.Equal(t, partition, producedPartition)
+		messages[partition] = value
+	}
+	return messages
+}
+
+type collectedConsumerMessage struct {
+	consumer string
+	message  *sarama.ConsumerMessage
+}
+
+func collectConsumerMessages(t *testing.T, consumers map[string]*cluster.Consumer, expected map[int32][]byte, timeout time.Duration) map[int32]collectedConsumerMessage {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	messages := make(map[int32]collectedConsumerMessage, len(expected))
+	for len(messages) < len(expected) {
+		select {
+		case msg := <-consumers["a"].Messages():
+			collectExpectedMessage(t, messages, "a", msg, expected)
+		case err := <-consumers["a"].Errors():
+			require.NoError(t, err)
+		case msg := <-messageChannel(consumers["b"]):
+			collectExpectedMessage(t, messages, "b", msg, expected)
+		case err := <-errorChannel(consumers["b"]):
+			require.NoError(t, err)
+		case <-timer.C:
+			t.Fatalf("timed out waiting for messages: got %d, want %d", len(messages), len(expected))
+		}
+	}
+	return messages
+}
+
+func collectExpectedMessage(t *testing.T, messages map[int32]collectedConsumerMessage, consumer string, msg *sarama.ConsumerMessage, expected map[int32][]byte) {
+	t.Helper()
+
+	value, ok := expected[msg.Partition]
+	if !ok {
+		return
+	}
+	if _, seen := messages[msg.Partition]; seen {
+		return
+	}
+	require.Equal(t, topic, msg.Topic)
+	require.Equal(t, value, msg.Value)
+	messages[msg.Partition] = collectedConsumerMessage{consumer: consumer, message: msg}
+}
+
+func messageChannel(consumer *cluster.Consumer) <-chan *sarama.ConsumerMessage {
+	if consumer == nil {
+		return nil
+	}
+	return consumer.Messages()
+}
+
+func errorChannel(consumer *cluster.Consumer) <-chan error {
+	if consumer == nil {
+		return nil
+	}
+	return consumer.Errors()
+}
+
+func assertMessagesMatchAssignments(t *testing.T, messages map[int32]collectedConsumerMessage, assignments map[string]map[int32]bool) {
+	t.Helper()
+
+	require.Len(t, messages, 4)
+	for partition, msg := range messages {
+		require.True(t, assignments[msg.consumer][partition], "consumer %s received unassigned partition %d", msg.consumer, partition)
+	}
+}
+
+func commitCollectedMessages(t *testing.T, messages map[int32]collectedConsumerMessage, consumers map[string]*cluster.Consumer) {
+	t.Helper()
+
+	for _, msg := range messages {
+		consumers[msg.consumer].MarkOffset(msg.message, "")
+	}
+	for _, consumer := range consumers {
+		require.NoError(t, consumer.CommitOffsets())
+	}
+}
+
 func waitForClusterMessage(t *testing.T, consumer *cluster.Consumer, timeout time.Duration) *sarama.ConsumerMessage {
 	t.Helper()
 
@@ -560,6 +789,10 @@ func BenchmarkServer(b *testing.B) {
 }
 
 func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
+	return createTopicWithPartitions(t, s1, 1, other...)
+}
+
+func createTopicWithPartitions(t ti.T, s1 *jocko.Server, partitions int32, other ...*jocko.Server) error {
 	d := &jocko.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
@@ -573,15 +806,17 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 	for _, o := range other {
 		assignment = append(assignment, o.ID())
 	}
+	replicaAssignment := make(map[int32][]int32, partitions)
+	for partition := int32(0); partition < partitions; partition++ {
+		replicaAssignment[partition] = assignment
+	}
 	res, err := conn.CreateTopics(&protocol.CreateTopicRequests{
 		Timeout: 15 * time.Second,
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
-			NumPartitions:     int32(1),
+			NumPartitions:     partitions,
 			ReplicationFactor: int16(len(assignment)),
-			ReplicaAssignment: map[int32][]int32{
-				0: assignment,
-			},
+			ReplicaAssignment: replicaAssignment,
 			Configs: map[string]*string{
 				"config_key": strPointer("config_val"),
 			},
