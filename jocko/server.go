@@ -243,6 +243,36 @@ func (s *Server) handleRequest(conn net.Conn) {
 			req = &protocol.CreateTopicRequests{}
 		case protocol.DeleteTopicsKey:
 			req = &protocol.DeleteTopicsRequest{}
+		default:
+			log.Error.Printf("server/%d: unsupported api key: %d", s.config.ID, header.APIKey)
+			span.LogKV("msg", "unsupported api key", "api_key", header.APIKey)
+			span.Finish()
+			return
+		}
+
+		apiVersion, advertised := protocol.APIVersionForKey(header.APIKey, protocol.APIVersions)
+		if advertised && (header.APIVersion < apiVersion.MinVersion || header.APIVersion > apiVersion.MaxVersion) {
+			if header.APIKey == protocol.APIVersionsKey {
+				resp := &protocol.Response{
+					CorrelationID: header.CorrelationID,
+					Body: &protocol.APIVersionsResponse{
+						APIVersion:  0,
+						ErrorCode:   protocol.ErrUnsupportedVersion.Code(),
+						APIVersions: protocol.APIVersions,
+					},
+				}
+				b, err := protocol.Encode(resp)
+				if err != nil {
+					log.Error.Printf("server/%d: encode unsupported api versions response failed: %s", s.config.ID, err)
+				} else if _, err := conn.Write(b); err != nil {
+					log.Error.Printf("server/%d: write unsupported api versions response failed: %s", s.config.ID, err)
+				}
+			} else {
+				log.Error.Printf("server/%d: unsupported api version: api key %d version %d", s.config.ID, header.APIKey, header.APIVersion)
+			}
+			span.LogKV("msg", "unsupported api version", "api_key", header.APIKey, "api_version", header.APIVersion)
+			span.Finish()
+			return
 		}
 
 		if err := req.Decode(d, header.APIVersion); err != nil {

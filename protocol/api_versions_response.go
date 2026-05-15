@@ -35,6 +35,12 @@ func (c *APIVersionsResponse) Encode(e PacketEncoder) error {
 
 func (c *APIVersionsResponse) Decode(d PacketDecoder, version int16) error {
 	c.APIVersion = version
+	errorCode, err := d.Int16()
+	if err != nil {
+		return err
+	}
+	c.ErrorCode = errorCode
+
 	l, err := d.ArrayLength()
 	if err != nil {
 		return err

@@ -233,12 +233,19 @@ func span(ctx context.Context, tracer opentracing.Tracer, op string) opentracing
 	return tracer.StartSpan("broker: "+op, opentracing.ChildOf(parentSpan.Context()))
 }
 
-var apiVersions = &protocol.APIVersionsResponse{APIVersions: protocol.APIVersions}
+var apiVersions = &protocol.APIVersionsResponse{
+	ErrorCode:   protocol.ErrNone.Code(),
+	APIVersions: protocol.APIVersions,
+}
 
 func (b *Broker) handleAPIVersions(ctx *Context, req *protocol.APIVersionsRequest) *protocol.APIVersionsResponse {
 	sp := span(ctx, b.tracer, "api versions")
 	defer sp.Finish()
-	return apiVersions
+	return &protocol.APIVersionsResponse{
+		APIVersion:  req.Version(),
+		ErrorCode:   protocol.ErrNone.Code(),
+		APIVersions: protocol.APIVersions,
+	}
 }
 
 func (b *Broker) handleCreateTopic(ctx *Context, reqs *protocol.CreateTopicRequests) *protocol.CreateTopicsResponse {
