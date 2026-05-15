@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -638,30 +639,42 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 			GenerationID: 1,
 		}
 	}
-	if group.Members == nil {
-		group.Members = make(map[string]structs.Member)
-	}
-	if group.Offsets == nil {
-		group.Offsets = make(map[string]map[int32]structs.Offset)
-	}
+	normalizeGroup(group)
+
 	if r.MemberID == "" {
-		// for group member IDs -- can replace with something else
-		r.MemberID = ctx.Header().ClientID + "-" + uuid.NewV1().String()
+		r.MemberID = stableMemberID(ctx)
 	}
-	group.Members[r.MemberID] = structs.Member{
-		ID:       r.MemberID,
-		Metadata: selectedGroupProtocolMetadata(r.GroupProtocols),
+	_, knownMember := group.Members[r.MemberID]
+	if !knownMember && len(group.Members) > 0 {
+		startGroupRebalance(group)
 	}
+	member := group.Members[r.MemberID]
+	member.ID = r.MemberID
+	member.Metadata = selectedGroupProtocolMetadata(r.GroupProtocols)
+	member.JoinedGeneration = group.GenerationID
+	group.Members[r.MemberID] = member
 	if group.LeaderID == "" {
-		group.LeaderID = r.MemberID
+		group.LeaderID = firstGroupMemberID(group)
 	}
-	group.State = structs.GroupStateCompletingRebalance
+	if allMembersJoined(group) {
+		group.State = structs.GroupStateCompletingRebalance
+	} else {
+		group.State = structs.GroupStatePreparingRebalance
+	}
 	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
 		Group: *group,
 	})
 	if err != nil {
 		log.Error.Printf("broker/%d: register group error: %s", b.config.ID, err)
 		res.ErrorCode = protocol.ErrUnknown.Code()
+		return res
+	}
+	if group.State == structs.GroupStatePreparingRebalance {
+		res.ErrorCode = protocol.ErrRebalanceInProgress.Code()
+		res.GenerationID = group.GenerationID
+		res.GroupProtocol = selectedGroupProtocolName(r.GroupProtocols)
+		res.LeaderID = group.LeaderID
+		res.MemberID = r.MemberID
 		return res
 	}
 
@@ -679,6 +692,68 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 	}
 
 	return res
+}
+
+func stableMemberID(ctx *Context) string {
+	if ctx != nil && ctx.Header() != nil && ctx.Header().ClientID != "" {
+		return ctx.Header().ClientID
+	}
+	return uuid.NewV1().String()
+}
+
+func normalizeGroup(group *structs.Group) {
+	if group.Members == nil {
+		group.Members = make(map[string]structs.Member)
+	}
+	if group.Offsets == nil {
+		group.Offsets = make(map[string]map[int32]structs.Offset)
+	}
+	if group.GenerationID == 0 {
+		group.GenerationID = 1
+	}
+	if len(group.Members) == 0 {
+		group.State = structs.GroupStateEmpty
+		group.LeaderID = ""
+		return
+	}
+	if group.LeaderID == "" {
+		group.LeaderID = firstGroupMemberID(group)
+	}
+}
+
+func firstGroupMemberID(group *structs.Group) string {
+	memberIDs := make([]string, 0, len(group.Members))
+	for memberID := range group.Members {
+		memberIDs = append(memberIDs, memberID)
+	}
+	sort.Strings(memberIDs)
+	if len(memberIDs) == 0 {
+		return ""
+	}
+	return memberIDs[0]
+}
+
+func startGroupRebalance(group *structs.Group) {
+	group.GenerationID++
+	group.State = structs.GroupStatePreparingRebalance
+	group.LeaderID = firstGroupMemberID(group)
+	for memberID, member := range group.Members {
+		member.Assignment = nil
+		member.JoinedGeneration = 0
+		group.Members[memberID] = member
+	}
+}
+
+func allMembersJoined(group *structs.Group) bool {
+	if len(group.Members) == 0 {
+		return false
+	}
+	for _, member := range group.Members {
+		if member.JoinedGeneration != group.GenerationID {
+			return false
+		}
+	}
+	return true
 }
 
 func selectedGroupProtocolName(protocols []*protocol.GroupProtocol) string {
@@ -714,6 +789,7 @@ func (b *Broker) handleLeaveGroup(ctx *Context, r *protocol.LeaveGroupRequest) *
 		res.ErrorCode = protocol.ErrInvalidGroupId.Code()
 		return res
 	}
+	normalizeGroup(group)
 	if _, ok := group.Members[r.MemberID]; !ok {
 		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
 		return res
@@ -730,7 +806,7 @@ func (b *Broker) handleLeaveGroup(ctx *Context, r *protocol.LeaveGroupRequest) *
 	if len(group.Members) == 0 {
 		group.State = structs.GroupStateEmpty
 	} else {
-		group.State = structs.GroupStatePreparingRebalance
+		startGroupRebalance(group)
 	}
 
 	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
@@ -761,6 +837,7 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 		res.ErrorCode = protocol.ErrInvalidGroupId.Code()
 		return res
 	}
+	normalizeGroup(group)
 	if _, ok := group.Members[r.MemberID]; !ok {
 		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
 		return res
@@ -780,6 +857,10 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 
 	if group.LeaderID == r.MemberID {
 		// take the assignments from the leader and save them
+		for memberID, member := range group.Members {
+			member.Assignment = nil
+			group.Members[memberID] = member
+		}
 		for _, ga := range r.GroupAssignments {
 			if m, ok := group.Members[ga.MemberID]; ok {
 				m.Assignment = ga.MemberAssignment
@@ -799,6 +880,10 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 		}
 	}
 	if m, ok := group.Members[r.MemberID]; ok {
+		if group.State == structs.GroupStateCompletingRebalance && group.LeaderID != r.MemberID && len(m.Assignment) == 0 {
+			res.ErrorCode = protocol.ErrRebalanceInProgress.Code()
+			return res
+		}
 		res.MemberAssignment = m.Assignment
 	} else {
 		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
@@ -824,8 +909,13 @@ func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *pr
 		res.ErrorCode = protocol.ErrInvalidGroupId.Code()
 		return res
 	}
+	normalizeGroup(group)
 	if _, ok := group.Members[r.MemberID]; !ok {
 		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return res
+	}
+	if group.State != structs.GroupStateStable {
+		res.ErrorCode = protocol.ErrRebalanceInProgress.Code()
 		return res
 	}
 	if r.GroupGenerationID != group.GenerationID {
@@ -864,6 +954,12 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 				if replica.Log == nil {
 					return protocol.ErrReplicaNotAvailable
 				}
+				newestOffset := replica.Log.NewestOffset()
+				if p.FetchOffset >= newestOffset {
+					fpres.HighWatermark = newestOffset
+					fpres.RecordSet = []byte{}
+					return protocol.ErrNone
+				}
 				rdr, rdrErr := replica.Log.NewReader(p.FetchOffset, p.MaxBytes)
 				if rdrErr != nil {
 					log.Error.Printf("broker/%d: replica log read error: %s", b.config.ID, rdrErr)
@@ -884,7 +980,7 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 						break
 					}
 				}
-				fpres.HighWatermark = replica.Log.NewestOffset() - 1
+				fpres.HighWatermark = newestOffset - 1
 				fpres.RecordSet = buf.Bytes()
 				return protocol.ErrNone
 			})
@@ -1513,7 +1609,6 @@ func (b *Broker) withTimeout(timeout time.Duration, fn func() protocol.Error) pr
 	}
 
 	c := make(chan protocol.Error, 1)
-	defer close(c)
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
