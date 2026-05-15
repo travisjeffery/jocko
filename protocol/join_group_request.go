@@ -30,6 +30,9 @@ func (r *JoinGroupRequest) Encode(e PacketEncoder) (err error) {
 	if err = e.PutString(r.ProtocolType); err != nil {
 		return err
 	}
+	if err = e.PutArrayLength(len(r.GroupProtocols)); err != nil {
+		return err
+	}
 	for _, groupProtocol := range r.GroupProtocols {
 		if err = e.PutString(groupProtocol.ProtocolName); err != nil {
 			return err

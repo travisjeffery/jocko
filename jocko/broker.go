@@ -631,19 +631,31 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 	if group == nil {
 		// group doesn't exist so let's create it
 		group = &structs.Group{
-			Group:       r.GroupID,
-			Coordinator: b.config.ID,
-			Members:     make(map[string]structs.Member),
+			Group:        r.GroupID,
+			Coordinator:  b.config.ID,
+			Members:      make(map[string]structs.Member),
+			Offsets:      make(map[string]map[int32]structs.Offset),
+			GenerationID: 1,
 		}
+	}
+	if group.Members == nil {
+		group.Members = make(map[string]structs.Member)
+	}
+	if group.Offsets == nil {
+		group.Offsets = make(map[string]map[int32]structs.Offset)
 	}
 	if r.MemberID == "" {
 		// for group member IDs -- can replace with something else
 		r.MemberID = ctx.Header().ClientID + "-" + uuid.NewV1().String()
-		group.Members[r.MemberID] = structs.Member{ID: r.MemberID}
+	}
+	group.Members[r.MemberID] = structs.Member{
+		ID:       r.MemberID,
+		Metadata: selectedGroupProtocolMetadata(r.GroupProtocols),
 	}
 	if group.LeaderID == "" {
 		group.LeaderID = r.MemberID
 	}
+	group.State = structs.GroupStateCompletingRebalance
 	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
 		Group: *group,
 	})
@@ -653,7 +665,8 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 		return res
 	}
 
-	res.GenerationID = 0
+	res.GenerationID = group.GenerationID
+	res.GroupProtocol = selectedGroupProtocolName(r.GroupProtocols)
 	res.LeaderID = group.LeaderID
 	res.MemberID = r.MemberID
 
@@ -666,6 +679,20 @@ func (b *Broker) handleJoinGroup(ctx *Context, r *protocol.JoinGroupRequest) *pr
 	}
 
 	return res
+}
+
+func selectedGroupProtocolName(protocols []*protocol.GroupProtocol) string {
+	if len(protocols) == 0 {
+		return ""
+	}
+	return protocols[0].ProtocolName
+}
+
+func selectedGroupProtocolMetadata(protocols []*protocol.GroupProtocol) []byte {
+	if len(protocols) == 0 {
+		return nil
+	}
+	return protocols[0].ProtocolMetadata
 }
 
 func (b *Broker) handleLeaveGroup(ctx *Context, r *protocol.LeaveGroupRequest) *protocol.LeaveGroupResponse {
@@ -693,6 +720,18 @@ func (b *Broker) handleLeaveGroup(ctx *Context, r *protocol.LeaveGroupRequest) *
 	}
 
 	delete(group.Members, r.MemberID)
+	if group.LeaderID == r.MemberID {
+		group.LeaderID = ""
+		for memberID := range group.Members {
+			group.LeaderID = memberID
+			break
+		}
+	}
+	if len(group.Members) == 0 {
+		group.State = structs.GroupStateEmpty
+	} else {
+		group.State = structs.GroupStatePreparingRebalance
+	}
 
 	_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
 		Group: *group,
@@ -737,29 +776,6 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 	case structs.GroupStatePreparingRebalance:
 		res.ErrorCode = protocol.ErrRebalanceInProgress.Code()
 		return res
-	case structs.GroupStateCompletingRebalance:
-		// TODO: wait to get member in group
-
-		if group.LeaderID == r.MemberID {
-			// if is leader, attempt to persist state and transition to stable
-			var assignment []protocol.GroupAssignment
-			for _, ga := range r.GroupAssignments {
-				if _, ok := group.Members[ga.MemberID]; !ok {
-					// if member isn't set fill in with empty assignment
-					assignment = append(assignment, protocol.GroupAssignment{
-						MemberID:         ga.MemberID,
-						MemberAssignment: nil,
-					})
-				} else {
-					assignment = append(assignment, ga)
-				}
-
-				// save group
-			}
-		}
-	case structs.GroupStateStable:
-		// in stable, return current assignment
-
 	}
 
 	if group.LeaderID == r.MemberID {
@@ -767,10 +783,13 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 		for _, ga := range r.GroupAssignments {
 			if m, ok := group.Members[ga.MemberID]; ok {
 				m.Assignment = ga.MemberAssignment
+				group.Members[ga.MemberID] = m
 			} else {
-				panic("sync group: unknown member")
+				res.ErrorCode = protocol.ErrUnknownMemberId.Code()
+				return res
 			}
 		}
+		group.State = structs.GroupStateStable
 		_, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{
 			Group: *group,
 		})
@@ -778,13 +797,11 @@ func (b *Broker) handleSyncGroup(ctx *Context, r *protocol.SyncGroupRequest) *pr
 			res.ErrorCode = protocol.ErrUnknown.Code()
 			return res
 		}
+	}
+	if m, ok := group.Members[r.MemberID]; ok {
+		res.MemberAssignment = m.Assignment
 	} else {
-		// TODO: need to wait until leader sets assignments
-		if m, ok := group.Members[r.MemberID]; ok {
-			res.MemberAssignment = m.Assignment
-		} else {
-			panic(fmt.Errorf("sync group: unknown member: %s", r.MemberID))
-		}
+		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
 	}
 
 	return res
@@ -807,7 +824,14 @@ func (b *Broker) handleHeartbeat(ctx *Context, r *protocol.HeartbeatRequest) *pr
 		res.ErrorCode = protocol.ErrInvalidGroupId.Code()
 		return res
 	}
-	// TODO: need to handle case when rebalance is in process
+	if _, ok := group.Members[r.MemberID]; !ok {
+		res.ErrorCode = protocol.ErrUnknownMemberId.Code()
+		return res
+	}
+	if r.GroupGenerationID != group.GenerationID {
+		res.ErrorCode = protocol.ErrIllegalGeneration.Code()
+		return res
+	}
 
 	res.ErrorCode = protocol.ErrNone.Code()
 
@@ -884,10 +908,6 @@ func (b *Broker) handleListGroups(ctx *Context, req *protocol.ListGroupsRequest)
 	res.APIVersion = req.Version()
 	state := b.fsm.State()
 
-	fmt.Println("list")
-	fmt.Println("list")
-	fmt.Println("list")
-
 	_, groups, err := state.GetGroups()
 	if err != nil {
 		res.ErrorCode = protocol.ErrUnknown.Code()
@@ -910,23 +930,22 @@ func (b *Broker) handleDescribeGroups(ctx *Context, req *protocol.DescribeGroups
 	res.APIVersion = req.Version()
 	state := b.fsm.State()
 
-	fmt.Println("describe")
-	fmt.Println("describe")
-	fmt.Println("describe")
-
 	for _, id := range req.GroupIDs {
-		group := protocol.Group{}
+		group := protocol.Group{GroupID: id, GroupMembers: make(map[string]*protocol.GroupMember)}
 		_, g, err := state.GetGroup(id)
 		if err != nil {
 			group.ErrorCode = protocol.ErrUnknown.Code()
-			group.GroupID = id
 			res.Groups = append(res.Groups, group)
 			return res
 		}
-		group.GroupID = id
-		group.State = "Stable"
+		if g == nil {
+			group.ErrorCode = protocol.ErrInvalidGroupId.Code()
+			res.Groups = append(res.Groups, group)
+			continue
+		}
+		group.State = groupStateString(g.State)
 		group.ProtocolType = "consumer"
-		group.Protocol = "consumer"
+		group.Protocol = "range"
 		for id, member := range g.Members {
 			group.GroupMembers[id] = &protocol.GroupMember{
 				ClientID: member.ID,
@@ -936,11 +955,28 @@ func (b *Broker) handleDescribeGroups(ctx *Context, req *protocol.DescribeGroups
 				GroupMemberAssignment: member.Assignment,
 			}
 		}
-		res.Groups = append(res.Groups)
+		res.Groups = append(res.Groups, group)
 
 	}
 
 	return res
+}
+
+func groupStateString(state structs.GroupState) string {
+	switch state {
+	case structs.GroupStatePreparingRebalance:
+		return "PreparingRebalance"
+	case structs.GroupStateCompletingRebalance:
+		return "CompletingRebalance"
+	case structs.GroupStateStable:
+		return "Stable"
+	case structs.GroupStateDead:
+		return "Dead"
+	case structs.GroupStateEmpty:
+		return "Empty"
+	default:
+		return "Unknown"
+	}
 }
 
 func (b *Broker) handleStopReplica(ctx *Context, req *protocol.StopReplicaRequest) *protocol.StopReplicaResponse {
@@ -959,30 +995,121 @@ func (b *Broker) handleControlledShutdown(ctx *Context, req *protocol.Controlled
 }
 
 func (b *Broker) handleOffsetCommit(ctx *Context, req *protocol.OffsetCommitRequest) *protocol.OffsetCommitResponse {
-	panic("not implemented: offset commit")
-	return nil
+	sp := span(ctx, b.tracer, "offset commit")
+	defer sp.Finish()
+
+	res := new(protocol.OffsetCommitResponse)
+	res.APIVersion = req.Version()
+	res.Responses = make([]protocol.OffsetCommitTopicResponse, len(req.Topics))
+
+	state := b.fsm.State()
+	_, group, err := state.GetGroup(req.GroupID)
+	if err != nil {
+		for i, topic := range req.Topics {
+			res.Responses[i] = offsetCommitTopicResponse(topic, protocol.ErrUnknown.Code())
+		}
+		return res
+	}
+	if group == nil {
+		group = &structs.Group{
+			Group:       req.GroupID,
+			Coordinator: b.config.ID,
+			Members:     make(map[string]structs.Member),
+			Offsets:     make(map[string]map[int32]structs.Offset),
+		}
+	}
+	if group.Offsets == nil {
+		group.Offsets = make(map[string]map[int32]structs.Offset)
+	}
+	for _, topic := range req.Topics {
+		if group.Offsets[topic.Topic] == nil {
+			group.Offsets[topic.Topic] = make(map[int32]structs.Offset)
+		}
+		for _, partition := range topic.Partitions {
+			metadata := ""
+			if partition.Metadata != nil {
+				metadata = *partition.Metadata
+			}
+			group.Offsets[topic.Topic][partition.Partition] = structs.Offset{
+				Offset:   partition.Offset,
+				Metadata: metadata,
+			}
+		}
+	}
+	if _, err = b.raftApply(structs.RegisterGroupRequestType, structs.RegisterGroupRequest{Group: *group}); err != nil {
+		for i, topic := range req.Topics {
+			res.Responses[i] = offsetCommitTopicResponse(topic, protocol.ErrUnknown.Code())
+		}
+		return res
+	}
+	for i, topic := range req.Topics {
+		res.Responses[i] = offsetCommitTopicResponse(topic, protocol.ErrNone.Code())
+	}
+	return res
+}
+
+func offsetCommitTopicResponse(topic protocol.OffsetCommitTopicRequest, errorCode int16) protocol.OffsetCommitTopicResponse {
+	res := protocol.OffsetCommitTopicResponse{
+		Topic:              topic.Topic,
+		PartitionResponses: make([]protocol.OffsetCommitPartitionResponse, len(topic.Partitions)),
+	}
+	for i, partition := range topic.Partitions {
+		res.PartitionResponses[i] = protocol.OffsetCommitPartitionResponse{
+			Partition: partition.Partition,
+			ErrorCode: errorCode,
+		}
+	}
+	return res
 }
 
 func (b *Broker) handleOffsetFetch(ctx *Context, req *protocol.OffsetFetchRequest) *protocol.OffsetFetchResponse {
-	sp := span(ctx, b.tracer, "create topic")
+	sp := span(ctx, b.tracer, "offset fetch")
 	defer sp.Finish()
 
 	res := new(protocol.OffsetFetchResponse)
 	res.APIVersion = req.Version()
 	res.Responses = make([]protocol.OffsetFetchTopicResponse, len(req.Topics))
 
-	// state := b.fsm.State()
-
-	// _, g, err := state.GetGroup(req.GroupID)
-
-	// // If group doesn't exist then create it?
-	// if err != nil {
-	// 	// TODO: handle err
-	// 	panic(err)
-	// }
+	state := b.fsm.State()
+	_, group, err := state.GetGroup(req.GroupID)
+	if err != nil {
+		for i, topic := range req.Topics {
+			res.Responses[i] = offsetFetchTopicResponse(topic, nil, protocol.ErrUnknown.Code())
+		}
+		return res
+	}
+	for i, topic := range req.Topics {
+		var offsets map[int32]structs.Offset
+		if group != nil && group.Offsets != nil {
+			offsets = group.Offsets[topic.Topic]
+		}
+		res.Responses[i] = offsetFetchTopicResponse(topic, offsets, protocol.ErrNone.Code())
+	}
 
 	return res
 
+}
+
+func offsetFetchTopicResponse(topic protocol.OffsetFetchTopicRequest, offsets map[int32]structs.Offset, errorCode int16) protocol.OffsetFetchTopicResponse {
+	res := protocol.OffsetFetchTopicResponse{
+		Topic:      topic.Topic,
+		Partitions: make([]protocol.OffsetFetchPartition, len(topic.Partitions)),
+	}
+	for i, partition := range topic.Partitions {
+		offset := structs.Offset{Offset: -1}
+		if offsets != nil {
+			if stored, ok := offsets[partition]; ok {
+				offset = stored
+			}
+		}
+		res.Partitions[i] = protocol.OffsetFetchPartition{
+			Partition: partition,
+			Offset:    offset.Offset,
+			Metadata:  offset.Metadata,
+			ErrorCode: errorCode,
+		}
+	}
+	return res
 }
 
 // isController returns true if this is the cluster controller.

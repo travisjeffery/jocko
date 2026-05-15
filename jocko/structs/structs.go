@@ -160,6 +160,11 @@ type Member struct {
 	Assignment []byte
 }
 
+type Offset struct {
+	Offset   int64
+	Metadata string
+}
+
 type GroupState int32
 
 const (
@@ -177,6 +182,7 @@ type Group struct {
 	Coordinator  int32
 	LeaderID     string
 	Members      map[string]Member
+	Offsets      map[string]map[int32]Offset
 	State        GroupState
 	GenerationID int32
 
