@@ -3,6 +3,7 @@ package jocko_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -24,6 +25,88 @@ const (
 
 func init() {
 	log.SetLevel("debug")
+}
+
+func TestKafkaClientProduceConsume(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, dir := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 1
+		cfg.StartAsLeader = true
+	}, nil)
+	defer os.RemoveAll(dir)
+
+	err := srv.Start(ctx)
+	require.NoError(t, err)
+	defer srv.Shutdown()
+
+	jocko.WaitForLeader(t, srv)
+
+	err = createTopic(t, srv)
+	require.NoError(t, err)
+
+	config := sarama.NewConfig()
+	config.ClientID = "kafka-client-e2e-test"
+	config.Version = sarama.V0_10_0_0
+	config.ChannelBufferSize = 1
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 10
+
+	brokers := []string{srv.Addr().String()}
+	retry.Run(t, func(r *retry.R) {
+		client, err := sarama.NewClient(brokers, config)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		defer client.Close()
+
+		if got := len(client.Brokers()); got != 1 {
+			r.Fatalf("client found wrong broker count: %d", got)
+		}
+
+		partitions, err := client.Partitions(topic)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if len(partitions) != 1 || partitions[0] != 0 {
+			r.Fatalf("client found wrong partitions: %v", partitions)
+		}
+	})
+
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	require.NoError(t, err)
+	defer producer.Close()
+
+	wantValue := []byte("Hello from Sarama!")
+	producedPartition, producedOffset, err := producer.SendMessage(&sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.ByteEncoder(wantValue),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), producedPartition)
+
+	consumer, err := sarama.NewConsumer(brokers, config)
+	require.NoError(t, err)
+	defer consumer.Close()
+
+	partition, err := consumer.ConsumePartition(topic, producedPartition, producedOffset)
+	require.NoError(t, err)
+	defer partition.Close()
+
+	select {
+	case msg := <-partition.Messages():
+		require.Equal(t, producedOffset, msg.Offset)
+		require.Equal(t, producedPartition, msg.Partition)
+		require.Equal(t, topic, msg.Topic)
+		require.Equal(t, wantValue, msg.Value)
+	case err := <-partition.Errors():
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting to consume produced message")
+	}
 }
 
 func TestProduceConsume(t *testing.T) {
@@ -395,12 +478,12 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 	for _, o := range other {
 		assignment = append(assignment, o.ID())
 	}
-	_, err = conn.CreateTopics(&protocol.CreateTopicRequests{
+	res, err := conn.CreateTopics(&protocol.CreateTopicRequests{
 		Timeout: 15 * time.Second,
 		Requests: []*protocol.CreateTopicRequest{{
 			Topic:             topic,
 			NumPartitions:     int32(1),
-			ReplicationFactor: int16(3),
+			ReplicationFactor: int16(len(assignment)),
 			ReplicaAssignment: map[int32][]int32{
 				0: assignment,
 			},
@@ -409,7 +492,15 @@ func createTopic(t ti.T, s1 *jocko.Server, other ...*jocko.Server) error {
 			},
 		}},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	for _, topicErr := range res.TopicErrorCodes {
+		if topicErr.ErrorCode != protocol.ErrNone.Code() {
+			return fmt.Errorf("create topic %q failed: %s", topicErr.Topic, protocol.Errs[topicErr.ErrorCode])
+		}
+	}
+	return nil
 }
 
 func strPointer(v string) *string {
