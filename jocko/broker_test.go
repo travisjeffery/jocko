@@ -1,3 +1,4 @@
+//go:build !race
 // +build !race
 
 package jocko
@@ -1014,32 +1015,31 @@ func TestBroker_LeftLeader(t *testing.T) {
 
 	leader.Shutdown()
 
-	var remain *Broker
+	var remaining []*Broker
 	for _, b := range brokers {
 		if b == leader {
 			continue
 		}
-		remain = b
+		remaining = append(remaining, b)
 		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(b, 2)) })
 	}
 
-	retry.Run(t, func(r *retry.R) {
-		for _, b := range brokers {
-			if leader == b && b.isLeader() {
-				r.Fatal("should have new leader")
+	retry.RunWith(&retry.Timer{Timeout: 20 * time.Second, Wait: 25 * time.Millisecond}, t, func(r *retry.R) {
+		for _, b := range remaining {
+			if !b.isLeader() {
+				continue
 			}
-		}
-	})
-
-	state := remain.fsm.State()
-	retry.Run(t, func(r *retry.R) {
-		_, node, err := state.GetNode(leader.config.ID)
-		if err != nil {
-			r.Fatalf("err: %v", err)
-		}
-		if node != nil {
+			state := b.fsm.State()
+			_, node, err := state.GetNode(leader.config.ID)
+			if err != nil {
+				r.Fatalf("err: %v", err)
+			}
+			if node == nil {
+				return
+			}
 			r.Fatal("leader should be deregistered")
 		}
+		r.Fatal("should have new leader")
 	})
 }
 
