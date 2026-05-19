@@ -48,13 +48,15 @@ func NewReplicator(config ReplicatorConfig, replica *Replica, leader client) *Re
 		msgs:    make(chan []byte, 2),
 		backoff: bo,
 	}
+	if replica != nil && replica.Log != nil {
+		r.offset = replica.Log.NewestOffset()
+	}
 	return r
 }
 
 // Replicate start fetching messages from the leader and appending them to the local commit log.
 func (r *Replicator) Replicate() {
 	go r.fetchMessages()
-	go r.appendMessages()
 }
 
 func (r *Replicator) fetchMessages() {
@@ -90,15 +92,18 @@ func (r *Replicator) fetchMessages() {
 						log.Error.Printf("replicator: partition response error: %d", p.ErrorCode)
 						goto BACKOFF
 					}
-					if p.RecordSet == nil {
+					if len(p.RecordSet) == 0 {
+						r.highwaterMarkOffset = p.HighWatermark
+						r.backoff.Reset()
+						r.sleepEmptyFetch()
+						continue
+					}
+					if err := appendRecordSetEntries(r.replica.Log, p.RecordSet); err != nil {
+						log.Error.Printf("replicator: append messages error: %s", err)
 						goto BACKOFF
 					}
-					offset := int64(protocol.Encoding.Uint64(p.RecordSet[:8]))
-					if offset > r.offset {
-						r.msgs <- p.RecordSet
-						r.highwaterMarkOffset = p.HighWatermark
-						r.offset = offset
-					}
+					r.highwaterMarkOffset = p.HighWatermark
+					r.offset = r.replica.Log.NewestOffset()
 				}
 			}
 
@@ -109,6 +114,36 @@ func (r *Replicator) fetchMessages() {
 			time.Sleep(r.backoff.NextBackOff())
 		}
 	}
+}
+
+func appendRecordSetEntries(log CommitLog, recordSet []byte) error {
+	for pos := 0; pos < len(recordSet); {
+		d := protocol.NewDecoder(recordSet[pos:])
+		if _, err := d.Int64(); err != nil {
+			return err
+		}
+		size, err := d.Int32()
+		if err != nil {
+			return err
+		}
+		end := pos + d.Offset() + int(size)
+		if end > len(recordSet) {
+			return protocol.ErrInsufficientData
+		}
+		if _, err := log.Append(recordSet[pos:end]); err != nil {
+			return err
+		}
+		pos = end
+	}
+	return nil
+}
+
+func (r *Replicator) sleepEmptyFetch() {
+	sleep := r.config.MaxWaitTime
+	if sleep <= 0 {
+		sleep = 10 * time.Millisecond
+	}
+	time.Sleep(sleep)
 }
 
 func (r *Replicator) appendMessages() {

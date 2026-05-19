@@ -259,6 +259,110 @@ func TestKafkaConsumerGroupMultiMemberRebalance(t *testing.T) {
 	}
 }
 
+func TestKafkaReplicatedPartitionLeaderFailover(t *testing.T) {
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	s1, dir1 := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = true
+		cfg.BootstrapExpect = 3
+	}, nil)
+	defer os.RemoveAll(dir1)
+	require.NoError(t, s1.Start(ctx1))
+	defer s1.Shutdown()
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	s2, dir2 := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil)
+	defer os.RemoveAll(dir2)
+	require.NoError(t, s2.Start(ctx2))
+	defer s2.Shutdown()
+
+	ctx3, cancel3 := context.WithCancel(context.Background())
+	defer cancel3()
+	s3, dir3 := jocko.NewTestServer(t, func(cfg *config.Config) {
+		cfg.Bootstrap = false
+		cfg.BootstrapExpect = 3
+	}, nil)
+	defer os.RemoveAll(dir3)
+	require.NoError(t, s3.Start(ctx3))
+	defer s3.Shutdown()
+
+	jocko.TestJoin(t, s1, s2, s3)
+	controller, followers := jocko.WaitForLeader(t, s1, s2, s3)
+	jocko.WaitForLiveNodes(t, s1, s2, s3)
+	retry.RunWith(&retry.Timer{Timeout: 10 * time.Second, Wait: 50 * time.Millisecond}, t, func(r *retry.R) {
+		r.Check(createTopic(t, controller, followers...))
+	})
+
+	servers := map[int32]*jocko.Server{
+		s1.ID(): s1,
+		s2.ID(): s2,
+		s3.ID(): s3,
+	}
+	cancels := map[int32]context.CancelFunc{
+		s1.ID(): cancel1,
+		s2.ID(): cancel2,
+		s3.ID(): cancel3,
+	}
+	brokers := []string{s1.Addr().String(), s2.Addr().String(), s3.Addr().String()}
+	waitForTopicReplication(t, brokers, 3, 3, 10*time.Second)
+	oldLeader := waitForPartitionLeader(t, brokers, -1, 10*time.Second)
+
+	producer := newManualProducer(t, []string{oldLeader.Addr()})
+	defer producer.Close()
+
+	firstValues := [][]byte{
+		[]byte("failover-before-0"),
+		[]byte("failover-before-1"),
+		[]byte("failover-before-2"),
+	}
+	for _, value := range firstValues {
+		partition, _, err := producer.SendMessage(&sarama.ProducerMessage{
+			Topic:     topic,
+			Partition: 0,
+			Value:     sarama.ByteEncoder(value),
+		})
+		require.NoError(t, err)
+		require.Equal(t, int32(0), partition)
+	}
+
+	waitForFetchHighWatermark(t, oldLeader.Addr(), 3, 10*time.Second)
+
+	leaderServer := servers[oldLeader.ID()]
+	require.NotNil(t, leaderServer)
+	require.NoError(t, leaderServer.Leave())
+	require.NoError(t, leaderServer.Shutdown())
+	cancels[oldLeader.ID()]()
+
+	var remainingBrokers []string
+	for id, srv := range servers {
+		if id != oldLeader.ID() {
+			remainingBrokers = append(remainingBrokers, srv.Addr().String())
+		}
+	}
+	newLeader := waitForPartitionLeader(t, remainingBrokers, oldLeader.ID(), 10*time.Second)
+	waitForFetchHighWatermark(t, newLeader.Addr(), 3, 10*time.Second)
+
+	assertPartitionValues(t, newLeader.Addr(), firstValues, 10*time.Second)
+
+	postProducer := newManualProducer(t, []string{newLeader.Addr()})
+	defer postProducer.Close()
+	afterValue := []byte("failover-after")
+	partition, _, err := postProducer.SendMessage(&sarama.ProducerMessage{
+		Topic:     topic,
+		Partition: 0,
+		Value:     sarama.ByteEncoder(afterValue),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), partition)
+	waitForFetchHighWatermark(t, newLeader.Addr(), 4, 10*time.Second)
+
+	assertPartitionValues(t, newLeader.Addr(), append(firstValues, afterValue), 10*time.Second)
+}
+
 func consumerGroupConfig(clientID string) *cluster.Config {
 	config := cluster.NewConfig()
 	config.ClientID = clientID
@@ -267,6 +371,220 @@ func consumerGroupConfig(clientID string) *cluster.Config {
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.Return.Errors = true
 	return config
+}
+
+func newManualProducer(t *testing.T, brokers []string) sarama.SyncProducer {
+	t.Helper()
+
+	config := sarama.NewConfig()
+	config.ClientID = "kafka-replicated-partition-producer"
+	config.Version = sarama.V0_10_0_0
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.Retry.Max = 10
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	require.NoError(t, err)
+	return producer
+}
+
+func waitForPartitionLeader(t *testing.T, brokers []string, previousLeader int32, timeout time.Duration) *sarama.Broker {
+	t.Helper()
+
+	config := sarama.NewConfig()
+	config.ClientID = "kafka-replicated-partition-metadata"
+	config.Version = sarama.V0_10_0_0
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		client, err := sarama.NewClient(brokers, config)
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		leader, err := client.Leader(topic, 0)
+		if err == nil && leader != nil && leader.ID() != previousLeader {
+			_ = client.Close()
+			return leader
+		}
+		if err != nil {
+			lastErr = err
+		}
+		_ = client.Close()
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for partition leader after %d: %v", previousLeader, lastErr)
+	return nil
+}
+
+func waitForTopicReplication(t *testing.T, brokers []string, replicas, isr int, timeout time.Duration) {
+	t.Helper()
+
+	config := sarama.NewConfig()
+	config.ClientID = "kafka-replicated-partition-replicas"
+	config.Version = sarama.V0_10_0_0
+	deadline := time.Now().Add(timeout)
+	var lastReplicas, lastISR []int32
+	var lastLeader *sarama.Broker
+	var lastErr error
+	for time.Now().Before(deadline) {
+		client, err := sarama.NewClient(brokers, config)
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		lastLeader, err = client.Leader(topic, 0)
+		if err != nil {
+			lastErr = err
+			_ = client.Close()
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		lastReplicas, err = client.Replicas(topic, 0)
+		if err != nil {
+			lastErr = err
+			_ = client.Close()
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		lastISR, err = client.InSyncReplicas(topic, 0)
+		if err != nil {
+			lastErr = err
+			_ = client.Close()
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		_ = client.Close()
+		if lastLeader != nil && len(lastReplicas) == replicas && len(lastISR) == isr {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for topic replication replicas=%d isr=%d, got leader=%v replicas=%v isr=%v err=%v", replicas, isr, lastLeader, lastReplicas, lastISR, lastErr)
+}
+
+func waitForFetchHighWatermark(t *testing.T, brokerAddr string, want int64, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var last int64
+	var lastErr error
+	for time.Now().Before(deadline) {
+		conn, err := (&jocko.Dialer{Timeout: time.Second, ClientID: "kafka-replicated-partition-fetch"}).Dial("tcp", brokerAddr)
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		res, err := conn.Fetch(&protocol.FetchRequest{
+			MaxWaitTime: 100 * time.Millisecond,
+			ReplicaID:   -1,
+			MinBytes:    1,
+			Topics: []*protocol.FetchTopic{{
+				Topic: topic,
+				Partitions: []*protocol.FetchPartition{{
+					Partition:   0,
+					FetchOffset: 0,
+					MaxBytes:    1024 * 1024,
+				}},
+			}},
+		})
+		_ = conn.Close()
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		last = res.Responses[0].PartitionResponses[0].HighWatermark
+		if last >= want {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for high watermark >= %d, got %d: %v", want, last, lastErr)
+}
+
+func assertPartitionValues(t *testing.T, brokerAddr string, want [][]byte, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var got [][]byte
+	var lastErr error
+	for time.Now().Before(deadline) {
+		conn, err := (&jocko.Dialer{Timeout: time.Second, ClientID: "kafka-replicated-partition-consumer"}).Dial("tcp", brokerAddr)
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		res, err := conn.Fetch(&protocol.FetchRequest{
+			MaxWaitTime: 100 * time.Millisecond,
+			ReplicaID:   -1,
+			MinBytes:    1,
+			Topics: []*protocol.FetchTopic{{
+				Topic: topic,
+				Partitions: []*protocol.FetchPartition{{
+					Partition:   0,
+					FetchOffset: 0,
+					MaxBytes:    1024 * 1024,
+				}},
+			}},
+		})
+		_ = conn.Close()
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		require.Len(t, res.Responses, 1)
+		require.Len(t, res.Responses[0].PartitionResponses, 1)
+		pres := res.Responses[0].PartitionResponses[0]
+		if pres.ErrorCode != protocol.ErrNone.Code() {
+			lastErr = protocol.Errs[pres.ErrorCode]
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		got, err = decodeRecordSetValues(pres.RecordSet)
+		if err != nil {
+			lastErr = err
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if len(got) >= len(want) {
+			require.Equal(t, want, got[:len(want)])
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for partition values: want=%q got=%q err=%v", want, got, lastErr)
+}
+
+func decodeRecordSetValues(recordSet []byte) ([][]byte, error) {
+	values := make([][]byte, 0)
+	for pos := 0; pos < len(recordSet); {
+		d := protocol.NewDecoder(recordSet[pos:])
+		if _, err := d.Int64(); err != nil {
+			return nil, err
+		}
+		size, err := d.Int32()
+		if err != nil {
+			return nil, err
+		}
+		start := pos + d.Offset()
+		end := start + int(size)
+		if end > len(recordSet) {
+			return nil, protocol.ErrInsufficientData
+		}
+		msg := new(protocol.Message)
+		if err := msg.Decode(protocol.NewDecoder(recordSet[start:end])); err != nil {
+			return nil, err
+		}
+		values = append(values, msg.Value)
+		pos = end
+	}
+	return values, nil
 }
 
 func waitForConsumerPartitions(t *testing.T, consumer *cluster.Consumer, want int, timeout time.Duration) map[int32]bool {
@@ -803,8 +1121,12 @@ func createTopicWithPartitions(t ti.T, s1 *jocko.Server, partitions int32, other
 		return err
 	}
 	assignment := []int32{s1.ID()}
+	seenAssignments := map[int32]bool{s1.ID(): true}
 	for _, o := range other {
-		assignment = append(assignment, o.ID())
+		if !seenAssignments[o.ID()] {
+			assignment = append(assignment, o.ID())
+			seenAssignments[o.ID()] = true
+		}
 	}
 	replicaAssignment := make(map[int32][]int32, partitions)
 	for partition := int32(0); partition < partitions; partition++ {

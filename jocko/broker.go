@@ -127,6 +127,22 @@ func NewBroker(config *config.Config, tracer opentracing.Tracer) (*Broker, error
 
 // Run starts a loop to handle requests send back responses.
 func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses chan<- *Context) {
+	sendResponse := func(reqCtx *Context, res protocol.ResponseBody) {
+		parentSpan := opentracing.SpanFromContext(reqCtx)
+		queueSpan := b.tracer.StartSpan("broker: queue response", opentracing.ChildOf(parentSpan.Context()))
+		responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
+
+		responses <- &Context{
+			parent: responseCtx,
+			conn:   reqCtx.conn,
+			header: reqCtx.header,
+			res: &protocol.Response{
+				CorrelationID: reqCtx.header.CorrelationID,
+				Body:          res,
+			},
+		}
+	}
+
 	for {
 		select {
 		case reqCtx := <-requests:
@@ -145,6 +161,12 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 
 			switch req := reqCtx.req.(type) {
 			case *protocol.ProduceRequest:
+				if req.Acks == -1 {
+					go func() {
+						sendResponse(reqCtx, b.handleProduce(reqCtx, req))
+					}()
+					continue
+				}
 				res = b.handleProduce(reqCtx, req)
 			case *protocol.FetchRequest:
 				res = b.handleFetch(reqCtx, req)
@@ -188,19 +210,7 @@ func (b *Broker) Run(ctx context.Context, requests <-chan *Context, responses ch
 				res = b.handleDeleteTopics(reqCtx, req)
 			}
 
-			parentSpan := opentracing.SpanFromContext(reqCtx)
-			queueSpan = b.tracer.StartSpan("broker: queue response", opentracing.ChildOf(parentSpan.Context()))
-			responseCtx := context.WithValue(reqCtx, responseQueueSpanKey, queueSpan)
-
-			responses <- &Context{
-				parent: responseCtx,
-				conn:   reqCtx.conn,
-				header: reqCtx.header,
-				res: &protocol.Response{
-					CorrelationID: reqCtx.header.CorrelationID,
-					Body:          res,
-				},
-			}
+			sendResponse(reqCtx, res)
 		case <-ctx.Done():
 			goto DONE
 		}
@@ -265,7 +275,7 @@ func (b *Broker) handleCreateTopic(ctx *Context, reqs *protocol.CreateTopicReque
 			}
 			continue
 		}
-		if req.ReplicationFactor > int16(len(b.LANMembers())) {
+		if len(req.ReplicaAssignment) == 0 && req.ReplicationFactor > int16(len(b.LANMembers())) {
 			res.TopicErrorCodes[i] = &protocol.TopicErrorCode{
 				Topic:     req.Topic,
 				ErrorCode: protocol.ErrInvalidReplicationFactor.Code(),
@@ -334,22 +344,29 @@ func (b *Broker) handleLeaderAndISR(ctx *Context, req *protocol.LeaderAndISRRequ
 		}
 	}
 	for i, p := range req.PartitionStates {
-		// TODO: need to replace the replica regardless
-		replica := &Replica{
-			BrokerID: b.config.ID,
-			Partition: structs.Partition{
-				ID:              p.Partition,
-				Partition:       p.Partition,
-				Topic:           p.Topic,
-				ISR:             p.ISR,
-				AR:              p.Replicas,
-				ControllerEpoch: p.ZKVersion,
-				LeaderEpoch:     p.LeaderEpoch,
-				Leader:          p.Leader,
-			},
-			IsLocal: true,
+		if !contains(p.Replicas, b.config.ID) {
+			replica, err := b.replicaLookup.Replica(p.Topic, p.Partition)
+			if err == nil && replica != nil {
+				if replica.Replicator != nil {
+					if err := replica.Replicator.Close(); err != nil {
+						setErr(i, p, protocol.ErrUnknown.WithErr(err))
+						continue
+					}
+				}
+				b.replicaLookup.RemoveReplica(replica)
+			}
+			res.Partitions[i] = &protocol.LeaderAndISRPartition{Partition: p.Partition, Topic: p.Topic, ErrorCode: protocol.ErrNone.Code()}
+			continue
 		}
-		b.replicaLookup.AddReplica(replica)
+
+		replica, err := b.replicaLookup.Replica(p.Topic, p.Partition)
+		if err != nil || replica == nil {
+			replica = &Replica{BrokerID: b.config.ID, IsLocal: true}
+			replica.setPartitionState(p)
+			b.replicaLookup.AddReplica(replica)
+		} else {
+			replica.setPartitionState(p)
+		}
 
 		if p.Leader == b.config.ID && (replica.Partition.Leader == b.config.ID) {
 			// is command asking this broker to be the new leader for p and this broker is not already the leader for
@@ -397,6 +414,7 @@ func (b *Broker) handleOffsets(ctx *Context, req *protocol.OffsetsRequest) *prot
 			if err != nil {
 				// TODO: have replica lookup return an error with a code
 				pres.ErrorCode = protocol.ErrUnknown.Code()
+				res.Responses[i].PartitionResponses = append(res.Responses[i].PartitionResponses, pres)
 				continue
 			}
 			var offset int64
@@ -443,6 +461,9 @@ func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *prot
 					pres.Partition = p.Partition
 					return protocol.ErrReplicaNotAvailable
 				}
+				if replica.Partition.Leader != b.config.ID {
+					return protocol.ErrNotLeaderForPartition
+				}
 				offset, appendErr := replica.Log.Append(p.RecordSet)
 				if appendErr != nil {
 					log.Error.Printf("broker/%d: log append error: %s", b.config.ID, err)
@@ -450,6 +471,10 @@ func (b *Broker) handleProduce(ctx *Context, req *protocol.ProduceRequest) *prot
 				}
 				pres.BaseOffset = offset
 				pres.LogAppendTime = time.Now()
+				targetOffset := replica.updateLeaderLogEnd()
+				if req.Acks == -1 && !replica.waitForHighWatermark(targetOffset, req.Timeout) {
+					return protocol.ErrRequestTimedOut
+				}
 				return protocol.ErrNone
 			})
 			pres.ErrorCode = err.Code()
@@ -955,33 +980,26 @@ func (b *Broker) handleFetch(ctx *Context, r *protocol.FetchRequest) *protocol.F
 					return protocol.ErrReplicaNotAvailable
 				}
 				newestOffset := replica.Log.NewestOffset()
-				if p.FetchOffset >= newestOffset {
-					fpres.HighWatermark = newestOffset
+				replicaFetch := r.ReplicaID >= 0
+				readableOffset := newestOffset
+				if !replicaFetch {
+					readableOffset = replica.highWatermark()
+				}
+				if replicaFetch {
+					replica.updateFollowerProgress(r.ReplicaID, p.FetchOffset)
+				}
+				if p.FetchOffset >= readableOffset {
+					fpres.HighWatermark = replica.highWatermark()
 					fpres.RecordSet = []byte{}
 					return protocol.ErrNone
 				}
-				rdr, rdrErr := replica.Log.NewReader(p.FetchOffset, p.MaxBytes)
+				recordSet, rdrErr := readRecordSetRange(replica.Log, p.FetchOffset, readableOffset, p.MaxBytes)
 				if rdrErr != nil {
 					log.Error.Printf("broker/%d: replica log read error: %s", b.config.ID, rdrErr)
 					return protocol.ErrUnknown.WithErr(rdrErr)
 				}
-				buf := new(bytes.Buffer)
-				var n int32
-				for n < r.MinBytes {
-					// TODO: copy these bytes to outer bytes
-					nn, err := io.Copy(buf, rdr)
-					if err != nil && err != io.EOF {
-						log.Error.Printf("broker/%d: reader copy error", b.config.ID, err)
-						return protocol.ErrUnknown.WithErr(rdrErr)
-					}
-					n += int32(nn)
-					if err == io.EOF {
-						// TODO: should use a different error here?
-						break
-					}
-				}
-				fpres.HighWatermark = newestOffset - 1
-				fpres.RecordSet = buf.Bytes()
+				fpres.HighWatermark = replica.highWatermark()
+				fpres.RecordSet = recordSet
 				return protocol.ErrNone
 			})
 			fpres.ErrorCode = err.Code()
@@ -1233,11 +1251,11 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 	state := b.fsm.State()
 	_, topic, _ := state.GetTopic(replica.Partition.Topic)
 
-	// TODO: think i need to just ensure/add the topic if it's not here yet
-
+	topicConfig := structs.NewTopicConfig()
 	if topic == nil {
-		log.Info.Printf("broker/%d: start replica called on unknown topic: %s", b.config.ID, replica.Partition.Topic)
-		return protocol.ErrUnknownTopicOrPartition
+		log.Info.Printf("broker/%d: starting replica before local topic state is applied: %s", b.config.ID, replica.Partition.Topic)
+	} else if topic.Config != nil {
+		topicConfig = topic.Config
 	}
 
 	if replica.Log == nil {
@@ -1245,7 +1263,7 @@ func (b *Broker) startReplica(replica *Replica) protocol.Error {
 			Path:            filepath.Join(b.config.DataDir, "data", fmt.Sprintf("%d", replica.Partition.ID)),
 			MaxSegmentBytes: 1024,
 			MaxLogBytes:     -1,
-			CleanupPolicy:   commitlog.CleanupPolicy(topic.Config.GetValue("cleanup.policy").(string)),
+			CleanupPolicy:   commitlog.CleanupPolicy(topicConfig.GetValue("cleanup.policy").(string)),
 		})
 		if err != nil {
 			return protocol.ErrUnknown.WithErr(err)
@@ -1264,9 +1282,12 @@ func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) p
 	if t != nil {
 		return protocol.ErrTopicAlreadyExists
 	}
-	ps, err := b.buildPartitions(topic.Topic, topic.NumPartitions, topic.ReplicationFactor)
-	if err != protocol.ErrNone {
-		return err
+	ps, protocolErr := b.buildPartitions(topic.Topic, topic.NumPartitions, topic.ReplicationFactor)
+	if len(topic.ReplicaAssignment) > 0 {
+		ps, protocolErr = b.buildAssignedPartitions(topic.Topic, topic.NumPartitions, topic.ReplicationFactor, topic.ReplicaAssignment)
+	}
+	if protocolErr != protocol.ErrNone {
+		return protocolErr
 	}
 	tt := structs.Topic{
 		Topic:      topic.Topic,
@@ -1300,19 +1321,34 @@ func (b *Broker) createTopic(ctx *Context, topic *protocol.CreateTopicRequest) p
 			Replicas: partition.AR,
 		})
 	}
-	// TODO: can optimize this
+	_, nodes, err := state.GetNodes()
+	if err != nil {
+		return protocol.ErrUnknown.WithErr(err)
+	}
+	brokerAddrs := make(map[int32]string)
+	for _, node := range nodes {
+		if node.Check == nil || node.Check.Status != structs.HealthPassing {
+			continue
+		}
+		brokerAddrs[node.Node] = node.Address
+	}
 	for _, broker := range b.brokerLookup.Brokers() {
-		if broker.ID.Int32() == b.config.ID {
+		brokerAddrs[broker.ID.Int32()] = broker.BrokerAddr
+	}
+	// TODO: can optimize this
+	for brokerID, brokerAddr := range brokerAddrs {
+		if brokerID == b.config.ID {
 			errCode := b.handleLeaderAndISR(ctx, req).ErrorCode
 			if protocol.ErrNone.Code() != errCode {
 				panic(fmt.Sprintf("broker/%d: handling leader and isr error: %d", b.config.ID, errCode))
 			}
 		} else {
-			conn, err := Dial("tcp", broker.BrokerAddr)
+			conn, err := Dial("tcp", brokerAddr)
 			if err != nil {
 				return protocol.ErrUnknown.WithErr(err)
 			}
 			res, err := conn.LeaderAndISR(req)
+			_ = conn.Close()
 			if err != nil {
 				// handle err and responses
 				return protocol.ErrUnknown.WithErr(err)
@@ -1360,6 +1396,26 @@ func (b *Broker) buildPartitions(topic string, partitionsCount int32, replicatio
 		partitions = append(partitions, partition)
 	}
 
+	return partitions, protocol.ErrNone
+}
+
+func (b *Broker) buildAssignedPartitions(topic string, partitionsCount int32, replicationFactor int16, assignment map[int32][]int32) ([]structs.Partition, protocol.Error) {
+	partitions := make([]structs.Partition, 0, partitionsCount)
+	for i := int32(0); i < partitionsCount; i++ {
+		replicas, ok := assignment[i]
+		if !ok || len(replicas) == 0 {
+			return nil, protocol.ErrInvalidReplicationFactor
+		}
+		replicaSet := append([]int32(nil), replicas...)
+		partitions = append(partitions, structs.Partition{
+			Topic:     topic,
+			ID:        i,
+			Partition: i,
+			Leader:    replicaSet[0],
+			AR:        replicaSet,
+			ISR:       replicaSet,
+		})
+	}
 	return partitions, protocol.ErrNone
 }
 
@@ -1458,10 +1514,6 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 			return protocol.ErrUnknown.WithErr(err)
 		}
 	}
-	hw := replica.Log.NewestOffset()
-	if err := replica.Log.Truncate(hw); err != nil {
-		return protocol.ErrUnknown.WithErr(err)
-	}
 	broker := b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", cmd.Leader)))
 	if broker == nil {
 		return protocol.ErrBrokerNotAvailable
@@ -1470,6 +1522,7 @@ func (b *Broker) becomeFollower(replica *Replica, cmd *protocol.PartitionState) 
 	if err != nil {
 		return protocol.ErrUnknown.WithErr(err)
 	}
+	replica.setPartitionState(cmd)
 	r := NewReplicator(ReplicatorConfig{}, replica, conn)
 	replica.Replicator = r
 	if !b.config.DevMode {
@@ -1487,10 +1540,8 @@ func (b *Broker) becomeLeader(replica *Replica, cmd *protocol.PartitionState) pr
 		}
 		replica.Replicator = nil
 	}
-	replica.Partition.Leader = cmd.Leader
-	replica.Partition.AR = cmd.Replicas
-	replica.Partition.ISR = cmd.ISR
-	replica.Partition.LeaderEpoch = cmd.ZKVersion
+	replica.setPartitionState(cmd)
+	replica.initializeLeaderProgress()
 	return protocol.ErrNone
 }
 
@@ -1501,6 +1552,42 @@ func contains(rs []int32, r int32) bool {
 		}
 	}
 	return false
+}
+
+func readRecordSetRange(log CommitLog, startOffset, endOffset int64, maxBytes int32) ([]byte, error) {
+	if startOffset >= endOffset {
+		return []byte{}, nil
+	}
+	rdr, err := log.NewReader(startOffset, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	for offset := startOffset; offset < endOffset; offset++ {
+		header := make([]byte, 12)
+		if _, err := io.ReadFull(rdr, header); err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return nil, err
+		}
+		size := int32(protocol.Encoding.Uint32(header[8:12]))
+		recordSet := make([]byte, 12+size)
+		copy(recordSet, header)
+		if _, err := io.ReadFull(rdr, recordSet[12:]); err != nil {
+			return nil, err
+		}
+		if maxBytes > 0 && int32(buf.Len()+len(recordSet)) > maxBytes && buf.Len() > 0 {
+			break
+		}
+		if _, err := buf.Write(recordSet); err != nil {
+			return nil, err
+		}
+	}
+	if buf.Len() == 0 {
+		return []byte{}, nil
+	}
+	return buf.Bytes(), nil
 }
 
 // ensurePath is used to make sure a path exists
@@ -1547,18 +1634,133 @@ func (b *Broker) LANMembers() []serf.Member {
 
 // Replica
 type Replica struct {
-	BrokerID   int32
-	Partition  structs.Partition
-	IsLocal    bool
-	Log        CommitLog
-	Hw         int64
-	Leo        int64
-	Replicator *Replicator
+	BrokerID    int32
+	Partition   structs.Partition
+	IsLocal     bool
+	Log         CommitLog
+	Hw          int64
+	Leo         int64
+	ISRProgress map[int32]int64
+	Replicator  *Replicator
 	sync.Mutex
 }
 
 func (r Replica) String() string {
 	return fmt.Sprintf("replica: %d {broker: %d, leader: %d, hw: %d, leo: %d}", r.Partition.ID, r.BrokerID, r.Partition.Leader, r.Hw, r.Leo)
+}
+
+func (r *Replica) setPartitionState(p *protocol.PartitionState) {
+	r.Lock()
+	defer r.Unlock()
+	r.IsLocal = true
+	r.Partition = structs.Partition{
+		ID:              p.Partition,
+		Partition:       p.Partition,
+		Topic:           p.Topic,
+		ISR:             p.ISR,
+		AR:              p.Replicas,
+		ControllerEpoch: p.ZKVersion,
+		LeaderEpoch:     p.LeaderEpoch,
+		Leader:          p.Leader,
+	}
+}
+
+func (r *Replica) initializeLeaderProgress() int64 {
+	r.Lock()
+	defer r.Unlock()
+	if r.ISRProgress == nil {
+		r.ISRProgress = make(map[int32]int64)
+	}
+	localEnd := r.logEndLocked()
+	for follower := range r.ISRProgress {
+		if !contains(r.Partition.ISR, follower) {
+			delete(r.ISRProgress, follower)
+		}
+	}
+	for _, isr := range r.Partition.ISR {
+		if isr == r.BrokerID {
+			r.ISRProgress[isr] = localEnd
+			continue
+		}
+		if _, ok := r.ISRProgress[isr]; !ok {
+			r.ISRProgress[isr] = 0
+		}
+	}
+	r.updateHighWatermarkLocked()
+	return r.Hw
+}
+
+func (r *Replica) updateLeaderLogEnd() int64 {
+	r.Lock()
+	defer r.Unlock()
+	if r.ISRProgress == nil {
+		r.ISRProgress = make(map[int32]int64)
+	}
+	localEnd := r.logEndLocked()
+	r.ISRProgress[r.BrokerID] = localEnd
+	r.updateHighWatermarkLocked()
+	return localEnd
+}
+
+func (r *Replica) updateFollowerProgress(follower int32, offset int64) {
+	r.Lock()
+	defer r.Unlock()
+	if r.ISRProgress == nil || !contains(r.Partition.ISR, follower) {
+		return
+	}
+	if offset > r.ISRProgress[follower] {
+		r.ISRProgress[follower] = offset
+	}
+	r.updateHighWatermarkLocked()
+}
+
+func (r *Replica) highWatermark() int64 {
+	r.Lock()
+	defer r.Unlock()
+	return r.Hw
+}
+
+func (r *Replica) waitForHighWatermark(offset int64, timeout time.Duration) bool {
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if r.highWatermark() >= offset {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return r.highWatermark() >= offset
+}
+
+func (r *Replica) logEndLocked() int64 {
+	if r.Log == nil {
+		r.Leo = 0
+		return 0
+	}
+	r.Leo = r.Log.NewestOffset()
+	return r.Leo
+}
+
+func (r *Replica) updateHighWatermarkLocked() {
+	if len(r.Partition.ISR) == 0 {
+		r.Hw = r.logEndLocked()
+		return
+	}
+	hw := int64(-1)
+	for _, isr := range r.Partition.ISR {
+		offset, ok := r.ISRProgress[isr]
+		if !ok {
+			offset = 0
+		}
+		if hw == -1 || offset < hw {
+			hw = offset
+		}
+	}
+	if hw > r.Hw {
+		r.Hw = hw
+	}
 }
 
 func (b *Broker) offsetsTopic(ctx *Context) (topic *structs.Topic, err error) {
