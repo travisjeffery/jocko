@@ -1,6 +1,6 @@
 # Jocko
 
-![ci](https://github.com/travisjeffery/jocko/workflows/Go/badge.svg)
+![ci](https://github.com/travisjeffery/jocko/actions/workflows/go.yml/badge.svg?branch=master&event=push)
 [![gitter](https://badges.gitter.im/travisjeffery/jocko.svg)](https://gitter.im/travisjeffery/jocko?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![codecov](https://codecov.io/gh/travisjeffery/jocko/branch/master/graph/badge.svg)](https://codecov.io/gh/travisjeffery/jocko)
 
