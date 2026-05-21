@@ -27,9 +27,14 @@ func (p *Client) Fetch(fetchRequest *protocol.FetchRequest) (*protocol.FetchResp
 	if len(p.msgs) >= p.msgCount {
 		return &protocol.FetchResponse{}, nil
 	}
-	msgs := [][]byte{
-		[]byte("msg " + strconv.Itoa(len(p.msgs))),
+	msg, err := protocol.Encode(&protocol.MessageSet{
+		Offset:   int64(len(p.msgs)),
+		Messages: []*protocol.Message{{Value: []byte("msg " + strconv.Itoa(len(p.msgs)))}},
+	})
+	if err != nil {
+		return nil, err
 	}
+	msgs := [][]byte{msg}
 	response := &protocol.FetchResponse{
 		Responses: protocol.FetchTopicResponses{{
 			Topic: fetchRequest.Topics[0].Topic,

@@ -11,6 +11,7 @@ import (
 	"github.com/mitchellh/go-testing-interface"
 	dynaport "github.com/travisjeffery/go-dynaport"
 	"github.com/travisjeffery/jocko/jocko/config"
+	"github.com/travisjeffery/jocko/jocko/structs"
 
 	"github.com/uber/jaeger-lib/metrics"
 
@@ -112,6 +113,8 @@ func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
 		followers map[*Server]bool
 	}{nil, make(map[*Server]bool)}
 	retry.Run(t, func(r *retry.R) {
+		tmp.leader = nil
+		tmp.followers = make(map[*Server]bool)
 		for _, s := range servers {
 			if raft.Leader == s.handler.(*Broker).raft.State() {
 				tmp.leader = s
@@ -128,4 +131,27 @@ func WaitForLeader(t testing.T, servers ...*Server) (*Server, []*Server) {
 		followers = append(followers, f)
 	}
 	return tmp.leader, followers
+}
+
+func WaitForLiveNodes(t testing.T, servers ...*Server) {
+	retry.RunWith(&retry.Timer{Timeout: 10 * time.Second, Wait: 50 * time.Millisecond}, t, func(r *retry.R) {
+		for _, s := range servers {
+			_, nodes, err := s.handler.(*Broker).fsm.State().GetNodes()
+			if err != nil {
+				r.Fatalf("get nodes: %v", err)
+			}
+
+			live := make(map[int32]bool, len(nodes))
+			for _, node := range nodes {
+				if node.Check != nil && node.Check.Status == structs.HealthPassing {
+					live[node.Node] = true
+				}
+			}
+			for _, want := range servers {
+				if !live[want.ID()] {
+					r.Fatalf("server %d does not see live node %d: %v", s.ID(), want.ID(), live)
+				}
+			}
+		}
+	})
 }

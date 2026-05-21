@@ -268,7 +268,7 @@ func (b *Broker) reconcileMember(m serf.Member) error {
 		err = b.handleLeftMember(m)
 	}
 	if err != nil {
-		log.Error.Printf("leader/%d: reconcile member: %s: error: %s", m.Name, b.config.ID, err)
+		log.Error.Printf("leader/%d: reconcile member: %s: error: %s", b.config.ID, m.Name, err)
 	}
 	return nil
 }
@@ -359,6 +359,9 @@ func (b *Broker) handleDeregisterMember(reason string, member serf.Member) error
 	}
 
 	log.Info.Printf("leader/%d: member is deregistering: reason: %s; node: %s", b.config.ID, reason, meta.ID)
+	if err := b.handleFailedMember(member); err != nil {
+		return err
+	}
 	req := structs.DeregisterNodeRequest{
 		Node: structs.Node{Node: meta.ID.Int32()},
 	}
@@ -476,10 +479,15 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 
 	// TODO: add an index for this. have same code in broker.go:handleMetadata(...)
 	var passing []*structs.Node
+	passingByID := make(map[int32]*structs.Node)
 	for _, n := range nodes {
-		if n.Check.Status == structs.HealthPassing && n.ID != meta.ID.Int32() {
+		if n.Check != nil && n.Check.Status == structs.HealthPassing && n.Node != meta.ID.Int32() {
 			passing = append(passing, n)
+			passingByID[n.Node] = n
 		}
+	}
+	if len(passing) == 0 {
+		return nil
 	}
 
 	// reassign consumer group coordinators
@@ -505,12 +513,6 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 		// TODO: LiveLeaders, ControllerEpoch
 	}
 	for _, p := range partitions {
-		i := rand.Intn(len(passing))
-		// TODO: check that old leader won't be in this list, will have been deregistered removed from fsm
-		node := passing[i]
-
-		// TODO: need to check replication factor
-
 		var ar []int32
 		for _, r := range p.AR {
 			if r != meta.ID.Int32() {
@@ -524,50 +526,85 @@ func (b *Broker) handleFailedMember(m serf.Member) error {
 			}
 		}
 
+		node := nextPartitionLeader(isr, ar, passingByID)
+		if node == nil {
+			log.Error.Printf("leader/%d: no passing replica candidate for partition reassignment: topic=%s partition=%d ar=%v isr=%v", b.config.ID, p.Topic, p.Partition, ar, isr)
+			continue
+		}
+
 		// TODO: need to update epochs
 
+		updatedPartition := structs.Partition{
+			Topic:     p.Topic,
+			ID:        p.Partition,
+			Partition: p.Partition,
+			Leader:    node.Node,
+			AR:        ar,
+			ISR:       isr,
+		}
 		req := structs.RegisterPartitionRequest{
-			Partition: structs.Partition{
-				Topic:     p.Topic,
-				ID:        p.Partition,
-				Partition: p.Partition,
-				Leader:    node.Node,
-				AR:        ar,
-				ISR:       isr,
-			},
+			Partition: updatedPartition,
 		}
 		if _, err = b.raftApply(structs.RegisterPartitionRequestType, req); err != nil {
 			return err
 		}
 		// TODO: need to send on leader and isr changes now i think
 		leaderAndISRReq.PartitionStates = append(leaderAndISRReq.PartitionStates, &protocol.PartitionState{
-			Topic:     p.Topic,
-			Partition: p.Partition,
+			Topic:     updatedPartition.Topic,
+			Partition: updatedPartition.Partition,
 			// TODO: ControllerEpoch, LeaderEpoch, ZKVersion - lol
-			Leader:   p.Leader,
-			ISR:      p.ISR,
-			Replicas: p.AR,
+			Leader:   updatedPartition.Leader,
+			ISR:      updatedPartition.ISR,
+			Replicas: updatedPartition.AR,
 		})
 	}
 
-	// TODO: optimize this to send requests to only nodes affected
-	for _, n := range passing {
-		broker := b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", n.Node)))
-		if broker == nil {
-			// TODO: this probably shouldn't happen -- likely a root issue to fix
-			log.Error.Printf("trying to assign partitions to unknown broker: %s", n)
-			continue
+	if len(leaderAndISRReq.PartitionStates) > 0 {
+		targets := make(map[int32]bool)
+		for _, n := range passing {
+			targets[n.Node] = true
 		}
-		conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
-		if err != nil {
-			return err
+		for _, p := range leaderAndISRReq.PartitionStates {
+			for _, replica := range p.Replicas {
+				targets[replica] = true
+			}
 		}
-		_, err = conn.LeaderAndISR(leaderAndISRReq)
-		if err != nil {
-			return err
+
+		// TODO: optimize this to send requests to only nodes affected
+		for nodeID := range targets {
+			broker := b.brokerLookup.BrokerByID(raft.ServerID(fmt.Sprintf("%d", nodeID)))
+			if broker == nil {
+				// TODO: this probably shouldn't happen -- likely a root issue to fix
+				log.Error.Printf("trying to assign partitions to unknown broker: %d", nodeID)
+				continue
+			}
+			conn, err := defaultDialer.Dial("tcp", broker.BrokerAddr)
+			if err != nil {
+				log.Error.Printf("leader/%d: leader and isr fanout to broker %d failed: %s", b.config.ID, nodeID, err)
+				continue
+			}
+			_, err = conn.LeaderAndISR(leaderAndISRReq)
+			if err != nil {
+				log.Error.Printf("leader/%d: leader and isr fanout to broker %d failed: %s", b.config.ID, nodeID, err)
+				continue
+			}
 		}
 	}
 
+	return nil
+}
+
+func nextPartitionLeader(isr, ar []int32, passing map[int32]*structs.Node) *structs.Node {
+	for _, replica := range isr {
+		if node := passing[replica]; node != nil {
+			return node
+		}
+	}
+	for _, replica := range ar {
+		if node := passing[replica]; node != nil {
+			return node
+		}
+	}
 	return nil
 }
 
