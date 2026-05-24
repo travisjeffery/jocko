@@ -12,7 +12,7 @@ func TestIsBroker(t *testing.T) {
 		function func(t *testing.T)
 	}{
 		{
-			name:     "minumum config",
+			name:     "minimum config",
 			function: testMinimum,
 		},
 	}
