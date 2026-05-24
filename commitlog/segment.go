@@ -216,14 +216,13 @@ func (s *Segment) findEntry(offset int64) (e *Entry, err error) {
 	e = &Entry{}
 	n := int(s.Index.bytes / entryWidth)
 	idx := sort.Search(n, func(i int) bool {
-		_ = s.Index.ReadEntryAtFileOffset(e, int64(i*entryWidth))
-		return e.Offset >= offset || e.Offset == 0
+		err = s.Index.ReadEntryAtFileOffset(e, int64(i*entryWidth))
+		return e.Offset >= offset || err != nil
 	})
 	if idx == n {
 		return nil, errors.New("entry not found")
 	}
-	_ = s.Index.ReadEntryAtFileOffset(e, int64(idx*entryWidth))
-	return e, nil
+	return e, s.Index.ReadEntryAtFileOffset(e, int64(idx*entryWidth))
 }
 
 // Delete closes the segment and then deletes its log and index files.
