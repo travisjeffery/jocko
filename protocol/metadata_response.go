@@ -4,7 +4,7 @@ type Broker struct {
 	NodeID int32
 	Host   string
 	Port   int32
-	// unsupported: Rack *string
+	Rack   *string // v1+, nullable
 }
 
 type PartitionMetadata struct {
@@ -18,6 +18,7 @@ type PartitionMetadata struct {
 type TopicMetadata struct {
 	TopicErrorCode    int16
 	Topic             string
+	IsInternal        bool // v1+
 	PartitionMetadata []*PartitionMetadata
 }
 
@@ -39,6 +40,11 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 			return err
 		}
 		e.PutInt32(b.Port)
+		if r.APIVersion >= 1 {
+			if err = e.PutNullableString(b.Rack); err != nil {
+				return err
+			}
+		}
 	}
 	if r.APIVersion >= 1 {
 		e.PutInt32(r.ControllerID)
@@ -50,6 +56,9 @@ func (r *MetadataResponse) Encode(e PacketEncoder) (err error) {
 		e.PutInt16(t.TopicErrorCode)
 		if err = e.PutString(t.Topic); err != nil {
 			return err
+		}
+		if r.APIVersion >= 1 {
+			e.PutBool(t.IsInternal)
 		}
 		if err = e.PutArrayLength(len(t.PartitionMetadata)); err != nil {
 			return err
@@ -90,11 +99,18 @@ func (r *MetadataResponse) Decode(d PacketDecoder, version int16) (err error) {
 		if err != nil {
 			return err
 		}
-		r.Brokers[i] = &Broker{
+		b := &Broker{
 			NodeID: nodeID,
 			Host:   host,
 			Port:   port,
 		}
+		if version >= 1 {
+			b.Rack, err = d.NullableString()
+			if err != nil {
+				return err
+			}
+		}
+		r.Brokers[i] = b
 	}
 	if version >= 1 {
 		r.ControllerID, err = d.Int32()
@@ -116,6 +132,12 @@ func (r *MetadataResponse) Decode(d PacketDecoder, version int16) (err error) {
 		m.Topic, err = d.String()
 		if err != nil {
 			return err
+		}
+		if version >= 1 {
+			m.IsInternal, err = d.Bool()
+			if err != nil {
+				return err
+			}
 		}
 		partitionCount, err := d.ArrayLength()
 		if err != nil {
